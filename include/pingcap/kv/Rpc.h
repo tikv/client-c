@@ -99,6 +99,7 @@ struct RpcClient
     void update(const ClusterConfig & config_)
     {
         config = config_;
+        std::unique_lock lk(mutex);
         conns.clear();
     }
 
