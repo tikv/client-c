@@ -15,7 +15,7 @@ inline std::vector<std::string> addrsToUrls(std::vector<std::string> addrs) {
             urls.push_back(addr);
         }
     }
-    return std::move(urls);
+    return urls;
 }
 
 Client::Client(const std::vector<std::string> & addrs)
@@ -41,6 +41,10 @@ Client::~Client()
     if (work_thread.joinable()) {
         work_thread.join();
     }
+}
+
+bool Client::isMock() {
+    return false;
 }
 
 std::shared_ptr<grpc::Channel> Client::getOrCreateGRPCConn(const std::string & addr)
@@ -73,13 +77,12 @@ pdpb::GetMembersResponse Client::getMembers(std::string url)
     if (!status.ok()) {
         std::cerr<< status.error_code() <<": "<<status.error_message() << std::endl;
     }
-    std::cout<<"success get member\n";
-    return std::move(resp);
+    return resp;
 }
 
 std::unique_ptr<pdpb::PD::Stub> Client::leaderStub() {
     auto cc = getOrCreateGRPCConn(leader);
-    return std::move(pdpb::PD::NewStub(cc));
+    return pdpb::PD::NewStub(cc);
 }
 
 void Client::initClusterID() {
@@ -92,7 +95,6 @@ void Client::initClusterID() {
                 continue;
             }
             cluster_id = resp.header().cluster_id();
-            std::cout<<"cluster: "<<cluster_id<<std::endl;
             return ;
         };
         std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -130,7 +132,6 @@ void Client::updateURLs(const ::google::protobuf::RepeatedPtrField<::pdpb::Membe
     for (int i = 0; i < members.size(); i++) {
         auto client_urls = members[i].client_urls();
         for (int j = 0; j < client_urls.size(); j++) {
-            std::cout<<"update: "<<client_urls[j]<<std::endl;
             tmp_urls.push_back(client_urls[j]);
         }
     }
@@ -189,7 +190,7 @@ uint64_t Client::getGCSafePoint() {
     return response.safe_point();
 }
 
-std::pair<metapb::Region, metapb::Peer> Client::getRegion(std::string key) {
+std::tuple<metapb::Region, metapb::Peer, metapb::Peer> Client::getRegion(std::string key) {
     pdpb::GetRegionRequest request{};
     pdpb::GetRegionResponse response{};
 
@@ -203,7 +204,25 @@ std::pair<metapb::Region, metapb::Peer> Client::getRegion(std::string key) {
     if (!status.ok()) {
         std::cerr<< status.error_code() <<": "<<status.error_message() << std::endl;
     }
-    return std::make_pair(response.region(), response.leader());
+    return std::make_tuple(response.region(), response.leader(), response.slaves(0));
+}
+
+std::tuple<metapb::Region, metapb::Peer, metapb::Peer> Client::getRegionByID(uint64_t region_id) {
+    pdpb::GetRegionByIDRequest request{};
+    pdpb::GetRegionResponse response{};
+
+    request.set_allocated_header(requestHeader());
+    request.set_region_id(region_id);
+
+    grpc::ClientContext context;
+
+    context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
+
+    auto status = leaderStub()->GetRegionByID(&context, request, &response);
+    if (!status.ok()) {
+        std::cerr<< status.error_code() <<": "<<status.error_message() << std::endl;
+    }
+    return std::make_tuple(response.region(), response.leader(), response.slaves(0));
 }
 
 metapb::Store Client::getStore(uint64_t store_id) {

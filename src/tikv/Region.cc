@@ -1,15 +1,22 @@
-#include <common/Region.h>
+#include <tikv/Region.h>
+#include <tikv/Exception.h>
 
 namespace pingcap {
 namespace kv {
 
-RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id) {
-    RegionPtr region = getCachedRegion(id);
+RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id, bool is_learner) {
+    RegionPtr region = getCachedRegion(bo, id);
     if (region == nullptr) {
         return nullptr;
     }
     const auto & meta = region -> meta;
-    const auto & peer = region -> peer;
+    auto  peer = region -> peer;
+    if (is_learner) {
+        peer = region -> learner;
+        if (!peer.IsInitialized()) {
+            throw Exception("no learner");
+        }
+    }
     std::string addr = getStoreAddr(bo, peer.store_id());
     if (addr == "") {
         //dropRegion(id);
@@ -18,10 +25,14 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id)
     return std::make_shared<RPCContext>(id, meta, peer, addr);
 }
 
-RegionPtr RegionCache::getCachedRegion (const RegionVerID & id) {
+RegionPtr RegionCache::getCachedRegion(Backoffer & bo, const RegionVerID & id) {
     auto it = regions.find(id);
     if (it == regions.end()) {
-        return nullptr;
+        auto region = loadRegionByID(bo, id.id);
+
+        insertRegionToCache(region);
+
+        return region;
     }
     return it->second;
 }
@@ -39,17 +50,38 @@ KeyLocation RegionCache::locateKey(Backoffer & bo, std::string key) {
     return KeyLocation (region -> verID() , region -> startKey(), region -> endKey());
 }
 
-RegionPtr RegionCache::loadRegion(Backoffer & bo, std::string key) {
+RegionPtr RegionCache::loadRegionByID(Backoffer & bo, uint64_t region_id) {
     for(;;) {
         try {
-            auto [meta, leader] = pdClient->getRegion(key);
+            auto [meta, leader, learner] = pdClient->getRegionByID(region_id);
             if (!meta.IsInitialized()) {
                 throw Exception("meta not found");
             }
             if (meta.peers_size() == 0) {
                 throw Exception("receive Region with no peer.");
             }
-            RegionPtr region = std::make_shared<Region>(meta, meta.peers(0));
+            RegionPtr region = std::make_shared<Region>(meta, meta.peers(0), learner);
+            if (leader.IsInitialized()) {
+                region -> switchPeer(leader.store_id());
+            }
+            return region;
+        } catch (const Exception & e) {
+            bo.backoff(boPDRPC, e);
+        }
+    }
+}
+
+RegionPtr RegionCache::loadRegion(Backoffer & bo, std::string key) {
+    for(;;) {
+        try {
+            auto [meta, leader, learner] = pdClient->getRegion(key);
+            if (!meta.IsInitialized()) {
+                throw Exception("meta not found");
+            }
+            if (meta.peers_size() == 0) {
+                throw Exception("receive Region with no peer.");
+            }
+            RegionPtr region = std::make_shared<Region>(meta, meta.peers(0), learner);
             if (leader.IsInitialized()) {
                 region -> switchPeer(leader.store_id());
             }
@@ -76,7 +108,7 @@ std::string RegionCache::reloadStoreAddr(Backoffer & bo, uint64_t id) {
     if (addr == "") {
         return "";
     }
-    stores.emplace(id, Store(id, addr));
+    stores[id] = Store(id, addr);
     return addr;
 }
 
@@ -97,7 +129,8 @@ RegionPtr RegionCache::searchCachedRegion(std::string key) {
 }
 
 void RegionCache::insertRegionToCache(RegionPtr region) {
-    regions_map[region -> endKey()] = RegionPtr(region);
+    regions_map[region -> endKey()] = region;
+    regions[region->verID()] = region;
 }
 
 }

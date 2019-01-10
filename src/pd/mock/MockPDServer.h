@@ -33,12 +33,10 @@ public:
 
     ::grpc::Status GetGCSafePoint(::grpc::ServerContext* context, const ::pdpb::GetGCSafePointRequest* request, ::pdpb::GetGCSafePointResponse* response) override
     {
-        std::cout<<"call gc safe point\n";
         pdpb::ResponseHeader * header = new pdpb::ResponseHeader();
         setHeader(header);
         response -> set_allocated_header(header);
         response -> set_safe_point(gc_point);
-        std::cout<<"end call gc safe point\n";
         return ::grpc::Status::OK;
     }
 
