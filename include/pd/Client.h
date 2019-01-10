@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -28,24 +29,28 @@ public:
 
     Client(const std::vector<std::string> & addrs);
 
-    ~Client();
+    ~Client() override;
 
     //uint64_t getClusterID() override;
 
     // only implement a weak get ts.
-    //uint64_t getTS() override;
+    uint64_t getTS() override {
+        throw "not implemented";
+    }
 
-    std::pair<metapb::Region, metapb::Peer> getRegion(std::string key) override;
+    std::tuple<metapb::Region, metapb::Peer, metapb::Peer> getRegion(std::string key) override;
 
     //std::pair<metapb::Region, metapb::Peer> getPrevRegion(std::string key) override;
 
-    //std::pair<metapb::Region, metapb::Peer> getRegionByID(uint64_t region_id) override;
+    std::tuple<metapb::Region, metapb::Peer, metapb::Peer> getRegionByID(uint64_t region_id) override;
 
     metapb::Store getStore(uint64_t store_id) override;
 
     //std::vector<metapb::Store> getAllStores() override;
 
     uint64_t getGCSafePoint() override;
+
+    bool isMock() override;
 
 private:
     void initClusterID();
@@ -87,9 +92,9 @@ private:
     std::condition_variable update_leader_cv;
 
     bool check_leader;
+
 };
 
-using ClientPtr = std::shared_ptr<Client>;
 
 }
 }

@@ -1,10 +1,14 @@
 #pragma once
+
 #include <mutex>
 #include <vector>
 #include <type_traits>
 #include <kvproto/tikvpb.grpc.pb.h>
+#include <kvproto/metapb.pb.h>
 #include <grpcpp/security/credentials.h>
 #include <grpcpp/create_channel.h>
+
+#include <tikv/Region.h>
 
 namespace pingcap {
 namespace kv {
@@ -37,14 +41,14 @@ struct RpcTypeTraits<kvrpcpb::ReadIndexRequest> {
 template<class T>
 class RpcCall {
 
-    using S = RpcTypeTraits<T>;
+    using S = typename RpcTypeTraits<T>::ResultType;
 
     T * req  ;
     S * resp ;
 
 public:
-    RpcCall() {
-        req = new T();
+    RpcCall(T * t) {
+        req = t;
         resp = new S();
     }
 
@@ -57,10 +61,25 @@ public:
         }
     }
 
-    void call(std::shared_ptr<tikvpb::Tikv::Stub> stub) {
+    void setCtx(RPCContextPtr rpc_ctx) {
+        kvrpcpb::Context * ctx = new kvrpcpb::Context();
+        ctx -> set_region_id(rpc_ctx -> region.id);
+        ctx -> set_allocated_region_epoch(new metapb::RegionEpoch(rpc_ctx -> meta.region_epoch()));
+        ctx -> set_allocated_peer(new metapb::Peer(rpc_ctx -> peer));
+        req -> set_allocated_context(ctx);
+    }
+
+    S * getResp() {
+        return resp;
+    }
+
+    void call(std::unique_ptr<tikvpb::Tikv::Stub> stub) {
         if constexpr(std::is_same<T, kvrpcpb::ReadIndexRequest>::value) {
             grpc::ClientContext context;
-            stub->KvGet(context, *req, resp);
+            auto status = stub->ReadIndex(&context, *req, resp);
+            if (!status.ok()) {
+                std::cout<< status.error_code() <<": "<<status.error_message() << std::endl;
+            }
         }
     }
 };
@@ -83,7 +102,7 @@ struct RpcClient {
     void sendRequest(std::string addr, RpcCallPtr<T> rpc) {
         ConnArrayPtr connArray = getConnArray(addr);
         auto stub = tikvpb::Tikv::NewStub(connArray->get());
-        rpc.call(stub);
+        rpc->call(std::move(stub));
     }
 };
 
