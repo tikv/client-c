@@ -9,6 +9,7 @@
 #include <grpcpp/create_channel.h>
 
 #include <tikv/Region.h>
+#include <common/Log.h>
 
 namespace pingcap {
 namespace kv {
@@ -45,9 +46,10 @@ class RpcCall {
 
     T * req  ;
     S * resp ;
+    Logger * log;
 
 public:
-    RpcCall(T * t) {
+    RpcCall(T * t) : log(&Logger::get("pingcap.tikv")) {
         req = t;
         resp = new S();
     }
@@ -78,7 +80,7 @@ public:
             grpc::ClientContext context;
             auto status = stub->ReadIndex(&context, *req, resp);
             if (!status.ok()) {
-                std::cout<< status.error_code() <<": "<<status.error_message() << std::endl;
+                log -> error("read index failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
             }
         }
     }

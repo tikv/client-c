@@ -23,7 +23,8 @@ Client::Client(const std::vector<std::string> & addrs)
      pd_timeout(3),
      loop_interval(100),
      update_leader_interval(60),
-     urls(addrsToUrls(addrs))
+     urls(addrsToUrls(addrs)),
+     log(&Logger::get("pingcap.pd"))
 {
     initClusterID();
 
@@ -75,7 +76,7 @@ pdpb::GetMembersResponse Client::getMembers(std::string url)
 
     auto status = pdpb::PD::NewStub(cc)->GetMembers(&context, pdpb::GetMembersRequest{}, &resp);
     if (!status.ok()) {
-        std::cerr<< status.error_code() <<": "<<status.error_message() << std::endl;
+        log->error("get member failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
     }
     return resp;
 }
@@ -91,7 +92,7 @@ void Client::initClusterID() {
             auto resp = getMembers(url);
             if (!resp.has_header())
             {
-                std::cerr << "failed to get cluster id by :" << url <<" retrying"<< std::endl;
+                log->error("failed to get cluster id by :" + url + " retrying");
                 continue;
             }
             cluster_id = resp.header().cluster_id();
@@ -107,7 +108,7 @@ void Client::updateLeader() {
         auto resp = getMembers(url);
         if (!resp.has_header() || resp.leader().client_urls_size() == 0)
         {
-            std::cerr << "failed to get cluster id by :" << url << std::endl;
+            log -> error("failed to get cluster id by :" + url);
             continue;
         }
         updateURLs(resp.members());
@@ -162,7 +163,7 @@ void Client::leaderLoop() {
                 check_leader = false;
                 updateLeader();
             } catch (...) {
-                std::cerr<< "update leader failed\n";
+                log->error("update leader failed.");
             }
         }
     }
@@ -185,7 +186,7 @@ uint64_t Client::getGCSafePoint() {
 
     auto status = leaderStub()->GetGCSafePoint(&context, request, &response);
     if (!status.ok()) {
-        std::cerr<< status.error_code() <<": "<<status.error_message() << std::endl;
+        log->error("get safe point failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
     }
     return response.safe_point();
 }
@@ -202,7 +203,7 @@ std::tuple<metapb::Region, metapb::Peer, metapb::Peer> Client::getRegion(std::st
 
     auto status = leaderStub()->GetRegion(&context, request, &response);
     if (!status.ok()) {
-        std::cerr<< status.error_code() <<": "<<status.error_message() << std::endl;
+        log->error("get region failed: " + std::to_string(status.error_code()) + " : " + status.error_message());
     }
     return std::make_tuple(response.region(), response.leader(), response.slaves(0));
 }
@@ -220,7 +221,7 @@ std::tuple<metapb::Region, metapb::Peer, metapb::Peer> Client::getRegionByID(uin
 
     auto status = leaderStub()->GetRegionByID(&context, request, &response);
     if (!status.ok()) {
-        std::cerr<< status.error_code() <<": "<<status.error_message() << std::endl;
+        log-> error("get region by id failed: " + std::to_string (status.error_code())  + ": " + status.error_message());
     }
     return std::make_tuple(response.region(), response.leader(), response.slaves(0));
 }
@@ -238,7 +239,7 @@ metapb::Store Client::getStore(uint64_t store_id) {
 
     auto status = leaderStub()->GetStore(&context, request, &response);
     if (!status.ok()) {
-        std::cerr<< status.error_code() <<": "<<status.error_message() << std::endl;
+        log-> error("get store failed: " + std::to_string (status.error_code())  + ": " + status.error_message());
     }
     return response.store();
 }
