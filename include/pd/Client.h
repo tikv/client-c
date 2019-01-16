@@ -4,8 +4,9 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
-#include "IClient.h"
 #include <kvproto/pdpb.grpc.pb.h>
+#include <common/Log.h>
+#include "IClient.h"
 
 namespace pingcap{
 namespace pd {
@@ -92,6 +93,8 @@ private:
     std::condition_variable update_leader_cv;
 
     bool check_leader;
+
+    Logger * log;
 
 };
 
