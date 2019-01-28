@@ -200,10 +200,14 @@ std::tuple<metapb::Region, metapb::Peer, metapb::Peer> Client::getRegion(std::st
     grpc::ClientContext context;
 
     context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
+    request.set_region_key(key);
 
     auto status = leaderStub()->GetRegion(&context, request, &response);
     if (!status.ok()) {
         log->error("get region failed: " + std::to_string(status.error_code()) + " : " + status.error_message());
+    }
+    if (response.slaves_size() == 0) {
+        return std::make_tuple(response.region(), response.leader(), metapb::Peer::default_instance());
     }
     return std::make_tuple(response.region(), response.leader(), response.slaves(0));
 }
@@ -222,6 +226,9 @@ std::tuple<metapb::Region, metapb::Peer, metapb::Peer> Client::getRegionByID(uin
     auto status = leaderStub()->GetRegionByID(&context, request, &response);
     if (!status.ok()) {
         log-> error("get region by id failed: " + std::to_string (status.error_code())  + ": " + status.error_message());
+    }
+    if (response.slaves_size() == 0) {
+        return std::make_tuple(response.region(), response.leader(), metapb::Peer::default_instance());
     }
     return std::make_tuple(response.region(), response.leader(), response.slaves(0));
 }

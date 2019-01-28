@@ -123,7 +123,7 @@ public:
 
     RPCContextPtr getRPCContext(Backoffer & bo, const RegionVerID & id, bool is_learner);
 
-    KeyLocation locateKey(Backoffer & bo, std::string key);
+    //KeyLocation locateKey(Backoffer & bo, std::string key);
 
 private:
     RegionPtr getCachedRegion(Backoffer & bo, const RegionVerID & id);
@@ -138,17 +138,21 @@ private:
 
     std::string getStoreAddr(Backoffer & bo, uint64_t id);
 
-    RegionPtr searchCachedRegion(std::string key);
+    //RegionPtr searchCachedRegion(std::string key);
 
     void insertRegionToCache(RegionPtr region);
 
-    std::map<std::string, RegionPtr> regions_map;
+//    std::map<std::string, RegionPtr> regions_map;
 
     std::unordered_map<RegionVerID, RegionPtr> regions;
 
     std::map<uint64_t, Store> stores;
 
     pd::ClientPtr pdClient;
+
+    std::mutex region_mutex;
+
+    std::mutex store_mutex;
 };
 
 using RegionCachePtr = std::shared_ptr<RegionCache>;
