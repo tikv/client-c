@@ -6,7 +6,7 @@
 #include <map>
 #include <memory>
 
-#include <tikv/Exception.h>
+#include <common/Exception.h>
 
 namespace pingcap {
 namespace kv {
