@@ -26,6 +26,7 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
 }
 
 RegionPtr RegionCache::getCachedRegion(Backoffer & bo, const RegionVerID & id) {
+    std::lock_guard<std::mutex> lock(region_mutex);
     auto it = regions.find(id);
     if (it == regions.end()) {
         auto region = loadRegionByID(bo, id.id);
@@ -37,18 +38,18 @@ RegionPtr RegionCache::getCachedRegion(Backoffer & bo, const RegionVerID & id) {
     return it->second;
 }
 
-KeyLocation RegionCache::locateKey(Backoffer & bo, std::string key) {
-    RegionPtr region = searchCachedRegion(key);
-    if (region != nullptr) {
-        return KeyLocation (region -> verID() , region -> startKey(), region -> endKey());
-    }
-
-    region = loadRegion(bo, key);
-
-    insertRegionToCache(region);
-
-    return KeyLocation (region -> verID() , region -> startKey(), region -> endKey());
-}
+//KeyLocation RegionCache::locateKey(Backoffer & bo, std::string key) {
+//    RegionPtr region = searchCachedRegion(key);
+//    if (region != nullptr) {
+//        return KeyLocation (region -> verID() , region -> startKey(), region -> endKey());
+//    }
+//
+//    region = loadRegion(bo, key);
+//
+//    insertRegionToCache(region);
+//
+//    return KeyLocation (region -> verID() , region -> startKey(), region -> endKey());
+//}
 
 RegionPtr RegionCache::loadRegionByID(Backoffer & bo, uint64_t region_id) {
     for(;;) {
@@ -113,6 +114,7 @@ std::string RegionCache::reloadStoreAddr(Backoffer & bo, uint64_t id) {
 }
 
 std::string RegionCache::getStoreAddr(Backoffer & bo, uint64_t id) {
+    std::lock_guard<std::mutex> lock(store_mutex);
     auto it = stores.find(id);
     if (it != stores.end()) {
         return it -> second.addr;
@@ -120,16 +122,16 @@ std::string RegionCache::getStoreAddr(Backoffer & bo, uint64_t id) {
     return reloadStoreAddr(bo, id);
 }
 
-RegionPtr RegionCache::searchCachedRegion(std::string key) {
-    auto it = regions_map.upper_bound(key);
-    if (it != regions_map.end() && it->second->contains(key)) {
-        return it->second;
-    }
-    return nullptr;
-}
+//RegionPtr RegionCache::searchCachedRegion(std::string key) {
+//    auto it = regions_map.upper_bound(key);
+//    if (it != regions_map.end() && it->second->contains(key)) {
+//        return it->second;
+//    }
+//    return nullptr;
+//}
 
 void RegionCache::insertRegionToCache(RegionPtr region) {
-    regions_map[region -> endKey()] = region;
+//    regions_map[region -> endKey()] = region;
     regions[region->verID()] = region;
 }
 
