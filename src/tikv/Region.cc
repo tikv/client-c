@@ -1,5 +1,5 @@
 #include <tikv/Region.h>
-#include <tikv/Exception.h>
+#include <common/Exception.h>
 
 namespace pingcap {
 namespace kv {

@@ -5,9 +5,11 @@
 #include <Poco/Exception.h>
 
 namespace pingcap {
-namespace kv {
 
 const int MismatchClusterIDCode = 1;
+const int GRPCErrorCode = 2;
+const int InitClusterIDFailed = 3;
+const int UpdatePDLeaderFailed = 4;
 
 class Exception : public Poco::Exception
 {
@@ -23,6 +25,4 @@ public:
 
 };
 
-
-}
 }
