@@ -71,6 +71,8 @@ struct Backoff {
     }
 };
 
+constexpr int readIndexMaxBackoff = 20000;
+
 using BackoffPtr = std::shared_ptr<Backoff>;
 
 struct Backoffer {
