@@ -62,17 +62,18 @@ private:
     }
 };
 
-inline void RunPDServer(std::vector<std::string> addrs)
+inline PDService * RunPDServer(std::vector<std::string> addrs)
 {
-    PDService service(addrs);
+    PDService * service = new PDService(addrs);
 
     grpc::ServerBuilder builder;
     for (auto addr : addrs) {
         builder.AddListeningPort(addr, grpc::InsecureServerCredentials());
     }
-    builder.RegisterService(&service);
+    builder.RegisterService(service);
     auto server = builder.BuildAndStart();
     server->Wait();
+    return service;
 }
 
 }
