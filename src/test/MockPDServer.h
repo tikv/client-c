@@ -4,13 +4,14 @@
 #include <kvproto/pdpb.grpc.pb.h>
 
 namespace pingcap{
-namespace pd {
-namespace mock {
+namespace test {
 
 class PDService final : public pdpb::PD::Service {
 public:
     // first one is leader ?
-    PDService(std::vector<std::string> addrs_):addrs(addrs_), leader(addrs_[0]), gc_point(11) {
+    PDService(std::vector<std::string> addrs_){
+        addrs = addrsToUrls(addrs_);
+        leader = addrs[0];
     }
 
     ::grpc::Status GetMembers(::grpc::ServerContext* context, const ::pdpb::GetMembersRequest* request, ::pdpb::GetMembersResponse* response) override 
@@ -46,6 +47,18 @@ public:
 
 
 private:
+    std::vector<std::string> addrsToUrls(std::vector<std::string> addrs) {
+        std::vector<std::string> urls;
+        for (const std::string & addr: addrs) {
+            if (addr.find("://") == std::string::npos) {
+                urls.push_back("http://" + addr);
+            } else {
+                urls.push_back(addr);
+            }
+        }
+        return urls;
+    }
+
     std::string leader;
     std::vector<std::string> addrs;
     uint64_t gc_point;
@@ -62,20 +75,32 @@ private:
     }
 };
 
-inline PDService * RunPDServer(std::vector<std::string> addrs)
-{
-    PDService * service = new PDService(addrs);
+struct PDServerHandler {
 
-    grpc::ServerBuilder builder;
-    for (auto addr : addrs) {
-        builder.AddListeningPort(addr, grpc::InsecureServerCredentials());
+    std::vector<std::string> addrs;
+    PDService * service;
+
+    PDServerHandler(std::vector<std::string> addrs_) : addrs(addrs_) {}
+
+    void startServer() {
+        grpc::ServerBuilder builder;
+        for (auto addr : addrs) {
+            builder.AddListeningPort(addr, grpc::InsecureServerCredentials());
+        }
+        builder.RegisterService(service);
+        auto server = builder.BuildAndStart();
+        server->Wait();
     }
-    builder.RegisterService(service);
-    auto server = builder.BuildAndStart();
-    server->Wait();
-    return service;
-}
 
-}
+    PDService * RunPDServer()
+    {
+        service = new PDService(addrs);
+        std::thread pd_server_thread(&PDServerHandler::startServer, this);
+        pd_server_thread.detach();
+        return service;
+    }
+
+};
+
 }
 }
