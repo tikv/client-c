@@ -9,7 +9,7 @@ namespace test{
 
 bool testPDGetGCSafePoint() {
     std::vector<std::string> addrs;
-    for (int i = 1; i <= 1; i++)
+    for (int i = 1; i <= 3; i++)
     {
         addrs.push_back("127.0.0.1:" + std::to_string(5000+i));
     }
