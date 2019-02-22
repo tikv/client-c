@@ -22,14 +22,18 @@ bool testReadIndex () {
     ::metapb::Region region = generateRegion(verID, "a", "b");
     pd_server -> addRegion(region, 0, 1);
     pd_server -> stores[1] -> setReadIndex(5);
+    pd_server -> registerStoreAddr(1, "127.0.0.1:7000");
+    pd_server -> registerStoreAddr(1, "127.0.0.1:6500");
 
     ::sleep(1);
+
     pd::ClientPtr clt = std::make_shared<pd::Client>(addrs);
     kv::RegionCachePtr cache = std::make_shared<kv::RegionCache>(clt);
     kv::RpcClientPtr rpc = std::make_shared<kv::RpcClient>();
     kv::RegionClient client(cache, rpc, verID);
     int idx = client.getReadIndex();
     if (idx != 5) {
+        std::cout<<"wrong idx: "<<idx<<std::endl;
         return false;
     }
     std::cout<<"success!!!!!\n";

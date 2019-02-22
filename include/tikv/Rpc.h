@@ -77,7 +77,6 @@ public:
 
     void call(std::unique_ptr<tikvpb::Tikv::Stub> stub) {
         if constexpr(std::is_same<T, kvrpcpb::ReadIndexRequest>::value) {
-            std::cout<<"send!\n";
             grpc::ClientContext context;
             context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(1));
             auto status = stub->ReadIndex(&context, *req, resp);
