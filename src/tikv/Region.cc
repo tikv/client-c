@@ -165,6 +165,7 @@ void RegionCache::updateLeader(Backoffer & bo, const RegionVerID & region_id, ui
 }
 
 void RegionCache::onRegionStale(RPCContextPtr ctx, const errorpb::StaleEpoch & stale_epoch) {
+
     dropRegion(ctx->region);
 
     std::lock_guard<std::mutex> lock(region_mutex);
@@ -172,6 +173,13 @@ void RegionCache::onRegionStale(RPCContextPtr ctx, const errorpb::StaleEpoch & s
         auto & meta = stale_epoch.new_regions(i);
         RegionPtr region = std::make_shared<Region>(meta, meta.peers(0));
         region->switchPeer(ctx->peer.store_id());
+        for (int i = 0; i < meta.peers_size(); i++) {
+            auto peer = meta.peers(i);
+            if (peer.is_learner()) {
+                region->learner = peer;
+                break;
+            }
+        }
         insertRegionToCache(region);
     }
 }

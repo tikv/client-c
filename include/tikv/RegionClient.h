@@ -21,6 +21,7 @@ struct RegionClient {
         auto rpc_call = std::make_shared<RpcCall<kvrpcpb::ReadIndexRequest>>(request);
         auto ctx = cache -> getRPCContext(bo, region_id, true);
         store_addr = ctx->addr;
+        std::cout<<"store_addr "<< store_addr <<std::endl;
         sendReqToRegion(bo, rpc_call, ctx);
         return rpc_call -> getResp() -> read_index();
     }
