@@ -57,6 +57,11 @@ public:
         return ::grpc::Status::OK;
     }
 
+    void registerStoreAddr(uint64_t store_id, std::string addr)
+    {
+        stores[store_id] -> registerAddr(addr);
+    }
+
     ::grpc::Status GetRegionByID(::grpc::ServerContext* context, const ::pdpb::GetRegionByIDRequest* request, ::pdpb::GetRegionResponse* response) override
     {
         pdpb::ResponseHeader * header = new pdpb::ResponseHeader();
@@ -107,6 +112,7 @@ public:
         }
         regions[region_ptr->meta.id()] = (region_ptr);
     }
+    std::map<uint64_t, Store*> stores;
 
 private:
     std::vector<std::string> addrsToUrls(std::vector<std::string> addrs) {
@@ -124,7 +130,6 @@ private:
     std::string leader;
     std::vector<std::string> addrs;
     std::map<uint64_t, kv::RegionPtr> regions;
-    std::map<uint64_t, Store*> stores;
     uint64_t gc_point;
 
     void setMember(const std::string & addr, pdpb::Member* member) {

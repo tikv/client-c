@@ -19,25 +19,26 @@ struct RegionClient {
         auto request = new kvrpcpb::ReadIndexRequest();
         Backoffer bo(readIndexMaxBackoff);
         auto rpc_call = std::make_shared<RpcCall<kvrpcpb::ReadIndexRequest>>(request);
-        auto ctx = cache -> getRPCContext(bo, region_id, true);
-        store_addr = ctx->addr;
-        std::cout<<"store_addr "<< store_addr <<std::endl;
-        sendReqToRegion(bo, rpc_call, ctx);
+        sendReqToRegion(bo, rpc_call, true);
         return rpc_call -> getResp() -> read_index();
     }
 
     template<typename T>
-    void sendReqToRegion(Backoffer & bo, RpcCallPtr<T> rpc, RPCContextPtr rpc_ctx) {
+    void sendReqToRegion(Backoffer & bo, RpcCallPtr<T> rpc, bool learner) {
         for (;;) {
-            rpc -> setCtx(rpc_ctx);
+            auto ctx = cache -> getRPCContext(bo, region_id, learner);
+            store_addr = ctx->addr;
+            std::cout<<"store_addr "<< store_addr <<std::endl;
+            rpc -> setCtx(ctx);
             try {
                 client -> sendRequest(store_addr, rpc);
             } catch(const Exception & e) {
-                onSendFail(bo, e, rpc_ctx);
+                onSendFail(bo, e, ctx);
+                continue;
             }
             auto resp = rpc -> getResp();
             if (resp -> has_region_error()) {
-                onRegionError(bo, rpc_ctx, resp->region_error());
+                onRegionError(bo, ctx, resp->region_error());
             } else {
                 return;
             }
@@ -85,6 +86,7 @@ struct RegionClient {
     }
 
     void onSendFail(Backoffer & bo, const Exception & e, RPCContextPtr rpc_ctx) {
+        std::cout<<"send failed!!\n";
         cache->dropStoreOnSendReqFail(rpc_ctx, e);
         bo.backoff(boTiKVRPC, e);
     }

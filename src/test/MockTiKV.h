@@ -1,8 +1,10 @@
+#include <queue>
+
 #include <grpcpp/server.h>
 #include <grpcpp/server_builder.h>
 #include <grpcpp/security/server_credentials.h>
-#include<kvproto/tikvpb.grpc.pb.h>
-#include<tikv/Region.h>
+#include <kvproto/tikvpb.grpc.pb.h>
+#include <tikv/Region.h>
 
 namespace pingcap {
 namespace test {
@@ -10,7 +12,6 @@ namespace test {
 class Store final : public ::tikvpb::Tikv::Service {
 public:
     Store(std::string addr_, int store_id_) : store_addr (addr_), store_id(store_id_) {
-       read_idx = 3;
     }
 
     void addRegion(kv::RegionPtr region) {
@@ -21,10 +22,8 @@ public:
     {
         ::errorpb::Error* error_pb = checkContext(request->context());
         if (error_pb != NULL) {
-            std::cout<<"error\n";
             response->set_allocated_region_error(error_pb);
         } else {
-            std::cout<<"no error\n";
             response->set_read_index(read_idx);
         }
         return ::grpc::Status::OK;
@@ -41,11 +40,21 @@ public:
     uint64_t store_id;
 
     std::string getStoreUrl() {
-        return (store_addr);
+        if (addrs.empty())
+            return store_addr;
+        std::string addr = addrs.front();
+        addrs.pop();
+        return addr;
+    }
+
+    void registerAddr(std::string addr) {
+        addrs.push(addr);
     }
 
 private:
     std::string store_addr;
+
+    std::queue<std::string> addrs;
 
     std::string addrToUrl(std::string addr) {
             if (addr.find("://") == std::string::npos) {
@@ -67,11 +76,11 @@ private:
         server->Wait();
     }
 
+
     ::errorpb::Error* checkContext(const ::kvrpcpb::Context & ctx) {
         uint64_t store_id_ = ctx.peer().id();
         ::errorpb::Error* err = new ::errorpb::Error();
         if (store_id_ != store_id) {
-            std::cout<<"store not match\n";
             ::errorpb::StoreNotMatch* store_not_match = new ::errorpb::StoreNotMatch();
             err -> set_allocated_store_not_match(store_not_match);
             return err;
@@ -80,7 +89,6 @@ private:
         uint64_t region_id = ctx.region_id();
         auto it = regions.find(region_id);
         if (it == regions.end()) {
-            std::cout<<"region not found\n";
             ::errorpb::RegionNotFound * region_not_found = new ::errorpb::RegionNotFound();
             region_not_found -> set_region_id(region_id);
             err -> set_allocated_region_not_found(region_not_found);
@@ -100,8 +108,6 @@ private:
         //}
 
         if (it->second->verID().confVer != ctx.region_epoch().conf_ver() || it->second->verID().ver != ctx.region_epoch().version()) {
-            std::cout<<"left: "<<it->second->verID().confVer<<std::endl;
-            std::cout<<"right: "<<ctx.region_epoch().conf_ver()<<std::endl;
             ::errorpb::StaleEpoch * stale_epoch = new ::errorpb::StaleEpoch();
             err -> set_allocated_stale_epoch(stale_epoch);
             return err;
