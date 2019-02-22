@@ -37,7 +37,11 @@ public:
         std::thread server_thread(&Store::start_server, this);
         server_thread.detach();
     }
+
     uint64_t store_id;
+
+    uint64_t getStoreID() {
+    }
 
     std::string getStoreUrl() {
         if (addrs.empty())
@@ -51,10 +55,27 @@ public:
         addrs.push(addr);
     }
 
+    void registerStoreId(uint64_t store_id_) {
+        store_ids.push(store_id_);
+    }
+
+    uint64_t getStoreId() {
+        if (store_ids.empty()) {
+            return store_id;
+        }
+        uint64_t store_id_ = store_ids.front();
+        store_ids.pop();
+        return store_id_;
+    }
+
+    bool inject_region_not_found;
+
 private:
     std::string store_addr;
 
     std::queue<std::string> addrs;
+
+    std::queue<uint64_t> store_ids;
 
     std::string addrToUrl(std::string addr) {
             if (addr.find("://") == std::string::npos) {
@@ -80,7 +101,7 @@ private:
     ::errorpb::Error* checkContext(const ::kvrpcpb::Context & ctx) {
         uint64_t store_id_ = ctx.peer().id();
         ::errorpb::Error* err = new ::errorpb::Error();
-        if (store_id_ != store_id) {
+        if (store_id_ != getStoreId()) {
             ::errorpb::StoreNotMatch* store_not_match = new ::errorpb::StoreNotMatch();
             err -> set_allocated_store_not_match(store_not_match);
             return err;
@@ -88,7 +109,8 @@ private:
 
         uint64_t region_id = ctx.region_id();
         auto it = regions.find(region_id);
-        if (it == regions.end()) {
+        if (it == regions.end() || inject_region_not_found) {
+            inject_region_not_found = false;
             ::errorpb::RegionNotFound * region_not_found = new ::errorpb::RegionNotFound();
             region_not_found -> set_region_id(region_id);
             err -> set_allocated_region_not_found(region_not_found);
