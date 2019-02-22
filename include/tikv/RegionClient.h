@@ -82,7 +82,6 @@ struct RegionClient {
         }
 
         cache -> dropRegion(rpc_ctx -> region);
-        throw Exception("unknown error.");
     }
 
     void onSendFail(Backoffer & bo, const Exception & e, RPCContextPtr rpc_ctx) {
