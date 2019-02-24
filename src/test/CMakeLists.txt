@@ -34,3 +34,10 @@ target_link_libraries(get_region_id_wrong_test kvproto
                               kv_client
                               ${Protobuf_LIBRARY}
                               gRPC::grpc++_unsecure)
+
+add_executable(grpc_error_test grpc_error_test.cc)
+target_include_directories(grpc_error_test PUBLIC ${KVPROTO_INCLUDE_DIR} ${kvClient_INCLUDE_DIR})
+target_link_libraries(grpc_error_test kvproto
+                              kv_client
+                              ${Protobuf_LIBRARY}
+                              gRPC::grpc++_unsecure)
