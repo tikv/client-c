@@ -54,7 +54,11 @@ public:
             store -> set_id(it -> second -> store_id);
             response -> set_allocated_store(store);
         }
-        return ::grpc::Status::OK;
+        if (statuses.empty())
+            return ::grpc::Status::OK;
+        auto ret = statuses.front();
+        statuses.pop();
+        return ret;
     }
 
     void registerStoreAddr(uint64_t store_id, std::string addr)
@@ -76,7 +80,11 @@ public:
             auto slave = response -> add_slaves();
             *slave = it->second->learner;
         }
-        return ::grpc::Status::OK;
+        if (statuses.empty())
+            return ::grpc::Status::OK;
+        auto ret = statuses.front();
+        statuses.pop();
+        return ret;
     }
 
     void setGCPoint(uint64_t gc_point_) {
@@ -114,6 +122,10 @@ public:
     }
     std::map<uint64_t, Store*> stores;
 
+    void registerGRPCStatus(::grpc::Status status_) {
+        statuses.push(status_);
+    }
+
 private:
     std::vector<std::string> addrsToUrls(std::vector<std::string> addrs) {
         std::vector<std::string> urls;
@@ -126,6 +138,8 @@ private:
         }
         return urls;
     }
+
+    std::queue<::grpc::Status> statuses;
 
     std::string leader;
     std::vector<std::string> addrs;
