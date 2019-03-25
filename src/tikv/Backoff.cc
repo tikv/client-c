@@ -51,9 +51,10 @@ void Backoffer::backoff(BackoffType tp, const Exception & exc) {
     auto it = backoff_map.find(tp);
     if (it != backoff_map.end()) {
         bo = it -> second;
+    } else {
+        bo = newBackoff(tp);
+        backoff_map[tp] = bo;
     }
-    bo = newBackoff(tp);
-    backoff_map[tp] = bo;
     total_sleep += bo->sleep();
     if (max_sleep > 0 && total_sleep > max_sleep) {
         throw Type2Exception(tp);
