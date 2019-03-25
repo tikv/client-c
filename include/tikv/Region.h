@@ -33,7 +33,7 @@ struct RegionVerID {
     uint64_t confVer;
     uint64_t ver;
 
-    RegionVerID(int id_, int conf_ver, int ver_): id(id_), confVer(conf_ver), ver(ver_){}
+    RegionVerID(uint64_t id_, uint64_t conf_ver, uint64_t ver_): id(id_), confVer(conf_ver), ver(ver_){}
 
     bool operator == (const RegionVerID & rhs) const {
         return id == rhs.id && confVer == rhs.confVer && ver == rhs.ver;
