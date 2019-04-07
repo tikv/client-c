@@ -169,8 +169,8 @@ void RegionCache::onRegionStale(RPCContextPtr ctx, const errorpb::EpochNotMatch 
     dropRegion(ctx->region);
 
     std::lock_guard<std::mutex> lock(region_mutex);
-    for (int i = 0; i < stale_epoch.new_regions_size(); i++) {
-        auto & meta = stale_epoch.new_regions(i);
+    for (int i = 0; i < stale_epoch.current_regions_size(); i++) {
+        auto & meta = stale_epoch.current_regions(i);
         RegionPtr region = std::make_shared<Region>(meta, meta.peers(0));
         region->switchPeer(ctx->peer.store_id());
         for (int i = 0; i < meta.peers_size(); i++) {
