@@ -1,4 +1,4 @@
-#include <common/CltException.h>
+#include <common/Exception.h>
 #include <tikv/Region.h>
 
 namespace pingcap
@@ -105,7 +105,6 @@ metapb::Peer RegionCache::selectLearner(Backoffer & bo, const std::vector<metapb
             return slave;
         }
     }
-    log->error("there is no valid slave. slave length is " + std::to_string(slaves.size()));
     return metapb::Peer();
 }
 
