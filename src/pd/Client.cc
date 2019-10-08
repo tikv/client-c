@@ -1,5 +1,5 @@
 #include <Poco/URI.h>
-#include <common/CltException.h>
+#include <common/Exception.h>
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
 #include <pd/Client.h>
@@ -242,31 +242,24 @@ uint64_t Client::getTS()
 
 uint64_t Client::getGCSafePoint()
 {
-    std::lock_guard<std::mutex> lk(gc_safepoint_mutex);
-
     pdpb::GetGCSafePointRequest request{};
     pdpb::GetGCSafePointResponse response{};
     request.set_allocated_header(requestHeader());
-    ;
-    ::grpc::Status status;
     std::string err_msg;
 
-    for (int i = 0; i < max_init_cluster_retries; i++)
+    grpc::ClientContext context;
+
+    context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
+
+    auto status = leaderStub()->GetGCSafePoint(&context, request, &response);
+    if (!status.ok())
     {
-        grpc::ClientContext context;
-
-        context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
-
-        auto status = leaderStub()->GetGCSafePoint(&context, request, &response);
-        if (status.ok())
-            return response.safe_point();
         err_msg = "get safe point failed: " + std::to_string(status.error_code()) + ": " + status.error_message();
         log->error(err_msg);
         check_leader.store(true);
-        usleep(100000);
-        // TODO retry outside.
+        throw Exception(err_msg, status.error_code());
     }
-    throw Exception(err_msg, status.error_code());
+    return response.safe_point();
 }
 
 std::tuple<metapb::Region, metapb::Peer, std::vector<metapb::Peer>> Client::getRegion(std::string key)

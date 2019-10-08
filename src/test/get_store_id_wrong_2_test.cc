@@ -1,4 +1,4 @@
-#include <common/CltException.h>
+#include <common/Exception.h>
 #include <tikv/RegionClient.h>
 #include <tikv/Rpc.h>
 #include "MockPDServer.h"
