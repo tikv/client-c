@@ -42,5 +42,3 @@ build
 tags
 .clang-format
 
-
-third_party/kvproto
