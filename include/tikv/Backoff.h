@@ -6,7 +6,7 @@
 #include <map>
 #include <memory>
 
-#include <common/CltException.h>
+#include <common/Exception.h>
 
 namespace pingcap
 {

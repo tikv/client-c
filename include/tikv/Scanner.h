@@ -1,6 +1,6 @@
 #pragma once
 
-#include <common/CltException.h>
+#include <common/Exception.h>
 #include <tikv/Backoff.h>
 #include <tikv/Snapshot.h>
 #include <tikv/Util.h>
