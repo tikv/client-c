@@ -25,8 +25,6 @@ struct ConnArray
 
     ConnArray() = default;
 
-    ConnArray(ConnArray &&) = default;
-
     ConnArray(size_t max_size, std::string addr);
 
     std::shared_ptr<grpc::Channel> get();
