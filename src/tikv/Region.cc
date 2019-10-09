@@ -9,9 +9,10 @@ namespace kv
 RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id, bool is_learner)
 {
     RegionPtr region = getCachedRegion(bo, id);
-    if (region == nullptr)
+    if (unlikely(region == nullptr))
     {
-        throw Exception("not found region, region id is: " + std::to_string(id.id));
+        // It's impossible to reach this branch, because getCachedRegion at least returns a uninited region object.
+        throw Exception("No regions found, region id is: " + std::to_string(id.id), RegionUnavailable);
     }
     const auto & meta = region->meta;
     auto peer = region->peer;
@@ -22,15 +23,17 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
         if (peer.store_id() == 0)
         {
             dropRegion(id);
-            throw Exception("no learner! the request region id is: " + std::to_string(id.id));
+            // Maybe the learner is building, we should retry it.
+            throw Exception("No learners found, the request region id is: " + std::to_string(id.id), LeanerUnavailable);
         }
     }
 
+    // FIXME: Should check response error !!
     std::string addr = getStoreAddr(bo, peer.store_id());
     if (addr == "")
     {
         dropRegion(id);
-        throw Exception("miss store, region id is: " + std::to_string(id.id) + " store id is: " + std::to_string(peer.store_id()));
+        throw Exception("Store not ready, region id is: " + std::to_string(id.id) + " store id is: " + std::to_string(peer.store_id()), StoreNotReady);
     }
     return std::make_shared<RPCContext>(id, meta, peer, addr);
 }
@@ -74,11 +77,11 @@ RegionPtr RegionCache::loadRegionByID(Backoffer & bo, uint64_t region_id)
             auto [meta, leader, slaves] = pdClient->getRegionByID(region_id);
             if (!meta.IsInitialized())
             {
-                throw Exception("meta not found");
+                throw Exception("Region does not exist in PD.", RegionUnavailable);
             }
             if (meta.peers_size() == 0)
             {
-                throw Exception("receive Region with no peer.");
+                throw Exception("Receive a Region Meta with no peers.", RegionUnavailable);
             }
             RegionPtr region = std::make_shared<Region>(meta, meta.peers(0), selectLearner(bo, slaves));
             if (leader.IsInitialized())
@@ -105,6 +108,7 @@ metapb::Peer RegionCache::selectLearner(Backoffer & bo, const std::vector<metapb
             return slave;
         }
     }
+    // Or else there is no learner in peers.
     return metapb::Peer();
 }
 

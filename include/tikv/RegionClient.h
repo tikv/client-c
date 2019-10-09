@@ -39,11 +39,12 @@ struct RegionClient
             RPCContextPtr ctx;
             try
             {
+                // TODO:: Should handle all exceptions inside cache !!!
                 ctx = cache->getRPCContext(bo, region_id, learner);
             }
             catch (const Exception & e)
             {
-                onGetLearnerFail(bo, e);
+                onGetRPCContextFail(bo, e);
                 continue;
             }
             store_addr = ctx->addr;
@@ -119,9 +120,9 @@ private:
         cache->dropRegion(rpc_ctx->region);
     }
 
-    void onGetLearnerFail(Backoffer & bo, const Exception & e)
+    void onGetRPCContextFail(Backoffer & bo, const Exception & e)
     {
-        log->error("error found, retrying. The error msg is: " + e.message());
+        log->error("Get rpc context failed, retrying. The error msg is: " + e.message());
         bo.backoff(boTiKVRPC, e);
     }
 
