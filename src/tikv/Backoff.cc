@@ -69,7 +69,8 @@ void Backoffer::backoff(BackoffType tp, const Exception & exc)
     total_sleep += bo->sleep();
     if (max_sleep > 0 && total_sleep > max_sleep)
     {
-        throw Type2Exception(tp);
+        // TODO:: Should Record all the errors!!
+        throw exc;
     }
 }
 

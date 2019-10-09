@@ -15,6 +15,11 @@ const int TimeoutError = 5;
 const int RegionUnavailable = 6;
 const int LogicalError = 7;
 const int LockError = 8;
+const int LeanerUnavailable = 9;
+const int StoreNotReady = 10;
+const int RaftEntryTooLarge = 11;
+const int ServerIsBusy = 12;
+const int LeaderNotMatch = 13;
 
 class Exception : public Poco::Exception
 {

@@ -13,13 +13,12 @@ struct RegionClient
 {
     RegionCachePtr cache;
     RpcClientPtr client;
-    std::string store_addr;
     RegionVerID region_id;
 
     Logger * log;
 
     RegionClient(RegionCachePtr cache_, RpcClientPtr client_, const RegionVerID & id)
-        : cache(cache_), client(client_), store_addr("you guess?"), region_id(id), log(&Logger::get("pingcap.tikv"))
+        : cache(cache_), client(client_), region_id(id), log(&Logger::get("pingcap.tikv"))
     {}
 
     int64_t getReadIndex()
@@ -37,16 +36,8 @@ struct RegionClient
         for (;;)
         {
             RPCContextPtr ctx;
-            try
-            {
-                ctx = cache->getRPCContext(bo, region_id, learner);
-            }
-            catch (const Exception & e)
-            {
-                onGetLearnerFail(bo, e);
-                continue;
-            }
-            store_addr = ctx->addr;
+            ctx = cache->getRPCContext(bo, region_id, learner);
+            const auto & store_addr = ctx->addr;
             rpc->setCtx(ctx);
             try
             {
@@ -78,12 +69,12 @@ private:
             if (not_leader.has_leader())
             {
                 cache->updateLeader(bo, rpc_ctx->region, not_leader.leader().store_id());
-                bo.backoff(boUpdateLeader, Exception("not leader"));
+                bo.backoff(boUpdateLeader, Exception("not leader", LeaderNotMatch));
             }
             else
             {
                 cache->dropRegion(rpc_ctx->region);
-                bo.backoff(boRegionMiss, Exception("not leader"));
+                bo.backoff(boRegionMiss, Exception("not leader", LeaderNotMatch));
             }
             return;
         }
@@ -102,7 +93,7 @@ private:
 
         if (err.has_server_is_busy())
         {
-            bo.backoff(boServerBusy, Exception("server busy"));
+            bo.backoff(boServerBusy, Exception("server busy", ServerIsBusy));
             return;
         }
 
@@ -113,16 +104,10 @@ private:
 
         if (err.has_raft_entry_too_large())
         {
-            throw Exception("entry too large");
+            throw Exception("entry too large", RaftEntryTooLarge);
         }
 
         cache->dropRegion(rpc_ctx->region);
-    }
-
-    void onGetLearnerFail(Backoffer & bo, const Exception & e)
-    {
-        log->error("error found, retrying. The error msg is: " + e.message());
-        bo.backoff(boTiKVRPC, e);
     }
 
     void onSendFail(Backoffer & bo, const Exception & e, RPCContextPtr rpc_ctx)
