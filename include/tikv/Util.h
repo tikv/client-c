@@ -1,6 +1,5 @@
 #pragma once
 
-#include <common/Exception.h>
 #include <string>
 
 namespace pingcap
@@ -20,7 +19,7 @@ inline std::string prefixNext(const std::string & str)
             return new_str;
         }
     }
-    throw Exception(str + " has been the largest string, cannot get next prefix.", LogicalError);
+    return "";
 }
 
 } // namespace kv
