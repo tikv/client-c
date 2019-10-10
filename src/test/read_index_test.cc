@@ -26,7 +26,7 @@ bool testReadIndex()
     pd_server->addRegion(region, 0, 1);
     pd_server->stores[1]->setReadIndex(5);
 
-    ::sleep(1);
+    std::this_thread::sleep_for(std::chrono::seconds(1));
     pd::ClientPtr clt = std::make_shared<pd::Client>(addrs);
     kv::RegionCachePtr cache = std::make_shared<kv::RegionCache>(clt, "zone", "engine");
     kv::RpcClientPtr rpc = std::make_shared<kv::RpcClient>();

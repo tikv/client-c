@@ -29,7 +29,7 @@ bool testReadIndex()
     pd_server->registerGRPCStatus(grpc::Status::CANCELLED);
     pd_server->registerGRPCStatus(grpc::Status::CANCELLED);
 
-    ::sleep(1);
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 
     pd::ClientPtr clt = std::make_shared<pd::Client>(addrs);
     kv::RegionCachePtr cache = std::make_shared<kv::RegionCache>(clt, "zone", "engine");

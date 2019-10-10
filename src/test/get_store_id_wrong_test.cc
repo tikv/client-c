@@ -28,7 +28,7 @@ bool testReadIndex()
     pd_server->registerStoreAddr(1, "127.0.0.1:7000");
     pd_server->registerStoreAddr(1, "127.0.0.1:6500");
 
-    ::sleep(1);
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 
     pd::ClientPtr clt = std::make_shared<pd::Client>(addrs);
     kv::RegionCachePtr cache = std::make_shared<kv::RegionCache>(clt, "zone", "engine");

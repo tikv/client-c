@@ -21,7 +21,7 @@ bool testPDGetGCSafePoint()
 
     PDService * pd_server = handler.RunPDServer();
 
-    ::sleep(1);
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 
     pd_server->setGCPoint(233);
 
