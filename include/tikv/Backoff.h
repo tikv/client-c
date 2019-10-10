@@ -5,6 +5,7 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <thread>
 
 #include <common/Exception.h>
 
@@ -71,7 +72,7 @@ struct Backoff
             case DecorrJitter:
                 sleep_time = int(std::min(double(cap), double(base + rand() % (last_sleep * 3 - base))));
         }
-        ::usleep(sleep_time);
+        std::this_thread::sleep_for(std::chrono::microseconds(sleep_time));
         attempts++;
         last_sleep = sleep_time;
         return last_sleep;
