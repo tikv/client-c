@@ -82,7 +82,7 @@ struct Region
 
     const std::string & endKey() { return meta.end_key(); }
 
-    bool contains(const std::string & key) { return key >= startKey() && key < endKey(); }
+    bool contains(const std::string & key) { return key >= startKey() && (key < endKey() || meta.end_key() == ""); }
 
     RegionVerID verID()
     {
