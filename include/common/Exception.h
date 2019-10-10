@@ -7,19 +7,22 @@
 namespace pingcap
 {
 
-const int MismatchClusterIDCode = 1;
-const int GRPCErrorCode = 2;
-const int InitClusterIDFailed = 3;
-const int UpdatePDLeaderFailed = 4;
-const int TimeoutError = 5;
-const int RegionUnavailable = 6;
-const int LogicalError = 7;
-const int LockError = 8;
-const int LeanerUnavailable = 9;
-const int StoreNotReady = 10;
-const int RaftEntryTooLarge = 11;
-const int ServerIsBusy = 12;
-const int LeaderNotMatch = 13;
+enum ErrorCodes : int
+{
+    MismatchClusterIDCode = 1,
+    GRPCErrorCode = 2,
+    InitClusterIDFailed = 3,
+    UpdatePDLeaderFailed = 4,
+    TimeoutError = 5,
+    RegionUnavailable = 6,
+    LogicalError = 7,
+    LockError = 8,
+    LeanerUnavailable = 9,
+    StoreNotReady = 10,
+    RaftEntryTooLarge = 11,
+    ServerIsBusy = 12,
+    LeaderNotMatch = 13
+};
 
 class Exception : public Poco::Exception
 {
