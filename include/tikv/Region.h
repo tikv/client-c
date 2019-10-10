@@ -183,7 +183,7 @@ private:
 
     pd::ClientPtr pdClient;
 
-    std::mutex region_mutex;
+    std::shared_mutex region_mutex;
 
     std::mutex store_mutex;
 

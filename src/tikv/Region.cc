@@ -39,10 +39,12 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
 
 RegionPtr RegionCache::getCachedRegion(Backoffer & bo, const RegionVerID & id)
 {
-    std::lock_guard<std::mutex> lock(region_mutex);
+    std::shared_lock<std::shared_mutex> lock(region_mutex);
     auto it = regions.find(id);
     if (it == regions.end())
     {
+        lock.unlock();
+
         auto region = loadRegionByID(bo, id.id);
 
         insertRegionToCache(region);
@@ -194,6 +196,7 @@ std::string RegionCache::getStoreAddr(Backoffer & bo, uint64_t id)
 
 RegionPtr RegionCache::searchCachedRegion(const std::string & key)
 {
+    std::shared_lock<std::shared_mutex> lock(region_mutex);
     auto it = regions_map.upper_bound(key);
     if (it != regions_map.end() && it->second->contains(key))
     {
@@ -204,13 +207,14 @@ RegionPtr RegionCache::searchCachedRegion(const std::string & key)
 
 void RegionCache::insertRegionToCache(RegionPtr region)
 {
+    std::unique_lock<std::shared_mutex> lock(region_mutex);
     regions_map[region->endKey()] = region;
     regions[region->verID()] = region;
 }
 
 void RegionCache::dropRegion(const RegionVerID & region_id)
 {
-    std::lock_guard<std::mutex> lock(region_mutex);
+    std::unique_lock<std::shared_mutex> lock(region_mutex);
     auto it1 = regions.find(region_id);
     if (it1 != regions.end())
     {
@@ -255,7 +259,6 @@ void RegionCache::onRegionStale(RPCContextPtr ctx, const errorpb::EpochNotMatch 
 
     dropRegion(ctx->region);
 
-    std::lock_guard<std::mutex> lock(region_mutex);
     for (int i = 0; i < stale_epoch.current_regions_size(); i++)
     {
         auto & meta = stale_epoch.current_regions(i);
