@@ -1,5 +1,3 @@
-#include <unistd.h>
-
 #include <pd/Client.h>
 #include <iostream>
 #include "MockPDServer.h"

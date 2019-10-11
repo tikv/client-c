@@ -3,7 +3,6 @@
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
 #include <pd/Client.h>
-#include <unistd.h>
 
 namespace pingcap
 {
