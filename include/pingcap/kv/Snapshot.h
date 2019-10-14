@@ -1,6 +1,6 @@
 #pragma once
 
-#include <tikv/RegionClient.h>
+#include <pingcap/kv/RegionClient.h>
 
 namespace pingcap
 {

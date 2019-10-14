@@ -1,8 +1,8 @@
 #pragma once
 
-#include <tikv/Backoff.h>
-#include <tikv/Region.h>
-#include <tikv/Rpc.h>
+#include <pingcap/kv/Backoff.h>
+#include <pingcap/kv/Region.h>
+#include <pingcap/kv/Rpc.h>
 
 namespace pingcap
 {

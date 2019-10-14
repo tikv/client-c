@@ -1,5 +1,5 @@
-#include <tikv/RegionClient.h>
-#include <tikv/Rpc.h>
+#include <pingcap/kv/RegionClient.h>
+#include <pingcap/kv/Rpc.h>
 #include "MockPDServer.h"
 
 namespace pingcap

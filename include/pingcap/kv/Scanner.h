@@ -1,9 +1,9 @@
 #pragma once
 
-#include <common/Exception.h>
-#include <tikv/Backoff.h>
-#include <tikv/Snapshot.h>
-#include <tikv/Util.h>
+#include <pingcap/Exception.h>
+#include <pingcap/kv/Backoff.h>
+#include <pingcap/kv/Snapshot.h>
+#include <pingcap/kv/Util.h>
 
 namespace pingcap
 {

@@ -4,7 +4,7 @@
 #include <grpcpp/server.h>
 #include <grpcpp/server_builder.h>
 #include <kvproto/tikvpb.grpc.pb.h>
-#include <tikv/Region.h>
+#include <pingcap/kv/Region.h>
 
 namespace pingcap
 {

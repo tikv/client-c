@@ -8,8 +8,8 @@
 #include <type_traits>
 #include <vector>
 
-#include <common/Log.h>
-#include <tikv/Region.h>
+#include <pingcap/Log.h>
+#include <pingcap/kv/Region.h>
 
 namespace pingcap
 {

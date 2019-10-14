@@ -1,4 +1,4 @@
-#include <tikv/Rpc.h>
+#include <pingcap/kv/Rpc.h>
 
 namespace pingcap
 {

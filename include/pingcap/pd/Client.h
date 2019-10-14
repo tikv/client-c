@@ -1,13 +1,14 @@
 #pragma once
 
-#include <common/Log.h>
 #include <kvproto/pdpb.grpc.pb.h>
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
 #include <shared_mutex>
 #include <thread>
-#include "IClient.h"
+
+#include <pingcap/Log.h>
+#include <pingcap/pd/IClient.h>
 
 namespace pingcap
 {
