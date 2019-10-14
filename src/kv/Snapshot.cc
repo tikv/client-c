@@ -1,7 +1,7 @@
-#include <common/Exception.h>
-#include <tikv/Backoff.h>
-#include <tikv/Scanner.h>
-#include <tikv/Snapshot.h>
+#include <pingcap/Exception.h>
+#include <pingcap/kv/Backoff.h>
+#include <pingcap/kv/Scanner.h>
+#include <pingcap/kv/Snapshot.h>
 
 namespace pingcap
 {

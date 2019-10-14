@@ -3,11 +3,12 @@
 #include <map>
 #include <unordered_map>
 
-#include <common/Log.h>
 #include <kvproto/errorpb.pb.h>
 #include <kvproto/metapb.pb.h>
-#include <pd/Client.h>
-#include <tikv/Backoff.h>
+
+#include <pingcap/Log.h>
+#include <pingcap/pd/Client.h>
+#include <pingcap/kv/Backoff.h>
 
 namespace pingcap
 {

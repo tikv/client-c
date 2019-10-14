@@ -1,5 +1,6 @@
-#include <pd/Client.h>
 #include <iostream>
+
+#include <pingcap/pd/Client.h>
 #include "MockPDServer.h"
 
 namespace pingcap

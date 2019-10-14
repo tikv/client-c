@@ -1,6 +1,6 @@
 #pragma once
 
-#include <pd/IClient.h>
+#include <pingcap/pd/IClient.h>
 #include <limits>
 
 namespace pingcap

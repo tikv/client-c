@@ -6,7 +6,7 @@
 #include <memory>
 #include <thread>
 
-#include <common/Exception.h>
+#include <pingcap/Exception.h>
 
 namespace pingcap
 {

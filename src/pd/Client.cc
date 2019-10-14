@@ -1,8 +1,9 @@
 #include <Poco/URI.h>
-#include <common/Exception.h>
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
-#include <pd/Client.h>
+
+#include <pingcap/Exception.h>
+#include <pingcap/pd/Client.h>
 
 namespace pingcap
 {
