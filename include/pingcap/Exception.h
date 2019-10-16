@@ -21,7 +21,8 @@ enum ErrorCodes : int
     StoreNotReady = 10,
     RaftEntryTooLarge = 11,
     ServerIsBusy = 12,
-    LeaderNotMatch = 13
+    LeaderNotMatch = 13,
+    RegionEpochNotMatch = 14
 };
 
 class Exception : public Poco::Exception

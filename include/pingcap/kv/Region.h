@@ -7,8 +7,8 @@
 #include <kvproto/metapb.pb.h>
 
 #include <pingcap/Log.h>
-#include <pingcap/pd/Client.h>
 #include <pingcap/kv/Backoff.h>
+#include <pingcap/pd/Client.h>
 
 namespace pingcap
 {
@@ -70,13 +70,10 @@ struct Region
 {
     metapb::Region meta;
     metapb::Peer peer;
-    metapb::Peer learner;
+    std::vector<metapb::Peer> learners;
 
-    Region(const metapb::Region & meta_, const metapb::Peer & peer_) : meta(meta_), peer(peer_), learner(metapb::Peer::default_instance())
-    {}
-
-    Region(const metapb::Region & meta_, const metapb::Peer & peer_, const metapb::Peer & learner_)
-        : meta(meta_), peer(peer_), learner(learner_)
+    Region(const metapb::Region & meta_, const metapb::Peer & peer_, const std::vector<metapb::Peer> & learners_)
+        : meta(meta_), peer(peer_), learners(learners_)
     {}
 
     const std::string & startKey() { return meta.start_key(); }
@@ -142,7 +139,7 @@ public:
         : pdClient(pdClient_), learner_key(std::move(key_)), learner_value(std::move(value_)), log(&Logger::get("pingcap.tikv"))
     {}
 
-    RPCContextPtr getRPCContext(Backoffer & bo, const RegionVerID & id, bool is_learner);
+    RPCContextPtr getRPCContext(Backoffer & bo, const RegionVerID & id);
 
     void updateLeader(Backoffer & bo, const RegionVerID & region_id, uint64_t leader_store_id);
 
@@ -152,16 +149,16 @@ public:
 
     void dropStore(uint64_t failed_store_id);
 
-    void dropStoreOnSendReqFail(RPCContextPtr & ctx, const Exception & exc);
+    void onSendReqFail(RPCContextPtr & ctx, const Exception & exc);
 
-    void onRegionStale(RPCContextPtr ctx, const errorpb::EpochNotMatch & epoch_not_match);
+    void onRegionStale(Backoffer & bo, RPCContextPtr ctx, const errorpb::EpochNotMatch & epoch_not_match);
+
+    RegionPtr getRegionByID(Backoffer & bo, const RegionVerID & id);
+
+    std::string getStoreAddr(Backoffer & bo, uint64_t id);
 
 private:
-    RegionPtr getCachedRegion(Backoffer & bo, const RegionVerID & id);
-
-    RegionPtr loadRegion(Backoffer & bo, std::string key);
-
-    metapb::Peer selectLearner(Backoffer & bo, const std::vector<metapb::Peer> & slaves);
+    RegionPtr loadRegionByKey(Backoffer & bo, const std::string & key);
 
     RegionPtr loadRegionByID(Backoffer & bo, uint64_t region_id);
 
@@ -169,10 +166,11 @@ private:
 
     Store reloadStore(Backoffer & bo, uint64_t id);
 
-    std::string getStoreAddr(Backoffer & bo, uint64_t id);
     Store getStore(Backoffer & bo, uint64_t id);
 
     RegionPtr searchCachedRegion(const std::string & key);
+
+    std::vector<metapb::Peer> selectLearner(Backoffer & bo, const metapb::Region & meta);
 
     void insertRegionToCache(RegionPtr region);
 
@@ -188,9 +186,9 @@ private:
 
     std::mutex store_mutex;
 
-    std::string learner_key;
+    const std::string learner_key;
 
-    std::string learner_value;
+    const std::string learner_value;
 
     Logger * log;
 };

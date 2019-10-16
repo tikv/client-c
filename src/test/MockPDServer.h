@@ -85,8 +85,7 @@ public:
             response->set_allocated_region(region);
             auto leader = new ::metapb::Peer(it->second->peer);
             response->set_allocated_leader(leader);
-            auto slave = response->add_slaves();
-            *slave = it->second->learner;
+            // TODO:: add learner. I will refine the tests in future.
         }
         if (statuses.empty())
             return ::grpc::Status::OK;
@@ -125,7 +124,9 @@ public:
                 leader = peer;
             }
         }
-        kv::RegionPtr region_ptr = std::make_shared<kv::Region>(region, *leader, *learner);
+        std::vector<::metapb::Peer> learners;
+        learners.push_back(*learner);
+        kv::RegionPtr region_ptr = std::make_shared<kv::Region>(region, *leader, learners);
         for (auto it : stores)
         {
             it.second->addRegion(region_ptr);

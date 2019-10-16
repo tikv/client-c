@@ -42,11 +42,11 @@ public:
     // only implement a weak get ts.
     uint64_t getTS() override;
 
-    std::tuple<metapb::Region, metapb::Peer, std::vector<metapb::Peer>> getRegion(std::string key) override;
+    std::pair<metapb::Region, metapb::Peer> getRegionByKey(const std::string & key) override;
 
     //std::pair<metapb::Region, metapb::Peer> getPrevRegion(std::string key) override;
 
-    std::tuple<metapb::Region, metapb::Peer, std::vector<metapb::Peer>> getRegionByID(uint64_t region_id) override;
+    std::pair<metapb::Region, metapb::Peer> getRegionByID(uint64_t region_id) override;
 
     metapb::Store getStore(uint64_t store_id) override;
 

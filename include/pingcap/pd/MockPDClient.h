@@ -21,9 +21,9 @@ public:
 
     uint64_t getTS() override { return Clock::now().time_since_epoch().count(); }
 
-    std::tuple<metapb::Region, metapb::Peer, std::vector<metapb::Peer>> getRegion(std::string) override { throw "not implemented"; }
+    std::pair<metapb::Region, metapb::Peer> getRegionByKey(const std::string &) override { throw "not implemented"; }
 
-    std::tuple<metapb::Region, metapb::Peer, std::vector<metapb::Peer>> getRegionByID(uint64_t) override { throw "not implemented"; }
+    std::pair<metapb::Region, metapb::Peer> getRegionByID(uint64_t) override { throw "not implemented"; }
 
     metapb::Store getStore(uint64_t) override { throw "not implemented"; }
 
