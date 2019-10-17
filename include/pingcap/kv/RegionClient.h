@@ -9,11 +9,20 @@ namespace pingcap
 namespace kv
 {
 
+// RegionClient sends KV/Cop requests to tikv server (corresponding to `RegionRequestSender` in go-client). It handles network errors and some region errors internally.
+//
+// Typically, a KV/Cop requests is bind to a region, all keys that are involved in the request should be located in the region.
+// The sending process begins with looking for the address of leader (may be learners for ReadIndex request) store's address of the target region from cache,
+// and the request is then sent to the destination TiKV server over TCP connection.
+// If region is updated, can be caused by leader transfer, region split, region merge, or region balance, tikv server may not able to process request and send back a RegionError.
+// RegionClient takes care of errors that does not relevant to region range, such as 'I/O timeout', 'NotLeader', and 'ServerIsBusy'.
+// For other errors, since region range have changed, the request may need to split, so we simply return the error to caller.
+
 struct RegionClient
 {
     RegionCachePtr cache;
     RpcClientPtr client;
-    RegionVerID region_id;
+    const RegionVerID region_id;
 
     Logger * log;
 
@@ -21,22 +30,14 @@ struct RegionClient
         : cache(cache_), client(client_), region_id(id), log(&Logger::get("pingcap.tikv"))
     {}
 
-    int64_t getReadIndex()
-    {
-        auto request = new kvrpcpb::ReadIndexRequest();
-        Backoffer bo(readIndexMaxBackoff);
-        auto rpc_call = std::make_shared<RpcCall<kvrpcpb::ReadIndexRequest>>(request);
-        sendReqToRegion(bo, rpc_call, true);
-        return rpc_call->getResp()->read_index();
-    }
-
+    // This method send a request to region, but is NOT Thread-Safe !!
     template <typename T>
-    void sendReqToRegion(Backoffer & bo, RpcCallPtr<T> rpc, bool learner)
+    void sendReqToRegion(Backoffer & bo, RpcCallPtr<T> rpc)
     {
         for (;;)
         {
             RPCContextPtr ctx;
-            ctx = cache->getRPCContext(bo, region_id, learner);
+            ctx = cache->getRPCContext(bo, region_id);
             const auto & store_addr = ctx->addr;
             rpc->setCtx(ctx);
             try
@@ -60,7 +61,7 @@ struct RegionClient
         }
     }
 
-private:
+protected:
     void onRegionError(Backoffer & bo, RPCContextPtr rpc_ctx, const errorpb::Error & err)
     {
         if (err.has_not_leader())
@@ -87,8 +88,9 @@ private:
 
         if (err.has_epoch_not_match())
         {
-            cache->onRegionStale(rpc_ctx, err.epoch_not_match());
-            return;
+            cache->onRegionStale(bo, rpc_ctx, err.epoch_not_match());
+            // Epoch not match should not retry, throw exception directly !!
+            throw Exception("Region epoch not match!", RegionEpochNotMatch);
         }
 
         if (err.has_server_is_busy())
@@ -110,9 +112,12 @@ private:
         cache->dropRegion(rpc_ctx->region);
     }
 
+    // Normally, it happens when machine down or network partition between tidb and kv or process crash.
     void onSendFail(Backoffer & bo, const Exception & e, RPCContextPtr rpc_ctx)
     {
-        cache->dropStoreOnSendReqFail(rpc_ctx, e);
+        cache->onSendReqFail(rpc_ctx, e);
+        // Retry on send request failure when it's not canceled.
+        // When a store is not available, the leader of related region should be elected quickly.
         bo.backoff(boTiKVRPC, e);
     }
 };

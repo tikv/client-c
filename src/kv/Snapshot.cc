@@ -26,7 +26,7 @@ std::string Snapshot::Get(const std::string & key)
     context->set_not_fill_cache(false);
     auto rpc_call = std::make_shared<RpcCall<kvrpcpb::GetRequest>>(request);
 
-    regionClient.sendReqToRegion(bo, rpc_call, false);
+    regionClient.sendReqToRegion(bo, rpc_call);
 
     auto response = rpc_call->getResp();
     if (response->has_error())

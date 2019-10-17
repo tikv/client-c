@@ -6,38 +6,29 @@ namespace pingcap
 namespace kv
 {
 
-RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id, bool is_learner)
+RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id)
 {
     for (;;)
     {
-        RegionPtr region = getCachedRegion(bo, id);
+        RegionPtr region = getRegionByID(bo, id);
         const auto & meta = region->meta;
         auto peer = region->peer;
-
-        if (is_learner)
-        {
-            peer = region->learner;
-            if (peer.store_id() == 0)
-            {
-                dropRegion(id);
-                bo.backoff(boRegionMiss, Exception("no learner! the request region id is: " + std::to_string(id.id), LeanerUnavailable));
-                continue;
-            }
-        }
 
         std::string addr = getStoreAddr(bo, peer.store_id());
         if (addr == "")
         {
             dropRegion(id);
             dropStore(peer.store_id());
-            bo.backoff(boRegionMiss, Exception("miss store, region id is: " + std::to_string(id.id) + " store id is: " + std::to_string(peer.store_id()), StoreNotReady));
+            bo.backoff(boRegionMiss,
+                Exception("miss store, region id is: " + std::to_string(id.id) + " store id is: " + std::to_string(peer.store_id()),
+                    StoreNotReady));
             continue;
         }
         return std::make_shared<RPCContext>(id, meta, peer, addr);
     }
 }
 
-RegionPtr RegionCache::getCachedRegion(Backoffer & bo, const RegionVerID & id)
+RegionPtr RegionCache::getRegionByID(Backoffer & bo, const RegionVerID & id)
 {
     std::shared_lock<std::shared_mutex> lock(region_mutex);
     auto it = regions.find(id);
@@ -62,11 +53,31 @@ KeyLocation RegionCache::locateKey(Backoffer & bo, const std::string & key)
         return KeyLocation(region->verID(), region->startKey(), region->endKey());
     }
 
-    region = loadRegion(bo, key);
+    region = loadRegionByKey(bo, key);
 
     insertRegionToCache(region);
 
     return KeyLocation(region->verID(), region->startKey(), region->endKey());
+}
+
+// selectLearner select all learner peers.
+std::vector<metapb::Peer> RegionCache::selectLearner(Backoffer & bo, const metapb::Region & meta)
+{
+    std::vector<metapb::Peer> learners;
+    for (int i = 0; i < meta.peers_size(); i++)
+    {
+        auto peer = meta.peers(i);
+        if (peer.is_learner())
+        {
+            auto store_id = peer.store_id();
+            auto labels = getStore(bo, store_id).labels;
+            if (labels[learner_key] == learner_value)
+            {
+                learners.push_back(peer);
+            }
+        }
+    }
+    return learners;
 }
 
 RegionPtr RegionCache::loadRegionByID(Backoffer & bo, uint64_t region_id)
@@ -75,8 +86,10 @@ RegionPtr RegionCache::loadRegionByID(Backoffer & bo, uint64_t region_id)
     {
         try
         {
-            auto [meta, leader, slaves] = pdClient->getRegionByID(region_id);
-            // Check if region is valid.
+            auto [meta, leader] = pdClient->getRegionByID(region_id);
+
+            // If the region is not found in cache, it must be out of date and already be cleaned up. We can
+            // skip the RPC by returning RegionError directly.
             if (!meta.IsInitialized())
             {
                 throw Exception("region not found for regionID " + std::to_string(region_id), RegionUnavailable);
@@ -86,7 +99,7 @@ RegionPtr RegionCache::loadRegionByID(Backoffer & bo, uint64_t region_id)
                 throw Exception("Receive Region with no peer", RegionUnavailable);
             }
 
-            RegionPtr region = std::make_shared<Region>(meta, meta.peers(0), selectLearner(bo, slaves));
+            RegionPtr region = std::make_shared<Region>(meta, meta.peers(0), selectLearner(bo, meta));
             if (leader.IsInitialized())
             {
                 region->switchPeer(leader.store_id());
@@ -100,36 +113,22 @@ RegionPtr RegionCache::loadRegionByID(Backoffer & bo, uint64_t region_id)
     }
 }
 
-metapb::Peer RegionCache::selectLearner(Backoffer & bo, const std::vector<metapb::Peer> & slaves)
-{
-    for (auto slave : slaves)
-    {
-        auto store_id = slave.store_id();
-        auto labels = getStore(bo, store_id).labels;
-        if (labels[learner_key] == learner_value)
-        {
-            return slave;
-        }
-    }
-    return metapb::Peer();
-}
-
-RegionPtr RegionCache::loadRegion(Backoffer & bo, std::string key)
+RegionPtr RegionCache::loadRegionByKey(Backoffer & bo, const std::string & key)
 {
     for (;;)
     {
         try
         {
-            auto [meta, leader, slaves] = pdClient->getRegion(key);
+            auto [meta, leader] = pdClient->getRegionByKey(key);
             if (!meta.IsInitialized())
             {
-                throw Exception("meta not found");
+                throw Exception("region not found for region key " + key, RegionUnavailable);
             }
             if (meta.peers_size() == 0)
             {
-                throw Exception("receive Region with no peer.");
+                throw Exception("Receive Region with no peer", RegionUnavailable);
             }
-            RegionPtr region = std::make_shared<Region>(meta, meta.peers(0), selectLearner(bo, slaves));
+            RegionPtr region = std::make_shared<Region>(meta, meta.peers(0), selectLearner(bo, meta));
             if (leader.IsInitialized())
             {
                 region->switchPeer(leader.store_id());
@@ -149,6 +148,7 @@ metapb::Store RegionCache::loadStore(Backoffer & bo, uint64_t id)
     {
         try
         {
+            // TODO:: The store may be not ready, it's better to check store's state.
             const auto & store = pdClient->getStore(id);
             return store;
         }
@@ -237,7 +237,7 @@ void RegionCache::dropStore(uint64_t failed_store_id)
     }
 }
 
-void RegionCache::dropStoreOnSendReqFail(RPCContextPtr & ctx, const Exception & exc)
+void RegionCache::onSendReqFail(RPCContextPtr & ctx, const Exception & exc)
 {
     const auto & failed_region_id = ctx->region;
     uint64_t failed_store_id = ctx->peer.store_id();
@@ -247,14 +247,14 @@ void RegionCache::dropStoreOnSendReqFail(RPCContextPtr & ctx, const Exception & 
 
 void RegionCache::updateLeader(Backoffer & bo, const RegionVerID & region_id, uint64_t leader_store_id)
 {
-    auto region = getCachedRegion(bo, region_id);
+    auto region = getRegionByID(bo, region_id);
     if (!region->switchPeer(leader_store_id))
     {
         dropRegion(region_id);
     }
 }
 
-void RegionCache::onRegionStale(RPCContextPtr ctx, const errorpb::EpochNotMatch & stale_epoch)
+void RegionCache::onRegionStale(Backoffer & bo, RPCContextPtr ctx, const errorpb::EpochNotMatch & stale_epoch)
 {
 
     dropRegion(ctx->region);
@@ -262,17 +262,8 @@ void RegionCache::onRegionStale(RPCContextPtr ctx, const errorpb::EpochNotMatch 
     for (int i = 0; i < stale_epoch.current_regions_size(); i++)
     {
         auto & meta = stale_epoch.current_regions(i);
-        RegionPtr region = std::make_shared<Region>(meta, meta.peers(0));
+        RegionPtr region = std::make_shared<Region>(meta, meta.peers(0), selectLearner(bo, meta));
         region->switchPeer(ctx->peer.store_id());
-        for (int i = 0; i < meta.peers_size(); i++)
-        {
-            auto peer = meta.peers(i);
-            if (peer.is_learner())
-            {
-                region->learner = peer;
-                break;
-            }
-        }
         insertRegionToCache(region);
     }
 }

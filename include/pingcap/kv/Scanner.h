@@ -111,7 +111,7 @@ private:
         context->set_not_fill_cache(false);
 
         auto rpc_call = std::make_shared<RpcCall<kvrpcpb::ScanRequest>>(request);
-        regionClient.sendReqToRegion(bo, rpc_call, false);
+        regionClient.sendReqToRegion(bo, rpc_call);
 
         // TODO Check safe point.
 

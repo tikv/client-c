@@ -262,7 +262,7 @@ uint64_t Client::getGCSafePoint()
     return response.safe_point();
 }
 
-std::tuple<metapb::Region, metapb::Peer, std::vector<metapb::Peer>> Client::getRegion(std::string key)
+std::pair<metapb::Region, metapb::Peer> Client::getRegionByKey(const std::string & key)
 {
     pdpb::GetRegionRequest request{};
     pdpb::GetRegionResponse response{};
@@ -285,17 +285,10 @@ std::tuple<metapb::Region, metapb::Peer, std::vector<metapb::Peer>> Client::getR
 
     if (!response.has_region())
         return {};
-    std::vector<metapb::Peer> slaves;
-    for (size_t i = 0; i < response.region().peers_size(); i++)
-    {
-        const auto & peer = response.region().peers(i);
-        if (peer.is_learner())
-            slaves.push_back(peer);
-    }
-    return std::make_tuple(response.region(), response.leader(), slaves);
+    return std::make_pair(response.region(), response.leader());
 }
 
-std::tuple<metapb::Region, metapb::Peer, std::vector<metapb::Peer>> Client::getRegionByID(uint64_t region_id)
+std::pair<metapb::Region, metapb::Peer> Client::getRegionByID(uint64_t region_id)
 {
     pdpb::GetRegionByIDRequest request{};
     pdpb::GetRegionResponse response{};
@@ -319,14 +312,7 @@ std::tuple<metapb::Region, metapb::Peer, std::vector<metapb::Peer>> Client::getR
     if (!response.has_region())
         return {};
 
-    std::vector<metapb::Peer> slaves;
-    for (size_t i = 0; i < response.region().peers_size(); i++)
-    {
-        const auto & peer = response.region().peers(i);
-        if (peer.is_learner())
-            slaves.push_back(peer);
-    }
-    return std::make_tuple(response.region(), response.leader(), slaves);
+    return std::make_pair(response.region(), response.leader());
 }
 
 metapb::Store Client::getStore(uint64_t store_id)
