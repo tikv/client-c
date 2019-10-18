@@ -136,7 +136,8 @@ private:
         {
             next_start_key = loc.end_key;
 
-            if (end_key.size() == 0 || (next_start_key) >= end_key)
+            // If the end key is empty, it infers this region is last and should stop scan.
+            if (loc.end_key.size() == 0 || (next_start_key) >= end_key)
             {
                 eof = true;
             }
