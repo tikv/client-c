@@ -19,11 +19,12 @@ struct Store
 {
     uint64_t id;
     std::string addr;
+    std::string peer_addr;
     std::map<std::string, std::string> labels;
 
     Store() {}
-    Store(uint64_t id_, const std::string & addr_, const std::map<std::string, std::string> & labels_)
-        : id(id_), addr(addr_), labels(labels_)
+    Store(uint64_t id_, const std::string & addr_, const std::string & peer_addr_, const std::map<std::string, std::string> & labels_)
+        : id(id_), addr(addr_), peer_addr(peer_addr_), labels(labels_)
     {}
     Store(Store &&) = default;
     Store(const Store &) = default;
@@ -156,6 +157,8 @@ public:
     RegionPtr getRegionByID(Backoffer & bo, const RegionVerID & id);
 
     std::string getStoreAddr(Backoffer & bo, uint64_t id);
+
+    std::string getStorePeerAddr(Backoffer & bo, uint64_t id);
 
 private:
     RegionPtr loadRegionByKey(Backoffer & bo, const std::string & key);

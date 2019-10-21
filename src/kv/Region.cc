@@ -167,7 +167,7 @@ Store RegionCache::reloadStore(Backoffer & bo, uint64_t id)
     {
         labels[store.labels(i).key()] = store.labels(i).value();
     }
-    stores[id] = Store(id, store.address(), labels);
+    stores[id] = Store(id, store.address(), store.peer_address(), labels);
     return stores[id];
 }
 
@@ -193,6 +193,18 @@ std::string RegionCache::getStoreAddr(Backoffer & bo, uint64_t id)
     }
     return reloadStore(bo, id).addr;
 }
+
+std::string RegionCache::getStorePeerAddr(Backoffer & bo, uint64_t id)
+{
+    std::lock_guard<std::mutex> lock(store_mutex);
+    auto it = stores.find(id);
+    if (it != stores.end())
+    {
+        return it->second.addr;
+    }
+    return reloadStore(bo, id).peer_addr;
+}
+
 
 RegionPtr RegionCache::searchCachedRegion(const std::string & key)
 {
