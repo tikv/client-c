@@ -14,7 +14,7 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id)
         const auto & meta = region->meta;
         auto peer = region->peer;
 
-        std::string addr = getStoreAddr(bo, peer.store_id());
+        std::string addr = getStore(bo, peer.store_id()).addr;
         if (addr == "")
         {
             dropRegion(id);
@@ -167,8 +167,8 @@ Store RegionCache::reloadStore(Backoffer & bo, uint64_t id)
     {
         labels[store.labels(i).key()] = store.labels(i).value();
     }
-    stores[id] = Store(id, store.address(), store.peer_address(), labels);
-    return stores[id];
+    auto it = stores.emplace(id, Store(id, store.address(), store.peer_address(), labels));
+    return it.first->second;
 }
 
 Store RegionCache::getStore(Backoffer & bo, uint64_t id)
@@ -181,30 +181,6 @@ Store RegionCache::getStore(Backoffer & bo, uint64_t id)
     }
     return reloadStore(bo, id);
 }
-
-
-std::string RegionCache::getStoreAddr(Backoffer & bo, uint64_t id)
-{
-    std::lock_guard<std::mutex> lock(store_mutex);
-    auto it = stores.find(id);
-    if (it != stores.end())
-    {
-        return it->second.addr;
-    }
-    return reloadStore(bo, id).addr;
-}
-
-std::string RegionCache::getStorePeerAddr(Backoffer & bo, uint64_t id)
-{
-    std::lock_guard<std::mutex> lock(store_mutex);
-    auto it = stores.find(id);
-    if (it != stores.end())
-    {
-        return it->second.peer_addr;
-    }
-    return reloadStore(bo, id).peer_addr;
-}
-
 
 RegionPtr RegionCache::searchCachedRegion(const std::string & key)
 {
@@ -236,7 +212,7 @@ void RegionCache::dropRegion(const RegionVerID & region_id)
         {
             regions_map.erase(it);
         }
-        log->information("drop region because of send failure");
+        log->information("drop region " + std::to_string(region_id.id) + " because of send failure");
     }
 }
 

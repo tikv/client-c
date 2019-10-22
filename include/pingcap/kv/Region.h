@@ -22,19 +22,9 @@ struct Store
     std::string peer_addr;
     std::map<std::string, std::string> labels;
 
-    Store() {}
     Store(uint64_t id_, const std::string & addr_, const std::string & peer_addr_, const std::map<std::string, std::string> & labels_)
         : id(id_), addr(addr_), peer_addr(peer_addr_), labels(labels_)
     {}
-    Store(Store &&) = default;
-    Store(const Store &) = default;
-    Store & operator=(const Store & rhs)
-    {
-        id = rhs.id;
-        addr = rhs.addr;
-        labels = rhs.labels;
-        return *this;
-    }
 };
 
 struct RegionVerID
@@ -156,9 +146,7 @@ public:
 
     RegionPtr getRegionByID(Backoffer & bo, const RegionVerID & id);
 
-    std::string getStoreAddr(Backoffer & bo, uint64_t id);
-
-    std::string getStorePeerAddr(Backoffer & bo, uint64_t id);
+    Store getStore(Backoffer & bo, uint64_t id);
 
 private:
     RegionPtr loadRegionByKey(Backoffer & bo, const std::string & key);
@@ -168,8 +156,6 @@ private:
     metapb::Store loadStore(Backoffer & bo, uint64_t id);
 
     Store reloadStore(Backoffer & bo, uint64_t id);
-
-    Store getStore(Backoffer & bo, uint64_t id);
 
     RegionPtr searchCachedRegion(const std::string & key);
 
