@@ -200,7 +200,7 @@ std::string RegionCache::getStorePeerAddr(Backoffer & bo, uint64_t id)
     auto it = stores.find(id);
     if (it != stores.end())
     {
-        return it->second.addr;
+        return it->second.peer_addr;
     }
     return reloadStore(bo, id).peer_addr;
 }
