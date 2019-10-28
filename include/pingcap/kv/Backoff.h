@@ -71,14 +71,13 @@ struct Backoff
             case DecorrJitter:
                 sleep_time = int(std::min(double(cap), double(base + rand() % (last_sleep * 3 - base))));
         }
-        std::this_thread::sleep_for(std::chrono::microseconds(sleep_time));
+        std::this_thread::sleep_for(std::chrono::milliseconds(sleep_time));
         attempts++;
         last_sleep = sleep_time;
         return last_sleep;
     }
 };
 
-constexpr int readIndexMaxBackoff = 20000;
 constexpr int GetMaxBackoff = 20000;
 constexpr int scanMaxBackoff = 20000;
 
