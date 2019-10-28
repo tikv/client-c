@@ -2,6 +2,7 @@ set(kvClient_sources)
 
 list(APPEND kvClient_sources pd/Client.cc)
 list(APPEND kvClient_sources kv/Region.cc)
+list(APPEND kvClient_sources kv/RegionClient.cc)
 list(APPEND kvClient_sources kv/Snapshot.cc)
 list(APPEND kvClient_sources kv/Backoff.cc)
 list(APPEND kvClient_sources kv/Rpc.cc)

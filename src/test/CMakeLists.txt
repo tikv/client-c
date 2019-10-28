@@ -28,9 +28,12 @@ target_link_libraries(get_region_id_wrong_test kvproto
                               ${Protobuf_LIBRARY}
                               gRPC::grpc++_unsecure)
 
-add_executable(grpc_error_test grpc_error_test.cc)
-target_include_directories(grpc_error_test PUBLIC ${KVPROTO_INCLUDE_DIR} ${kvClient_INCLUDE_DIR})
-target_link_libraries(grpc_error_test kvproto
+add_executable(server_is_busy_get_test server_is_busy_get_test.cc)
+target_include_directories(server_is_busy_get_test PUBLIC ${KVPROTO_INCLUDE_DIR} ${kvClient_INCLUDE_DIR})
+target_link_libraries(server_is_busy_get_test kvproto
                               kv_client
                               ${Protobuf_LIBRARY}
+                              ${Poco_Net_LIBRARY}
+                              ${Poco_Foundation_LIBRARY}
+                              PocoJSON
                               gRPC::grpc++_unsecure)
