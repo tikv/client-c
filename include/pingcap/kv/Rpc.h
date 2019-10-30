@@ -82,6 +82,36 @@ struct RpcTypeTraits<kvrpcpb::ScanRequest>
     }
 };
 
+template <>
+struct RpcTypeTraits<kvrpcpb::PrewriteRequest>
+{
+    using RequestType = kvrpcpb::PrewriteRequest;
+    using ResultType = kvrpcpb::PrewriteResponse;
+
+    static const char * err_msg() { return "Prewrite Failed"; }
+
+    static ::grpc::Status doRPCCall(
+        grpc::ClientContext * context, std::unique_ptr<tikvpb::Tikv::Stub> stub, const RequestType & req, ResultType * res)
+    {
+        return stub->KvPrewrite(context, req, res);
+    }
+};
+
+template <>
+struct RpcTypeTraits<kvrpcpb::CommitRequest>
+{
+    using RequestType = kvrpcpb::CommitRequest;
+    using ResultType = kvrpcpb::CommitResponse;
+
+    static const char * err_msg() { return "Commit Failed"; }
+
+    static ::grpc::Status doRPCCall(
+        grpc::ClientContext * context, std::unique_ptr<tikvpb::Tikv::Stub> stub, const RequestType & req, ResultType * res)
+    {
+        return stub->KvCommit(context, req, res);
+    }
+};
+
 template <class T>
 class RpcCall
 {

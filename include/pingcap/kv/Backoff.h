@@ -80,6 +80,8 @@ struct Backoff
 
 constexpr int GetMaxBackoff = 20000;
 constexpr int scanMaxBackoff = 20000;
+constexpr int prewriteMaxBackoff = 20000;
+constexpr int commitMaxBackoff = 41000;
 
 using BackoffPtr = std::shared_ptr<Backoff>;
 

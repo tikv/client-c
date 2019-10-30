@@ -1,9 +1,11 @@
 #include <pingcap/Exception.h>
 #include <pingcap/kv/Snapshot.h>
+#include <pingcap/kv/Txn.h>
 
 #include "mock_tikv.h"
 
 #include <iostream>
+#include <cassert>
 
 namespace pingcap
 {
@@ -12,25 +14,30 @@ namespace kv
 namespace test
 {
 
-ClusterPtr global_cluster;
-
 bool testReadIndex()
 {
-    global_cluster = initCluster();
-    std::vector<std::string> pd_addrs = global_cluster->pd_addrs;
+    auto mock_kv_cluster = mockkv::initCluster();
+    std::vector<std::string> pd_addrs = mock_kv_cluster->pd_addrs;
 
-    pd::ClientPtr clt = std::make_shared<pd::Client>(pd_addrs);
+    pd::ClientPtr pd_client = std::make_shared<pd::Client>(pd_addrs);
 
-    global_cluster->enableFailPoint(0, "server-busy");
+    mock_kv_cluster->updateFailPoint(mock_kv_cluster->stores[0].id, "server-busy", "1*return()");
 
-    kv::RegionCachePtr cache = std::make_shared<kv::RegionCache>(clt, "zone", "engine");
+    kv::RegionCachePtr cache = std::make_shared<kv::RegionCache>(pd_client, "zone", "engine");
     kv::RpcClientPtr rpc = std::make_shared<kv::RpcClient>();
 
-    Snapshot snap(cache, rpc, clt->getTS());
+    ClusterPtr cluster = std::make_shared<Cluster>(pd_client, cache, rpc);
+
+    Txn txn(cluster);
+
+    txn.set("abc", "edf");
+    txn.commit();
+
+    Snapshot snap(cache, rpc, pd_client->getTS());
 
     std::string result = snap.Get("abc");
 
-    std::cout << result << std::endl;
+    assert(result == "edf");
 
     return true;
 }

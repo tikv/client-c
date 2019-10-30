@@ -256,5 +256,23 @@ void RegionCache::onRegionStale(Backoffer & bo, RPCContextPtr ctx, const errorpb
     }
 }
 
+std::pair<std::unordered_map<RegionVerID, std::vector<std::string>>, RegionVerID> RegionCache::groupKeysByRegion(Backoffer & bo, const std::vector<std::string> & keys)
+{
+    std::unordered_map<RegionVerID, std::vector<std::string>> result_map;
+    KeyLocation loc;
+    RegionVerID first;
+    for (size_t i = 0; i < keys.size() ; i++)
+    {
+        const std::string & key = keys[i];
+        if (i == 0 || !loc.contains(key))
+        {
+            loc = locateKey(bo, key);
+            first = loc.region;
+        }
+        result_map[loc.region].push_back(key);
+    }
+    return std::make_pair(result_map, first);
+}
+
 } // namespace kv
 } // namespace pingcap

@@ -11,7 +11,7 @@ namespace pingcap
 {
 namespace kv
 {
-namespace test
+namespace mockkv
 {
 
 using namespace Poco::Net;
@@ -30,24 +30,17 @@ struct Cluster
     std::vector<std::string> pd_addrs;
     std::vector<Store> stores;
 
-    void enableFailPoint(int store_idx, std::string fail_point)
+    // See https://github.com/pingcap/failpoint
+    // Mock tikv use go failpoint to inject faults.
+    void updateFailPoint(int store_id, std::string fail_point, std::string term)
     {
-        const Store & store = stores[store_idx];
         HTTPClientSession sess("127.0.0.1", 2378);
         HTTPRequest req(HTTPRequest::HTTP_POST,
-            std::string(mock_server) + "/mock-tikv/api/v1/clusters/" + std::to_string(id) + "/stores/" + std::to_string(store.id)
+            std::string(mock_server) + "/mock-tikv/api/v1/clusters/" + std::to_string(id) + "/stores/" + std::to_string(store_id)
                 + "/failpoints/" + fail_point);
-        req.setContentLength(4);
+        req.setContentLength(term.size());
         auto & ostream = sess.sendRequest(req);
-        ostream << "true";
-    }
-    void disableFailPoint(int store_idx, std::string fail_point)
-    {
-        const Store & store = stores[store_idx];
-        HTTPClientSession sess("127.0.0.1", 2378);
-        HTTPRequest req(HTTPRequest::HTTP_DELETE,
-            std::string(mock_server) + "/mock-tikv/api/v1/clusters/" + std::to_string(id) + "/stores/" + std::to_string(store.id)
-                + "/failpoints/" + fail_point);
+        ostream << term;
     }
 };
 
