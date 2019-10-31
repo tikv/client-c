@@ -5,6 +5,7 @@
 
 #include <pingcap/Exception.h>
 #include <pingcap/kv/Backoff.h>
+#include <pingcap/kv/Cluster.h>
 
 namespace pingcap
 {
