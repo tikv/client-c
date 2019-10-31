@@ -33,6 +33,7 @@ struct RegionVerID
     uint64_t confVer;
     uint64_t ver;
 
+    RegionVerID() = default;
     RegionVerID(uint64_t id_, uint64_t conf_ver, uint64_t ver_) : id(id_), confVer(conf_ver), ver(ver_) {}
 
     bool operator==(const RegionVerID & rhs) const { return id == rhs.id && confVer == rhs.confVer && ver == rhs.ver; }
@@ -104,9 +105,12 @@ struct KeyLocation
     std::string start_key;
     std::string end_key;
 
+    KeyLocation() = default;
     KeyLocation(const RegionVerID & region_, const std::string & start_key_, const std::string & end_key_)
         : region(region_), start_key(start_key_), end_key(end_key_)
     {}
+
+    bool contains(const std::string & key) { return key >= start_key && (key < end_key || end_key == ""); }
 };
 
 struct RPCContext
@@ -147,6 +151,9 @@ public:
     RegionPtr getRegionByID(Backoffer & bo, const RegionVerID & id);
 
     Store getStore(Backoffer & bo, uint64_t id);
+
+    std::pair<std::unordered_map<RegionVerID, std::vector<std::string>>, RegionVerID> groupKeysByRegion(
+        Backoffer & bo, const std::vector<std::string> & keys);
 
 private:
     RegionPtr loadRegionByKey(Backoffer & bo, const std::string & key);
