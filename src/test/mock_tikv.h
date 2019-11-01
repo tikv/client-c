@@ -54,7 +54,6 @@ inline ClusterPtr initCluster()
     req.setContentLength(2);
     auto & ostream = sess.sendRequest(req);
     ostream << "{}";
-    sess.flushRequest();
     HTTPResponse res;
     auto & is = sess.receiveResponse(res);
     char buffer[1024];
