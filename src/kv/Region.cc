@@ -190,6 +190,11 @@ RegionPtr RegionCache::searchCachedRegion(const std::string & key)
     {
         return it->second;
     }
+    // An empty string is considered to be largest string in order.
+    if (regions_map.begin() != regions_map.end() && regions_map.begin()->second->contains(key))
+    {
+        return regions_map.begin()->second;
+    }
     return nullptr;
 }
 
@@ -256,12 +261,13 @@ void RegionCache::onRegionStale(Backoffer & bo, RPCContextPtr ctx, const errorpb
     }
 }
 
-std::pair<std::unordered_map<RegionVerID, std::vector<std::string>>, RegionVerID> RegionCache::groupKeysByRegion(Backoffer & bo, const std::vector<std::string> & keys)
+std::pair<std::unordered_map<RegionVerID, std::vector<std::string>>, RegionVerID> RegionCache::groupKeysByRegion(
+    Backoffer & bo, const std::vector<std::string> & keys)
 {
     std::unordered_map<RegionVerID, std::vector<std::string>> result_map;
     KeyLocation loc;
     RegionVerID first;
-    for (size_t i = 0; i < keys.size() ; i++)
+    for (size_t i = 0; i < keys.size(); i++)
     {
         const std::string & key = keys[i];
         if (i == 0 || !loc.contains(key))
