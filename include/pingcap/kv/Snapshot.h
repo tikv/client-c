@@ -15,7 +15,6 @@ struct Snapshot
     RpcClientPtr client;
     const uint64_t version;
 
-
     Snapshot(RegionCachePtr cache_, RpcClientPtr client_, uint64_t ver) : cache(cache_), client(client_), version(ver) {}
 
     std::string Get(const std::string & key);
