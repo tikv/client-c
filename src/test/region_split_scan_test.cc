@@ -22,7 +22,7 @@ ClusterPtr createCluster(pd::ClientPtr pd_client)
     return std::make_shared<Cluster>(pd_client, cache, rpc);
 }
 
-bool testSplitRegionGet()
+bool testSplitRegionScan()
 {
     auto mock_kv_cluster = mockkv::initCluster();
     std::vector<std::string> pd_addrs = mock_kv_cluster->pd_addrs;
@@ -83,7 +83,7 @@ int main(int argv, char ** args)
 {
     try
     {
-        if (!pingcap::kv::test::testSplitRegionGet())
+        if (!pingcap::kv::test::testSplitRegionScan())
             return 1;
     }
     catch (pingcap::Exception & e)
