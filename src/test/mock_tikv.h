@@ -1,3 +1,5 @@
+#pragma once
+
 #include <Poco/Dynamic/Var.h>
 #include <Poco/JSON/Array.h>
 #include <Poco/JSON/Object.h>

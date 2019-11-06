@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 2.8)
 project(kvClient)
 set (CMAKE_CXX_STANDARD 17)
 set (CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wno-narrowing")
+enable_testing()
 
 if (NOT gRPC_FOUND)
     include (cmake/find_grpc.cmake)
@@ -15,5 +16,9 @@ if (NOT KVPROTO_FOUND)
     include (cmake/find_kvproto.cmake)
     add_subdirectory (third_party/kvproto/cpp)
 endif ()
+
+if (NOT GTEST_FOUND)
+    include (cmake/find_gtest.cmake)
+endif()
 
 add_subdirectory (src)
