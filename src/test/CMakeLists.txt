@@ -10,14 +10,10 @@ list(APPEND test_libs
     PocoJSON
     gRPC::grpc++_unsecure)
 
-add_executable(io_or_region_error_get_test io_or_region_error_get_test.cc)
-target_include_directories(io_or_region_error_get_test PUBLIC ${test_includes})
-target_link_libraries(io_or_region_error_get_test ${test_libs})
+add_executable(kv_client_ut io_or_region_error_get_test.cc region_split_test.cc)
+target_include_directories(kv_client_ut PUBLIC ${test_includes})
+target_link_libraries(kv_client_ut ${test_libs} ${GTEST_LDFLAGS})
+target_compile_options(kv_client_ut PUBLIC ${GTEST_CFLAGS})
 
-add_executable(region_split_get_test region_split_get_test.cc)
-target_link_libraries(region_split_get_test ${test_libs})
-target_include_directories(region_split_get_test PUBLIC ${test_includes})
-
-add_executable(region_split_scan_test region_split_scan_test.cc)
-target_link_libraries(region_split_scan_test ${test_libs})
-target_include_directories(region_split_scan_test PUBLIC ${test_includes})
+include(CTest)
+add_test(kv_client_test kv_client_ut)
