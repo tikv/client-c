@@ -1,5 +1,3 @@
-add_compile_definitions(ENABLE_TESTS)
-
 list (APPEND test_includes ${KVPROTO_INCLUDE_DIR} ${kvClient_INCLUDE_DIR})
 
 list(APPEND test_libs
