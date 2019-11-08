@@ -8,6 +8,7 @@
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/Net/HTTPResponse.h>
 
+#include <memory>
 
 namespace pingcap
 {
