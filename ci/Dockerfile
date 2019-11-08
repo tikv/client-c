@@ -14,7 +14,7 @@ RUN apt update -y \
  && rm -rf /var/lib/apt/lists/*
 
 #back to root dir and download golang
-RUN cd / 
+RUN cd /
 
 ENV GOLANG_VERSION 1.13.3
 
