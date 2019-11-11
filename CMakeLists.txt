@@ -16,7 +16,7 @@ if (NOT KVPROTO_FOUND)
     include (cmake/find_kvproto.cmake)
 endif ()
 
-if (NOT GTEST_FOUND)
+if ((NOT GTEST_FOUND) AND ENABLE_TESTS)
     include (cmake/find_gtest.cmake)
 endif()
 
