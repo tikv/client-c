@@ -23,5 +23,3 @@ mock_kv_pid=$!
 cd "$build_dir" && make test
 
 kill -9 $mock_kv_pid
-
-
