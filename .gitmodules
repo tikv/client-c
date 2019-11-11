@@ -5,6 +5,3 @@
 [submodule "third_party/googletest"]
 	path = third_party/googletest
 	url = git@github.com:google/googletest.git
-[submodule "third_party/poco"]
-	path = third_party/poco
-	url = git@github.com:pocoproject/poco.git
