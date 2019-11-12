@@ -19,7 +19,7 @@ struct Cluster
         : pd_client(pd_client_), region_cache(region_cache_), rpc_client(rpc_client_)
     {}
 
-#ifdef ENABLE_TESTS
+    // Only server for test.
     void splitRegion(const std::string & split_key)
     {
         Backoffer bo(splitRegionBackoff);
@@ -34,7 +34,6 @@ struct Cluster
             throw Exception(rpc_call->getResp()->region_error().message(), RegionUnavailable);
         }
     }
-#endif
 };
 
 using ClusterPtr = std::shared_ptr<Cluster>;

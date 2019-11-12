@@ -14,11 +14,11 @@ endif()
 
 if (NOT KVPROTO_FOUND)
     include (cmake/find_kvproto.cmake)
-    add_subdirectory (third_party/kvproto/cpp)
 endif ()
 
-if (NOT GTEST_FOUND)
+if ((NOT GTEST_FOUND) AND ENABLE_TESTS)
     include (cmake/find_gtest.cmake)
 endif()
 
+add_subdirectory (third_party)
 add_subdirectory (src)

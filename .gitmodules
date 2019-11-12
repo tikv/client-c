@@ -2,3 +2,6 @@
 	path = third_party/kvproto
 	url = git@github.com:pingcap/kvproto.git
     branch = ov/engine-cpp
+[submodule "third_party/googletest"]
+	path = third_party/googletest
+	url = git@github.com:google/googletest.git
