@@ -22,7 +22,8 @@ enum ErrorCodes : int
     RaftEntryTooLarge = 11,
     ServerIsBusy = 12,
     LeaderNotMatch = 13,
-    RegionEpochNotMatch = 14
+    RegionEpochNotMatch = 14,
+    UnknownError = 15
 };
 
 class Exception : public Poco::Exception

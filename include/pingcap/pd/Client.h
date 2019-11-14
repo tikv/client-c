@@ -28,7 +28,7 @@ class Client : public IClient
 
     const std::chrono::seconds pd_timeout;
 
-    const std::chrono::microseconds loop_interval;
+    const std::chrono::milliseconds loop_interval;
 
     const std::chrono::seconds update_leader_interval;
 

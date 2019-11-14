@@ -1,5 +1,6 @@
 #pragma once
 
+#include <pingcap/kv/Cluster.h>
 #include <pingcap/kv/RegionClient.h>
 
 namespace pingcap
@@ -11,13 +12,13 @@ struct Scanner;
 
 struct Snapshot
 {
-    RegionCachePtr cache;
-    RpcClientPtr client;
+    Cluster * cluster;
     const uint64_t version;
 
-    Snapshot(RegionCachePtr cache_, RpcClientPtr client_, uint64_t ver) : cache(cache_), client(client_), version(ver) {}
+    Snapshot(Cluster * cluster_) : cluster(cluster_), version(cluster->pd_client->getTS()) {}
 
     std::string Get(const std::string & key);
+    std::string Get(Backoffer & bo, const std::string & key);
 
     Scanner Scan(const std::string & begin, const std::string & end);
 };

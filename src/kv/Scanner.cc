@@ -4,21 +4,6 @@ namespace pingcap
 {
 namespace kv
 {
-inline std::string prefixNext(const std::string & str)
-{
-    auto new_str = str;
-    for (int i = int(str.size()); i > 0; i--)
-    {
-        char & c = new_str[i - 1];
-        c++;
-        if (c != 0)
-        {
-            return new_str;
-        }
-    }
-    return "";
-}
-
 void Scanner::next()
 {
     Backoffer bo(scanMaxBackoff);
@@ -51,8 +36,19 @@ void Scanner::next()
             valid = false;
         }
 
+        if (current.has_error())
+        {
+            resolveCurrentLock(bo, current);
+        }
         return;
     }
+}
+
+void Scanner::resolveCurrentLock(pingcap::kv::Backoffer & bo, kvrpcpb::KvPair & current)
+{
+    auto value = snap.Get(bo, current.key());
+    current.set_allocated_error(nullptr);
+    current.set_value(value);
 }
 
 void Scanner::getData(Backoffer & bo)
@@ -60,12 +56,12 @@ void Scanner::getData(Backoffer & bo)
     log->debug("get data for scanner");
     for (;;)
     {
-        auto loc = snap.cache->locateKey(bo, next_start_key);
+        auto loc = snap.cluster->region_cache->locateKey(bo, next_start_key);
         auto req_end_key = end_key;
         if (req_end_key.size() > 0 && loc.end_key.size() > 0 && loc.end_key < req_end_key)
             req_end_key = loc.end_key;
 
-        auto regionClient = RegionClient(snap.cache, snap.client, loc.region);
+        auto regionClient = RegionClient(snap.cluster, loc.region);
         auto request = new kvrpcpb::ScanRequest();
         request->set_start_key(next_start_key);
         request->set_end_key(req_end_key);
@@ -84,7 +80,6 @@ void Scanner::getData(Backoffer & bo)
         }
         catch (Exception & e)
         {
-            snap.cache->dropRegion(loc.region);
             bo.backoff(boRegionMiss, e);
             continue;
         }
@@ -100,8 +95,8 @@ void Scanner::getData(Backoffer & bo)
             auto current = responce->pairs(i);
             if (current.has_error())
             {
-                // process lock
-                throw Exception("has key error", LockError);
+                auto lock = extractLockFromKeyErr(current.error());
+                current.set_key(lock->key);
             }
             cache.push_back(current);
         }

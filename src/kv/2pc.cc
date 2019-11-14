@@ -54,12 +54,12 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
     req->set_primary_lock(keys[0]);
     req->set_start_version(start_ts);
     req->set_lock_ttl(lock_ttl);
-    // TODO: use corrent txn size.
+    // TODO: use correct txn size.
     req->set_txn_size(500);
     req->set_primary_lock(primary_lock);
 
     auto rpc_call = std::make_shared<pingcap::kv::RpcCall<kvrpcpb::PrewriteRequest>>(req);
-    RegionClient region_client(cluster->region_cache, cluster->rpc_client, batch.region);
+    RegionClient region_client(cluster, batch.region);
     for (;;)
     {
         try
@@ -97,7 +97,7 @@ void TwoPhaseCommitter::commitSingleBatch(Backoffer & bo, const BatchKeys & batc
     req->set_commit_version(commit_ts);
 
     auto rpc_call = std::make_shared<pingcap::kv::RpcCall<kvrpcpb::CommitRequest>>(req);
-    RegionClient region_client(cluster->region_cache, cluster->rpc_client, batch.region);
+    RegionClient region_client(cluster, batch.region);
     try
     {
         region_client.sendReqToRegion(bo, rpc_call);

@@ -9,11 +9,10 @@ namespace {
 using namespace pingcap;
 using namespace pingcap::kv;
 
-inline ClusterPtr createCluster(pd::ClientPtr pd_client)
+inline ClusterPtr createCluster(const std::vector<std::string> & pd_addrs)
 {
-    RegionCachePtr cache = std::make_shared<kv::RegionCache>(pd_client, "zone", "engine");
-    RpcClientPtr rpc = std::make_shared<kv::RpcClient>();
-    return std::make_shared<Cluster>(pd_client, cache, rpc);
+    ClusterConfig config("zone", "engine", pd_addrs);
+    return std::make_unique<Cluster>(config);
 }
 
 }

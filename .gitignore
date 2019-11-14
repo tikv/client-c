@@ -33,6 +33,7 @@
 
 # build directory
 build
+cmake-build-*
 
 # IDE or editor files
 .idea

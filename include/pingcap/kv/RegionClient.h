@@ -1,6 +1,7 @@
 #pragma once
 
 #include <pingcap/kv/Backoff.h>
+#include <pingcap/kv/Cluster.h>
 #include <pingcap/kv/Region.h>
 #include <pingcap/kv/Rpc.h>
 
@@ -20,15 +21,12 @@ namespace kv
 
 struct RegionClient
 {
-    RegionCachePtr cache;
-    RpcClientPtr client;
+    Cluster * cluster;
     const RegionVerID region_id;
 
     Logger * log;
 
-    RegionClient(RegionCachePtr cache_, RpcClientPtr client_, const RegionVerID & id)
-        : cache(cache_), client(client_), region_id(id), log(&Logger::get("pingcap.tikv"))
-    {}
+    RegionClient(Cluster * cluster_, const RegionVerID & id) : cluster(cluster_), region_id(id), log(&Logger::get("pingcap.tikv")) {}
 
     // This method send a request to region, but is NOT Thread-Safe !!
     template <typename T>
@@ -37,12 +35,12 @@ struct RegionClient
         for (;;)
         {
             RPCContextPtr ctx;
-            ctx = cache->getRPCContext(bo, region_id);
+            ctx = cluster->region_cache->getRPCContext(bo, region_id);
             const auto & store_addr = ctx->addr;
             rpc->setCtx(ctx);
             try
             {
-                client->sendRequest(store_addr, rpc);
+                cluster->rpc_client->sendRequest(store_addr, rpc);
             }
             catch (const Exception & e)
             {

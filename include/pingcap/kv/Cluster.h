@@ -1,42 +1,50 @@
 #pragma once
 
-#include <pingcap/kv/RegionClient.h>
+#include <pingcap/kv/LockResolver.h>
 #include <pingcap/kv/Rpc.h>
+#include <pingcap/kv/codec_pd_client.h>
 #include <pingcap/pd/Client.h>
+#include <pingcap/pd/Oracle.h>
 
 namespace pingcap
 {
 namespace kv
 {
+
+struct ClusterConfig
+{
+    const std::string learner_label_key;
+    const std::string learner_label_value;
+    const std::vector<std::string> pd_addrs;
+    ClusterConfig(const std::string & key, const std::string & value, const std::vector<std::string> & pd_addrs_)
+        : learner_label_key(key), learner_label_value(value), pd_addrs(pd_addrs_)
+    {}
+};
+
 // Cluster represents a tikv-pd cluster.
 struct Cluster
 {
+    static constexpr int oracle_update_interval = 2000;
+
     pd::ClientPtr pd_client;
     RegionCachePtr region_cache;
     RpcClientPtr rpc_client;
+    pd::OraclePtr oracle;
+    LockResolverPtr lock_resolver;
 
-    Cluster(pd::ClientPtr pd_client_, RegionCachePtr region_cache_, RpcClientPtr rpc_client_)
-        : pd_client(pd_client_), region_cache(region_cache_), rpc_client(rpc_client_)
+    Cluster(const ClusterConfig & config)
+        : pd_client(std::make_shared<pd::CodecClient>(config.pd_addrs)),
+          region_cache(std::make_shared<RegionCache>(pd_client, config.learner_label_key, config.learner_label_value)),
+          rpc_client(std::make_shared<RpcClient>()),
+          oracle(std::make_shared<pd::Oracle>(pd_client, std::chrono::milliseconds(oracle_update_interval))),
+          lock_resolver(std::make_shared<LockResolver>(this))
     {}
 
     // Only server for test.
-    void splitRegion(const std::string & split_key)
-    {
-        Backoffer bo(splitRegionBackoff);
-        auto loc = region_cache->locateKey(bo, split_key);
-        RegionClient client(region_cache, rpc_client, loc.region);
-        auto * req = new kvrpcpb::SplitRegionRequest();
-        req->set_split_key(split_key);
-        auto rpc_call = std::make_shared<RpcCall<kvrpcpb::SplitRegionRequest>>(req);
-        client.sendReqToRegion(bo, rpc_call);
-        if (rpc_call->getResp()->has_region_error())
-        {
-            throw Exception(rpc_call->getResp()->region_error().message(), RegionUnavailable);
-        }
-    }
+    void splitRegion(const std::string & split_key);
 };
 
-using ClusterPtr = std::shared_ptr<Cluster>;
+using ClusterPtr = std::unique_ptr<Cluster>;
 
 } // namespace kv
 } // namespace pingcap

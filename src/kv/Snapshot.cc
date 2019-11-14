@@ -1,5 +1,6 @@
 #include <pingcap/Exception.h>
-#include <pingcap/kv/Backoff.h>
+#include <pingcap/kv/LockResolver.h>
+#include <pingcap/kv/RegionClient.h>
 #include <pingcap/kv/Scanner.h>
 #include <pingcap/kv/Snapshot.h>
 
@@ -10,15 +11,12 @@ namespace kv
 
 constexpr int scan_batch_size = 256;
 
-//bool extractLockFromKeyErr()
-
-std::string Snapshot::Get(const std::string & key)
+std::string Snapshot::Get(Backoffer & bo, const std::string & key)
 {
-    Backoffer bo(GetMaxBackoff);
     for (;;)
     {
-        auto location = cache->locateKey(bo, key);
-        auto regionClient = RegionClient(cache, client, location.region);
+        auto location = cluster->region_cache->locateKey(bo, key);
+        RegionClient region_client(cluster, location.region);
         auto request = new kvrpcpb::GetRequest();
         request->set_key(key);
         request->set_version(version);
@@ -30,21 +28,33 @@ std::string Snapshot::Get(const std::string & key)
 
         try
         {
-            regionClient.sendReqToRegion(bo, rpc_call);
+            region_client.sendReqToRegion(bo, rpc_call);
         }
         catch (Exception & e)
         {
-            cache->dropRegion(location.region);
             bo.backoff(boRegionMiss, e);
             continue;
         }
         auto response = rpc_call->getResp();
         if (response->has_error())
         {
-            throw Exception("has key error", LockError);
+            auto lock = extractLockFromKeyErr(response->error());
+            auto before_expired = cluster->lock_resolver->ResolveLocks(bo, version, {lock});
+            if (before_expired > 0) // need to wait ?
+            {
+                bo.backoffWithMaxSleep(
+                    boTxnLockFast, before_expired, Exception("key error : " + response->error().ShortDebugString(), LockError));
+            }
+            continue;
         }
         return response->value();
     }
+}
+
+std::string Snapshot::Get(const std::string & key)
+{
+    Backoffer bo(GetMaxBackoff);
+    return Get(bo, key);
 }
 
 Scanner Snapshot::Scan(const std::string & begin, const std::string & end) { return Scanner(*this, begin, end, scan_batch_size); }

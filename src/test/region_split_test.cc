@@ -36,7 +36,7 @@ protected:
 TEST_F(TestWithMockKVRegionSplit, testSplitRegionGet)
 {
 
-    Txn txn(test_cluster);
+    Txn txn(test_cluster.get());
 
     txn.set("abc", "1");
     txn.set("abd", "2");
@@ -46,7 +46,7 @@ TEST_F(TestWithMockKVRegionSplit, testSplitRegionGet)
     txn.set("abz", "6");
     txn.commit();
 
-    Snapshot snap(test_cluster->region_cache, test_cluster->rpc_client, test_cluster->pd_client->getTS());
+    Snapshot snap(test_cluster.get());
 
     std::string result = snap.Get("abf");
 
@@ -61,7 +61,7 @@ TEST_F(TestWithMockKVRegionSplit, testSplitRegionGet)
 
 TEST_F(TestWithMockKVRegionSplit, testSplitRegionScan)
 {
-    Txn txn(test_cluster);
+    Txn txn(test_cluster.get());
 
     txn.set("abc", "1");
     txn.set("abd", "2");
@@ -72,7 +72,7 @@ TEST_F(TestWithMockKVRegionSplit, testSplitRegionScan)
     txn.set("zzz", "7");
     txn.commit();
 
-    Snapshot snap(test_cluster->region_cache, test_cluster->rpc_client, test_cluster->pd_client->getTS());
+    Snapshot snap(test_cluster.get());
 
     auto scanner = snap.Scan("", "");
 

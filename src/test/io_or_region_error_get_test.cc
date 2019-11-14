@@ -5,7 +5,6 @@
 #include <pingcap/kv/Snapshot.h>
 #include <pingcap/kv/Txn.h>
 
-#include <cassert>
 #include <iostream>
 
 namespace
@@ -41,12 +40,12 @@ public:
 TEST_P(TestWithMockKV, testGetInjectError)
 {
 
-    Txn txn(test_cluster);
+    Txn txn(test_cluster.get());
     txn.set("abc", "edf");
     txn.commit();
 
     mock_kv_cluster->updateFailPoint(mock_kv_cluster->stores[0].id, fail_point, fail_arg);
-    Snapshot snap(test_cluster->region_cache, test_cluster->rpc_client, test_cluster->pd_client->getTS());
+    Snapshot snap(test_cluster.get());
 
     std::string result = snap.Get("abc");
 

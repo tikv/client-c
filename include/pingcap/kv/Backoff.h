@@ -51,7 +51,7 @@ struct Backoff
         last_sleep = base;
     }
 
-    int sleep()
+    int sleep(int max_sleep_time)
     {
         int sleep_time = 0;
         int v = 0;
@@ -71,6 +71,8 @@ struct Backoff
             case DecorrJitter:
                 sleep_time = int(std::min(double(cap), double(base + rand() % (last_sleep * 3 - base))));
         }
+        if (max_sleep_time >= 0 && max_sleep_time < sleep_time)
+            sleep_time = max_sleep_time;
         std::this_thread::sleep_for(std::chrono::milliseconds(sleep_time));
         attempts++;
         last_sleep = sleep_time;
@@ -95,6 +97,7 @@ struct Backoffer
     Backoffer(size_t max_sleep_) : total_sleep(0), max_sleep(max_sleep_) {}
 
     void backoff(BackoffType tp, const Exception & exc);
+    void backoffWithMaxSleep(BackoffType tp, int max_sleep_time, const Exception & exc);
 };
 
 } // namespace kv
