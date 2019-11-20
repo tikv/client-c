@@ -39,4 +39,4 @@ RUN git clone https://github.com/pocoproject/poco.git && cd poco && git checkout
 
 RUN cd /
 
-RUN git clone https://github.com/tikv/mock-tikv.git && cd mock-tikv && make failpoint-enable && make
+RUN git clone https://github.com/tikv/mock-tikv.git && cd mock-tikv && git checkout 4286274568cadff6dbc7a11d494c66b274aab5e0 && make failpoint-enable && make

@@ -21,8 +21,7 @@ public:
         mock_kv_cluster = mockkv::initCluster();
         std::vector<std::string> pd_addrs = mock_kv_cluster->pd_addrs;
 
-        pd::ClientPtr pd_client = std::make_shared<pd::Client>(pd_addrs);
-        test_cluster = createCluster(pd_client);
+        test_cluster = createCluster(pd_addrs);
 
         std::tie(fail_point, fail_arg) = GetParam();
     }

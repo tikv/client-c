@@ -23,8 +23,8 @@ protected:
         std::vector<std::string> pd_addrs = mock_kv_cluster->pd_addrs;
 
         pd::ClientPtr pd_client = std::make_shared<pd::Client>(pd_addrs);
-        test_cluster = createCluster(pd_client);
-        control_cluster = createCluster(pd_client);
+        test_cluster = createCluster(pd_addrs);
+        control_cluster = createCluster(pd_addrs);
     }
 
     mockkv::ClusterPtr mock_kv_cluster;
