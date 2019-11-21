@@ -47,7 +47,6 @@ void Scanner::next()
 void Scanner::resolveCurrentLock(pingcap::kv::Backoffer & bo, kvrpcpb::KvPair & current)
 {
     auto value = snap.Get(bo, current.key());
-    std::cout << "resolve current: " << current.key() << " " << value << std::endl;
     current.set_allocated_error(nullptr);
     current.set_value(value);
 }

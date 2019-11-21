@@ -55,7 +55,6 @@ struct BankCase
         {
             if (stop)
                 return;
-            std::cout << "start check\n";
             int total = 0;
             Snapshot snapshot(cluster);
             std::string prefix = "bankkey_";
