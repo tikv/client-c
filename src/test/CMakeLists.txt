@@ -1,4 +1,4 @@
-list (APPEND test_includes ${KVPROTO_INCLUDE_DIR} ${kvClient_INCLUDE_DIR})
+list (APPEND test_includes ${KVPROTO_INCLUDE_DIR} ${kvClient_INCLUDE_DIR} . )
 
 list(APPEND test_libs
     kvproto
@@ -16,3 +16,5 @@ target_link_libraries(kv_client_ut ${test_libs})
 
 include(CTest)
 add_test(kv_client_test kv_client_ut)
+
+add_subdirectory(bank_test)

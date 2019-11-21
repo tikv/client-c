@@ -4,6 +4,7 @@
 #include <vector>
 
 #include <pingcap/Exception.h>
+#include <pingcap/Log.h>
 #include <pingcap/kv/Backoff.h>
 #include <pingcap/kv/Cluster.h>
 
@@ -32,6 +33,10 @@ private:
     std::string primary_lock;
     // commited means primary key has been written to kv stores.
     bool commited;
+
+    std::unordered_map<uint64_t, int> region_txn_size;
+
+    Logger* log;
 
 public:
     TwoPhaseCommitter(Txn * txn);
@@ -70,7 +75,8 @@ private:
         {
             batches.push_back(BatchKeys(it->first, it->second));
         }
-        if (action == ActionCommit || action == ActionCleanUp)
+
+        if constexpr (action == ActionCommit || action == ActionCleanUp)
         {
             if constexpr (action == ActionCommit)
             {

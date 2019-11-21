@@ -11,8 +11,7 @@ using namespace pingcap::kv;
 
 inline ClusterPtr createCluster(const std::vector<std::string> & pd_addrs)
 {
-    ClusterConfig config("zone", "engine", pd_addrs);
-    return std::make_unique<Cluster>(config);
+    return std::make_unique<Cluster>(pd_addrs, "zone", "engine");
 }
 
 }

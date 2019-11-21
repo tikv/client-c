@@ -11,16 +11,6 @@ namespace pingcap
 namespace kv
 {
 
-struct ClusterConfig
-{
-    const std::string learner_label_key;
-    const std::string learner_label_value;
-    const std::vector<std::string> pd_addrs;
-    ClusterConfig(const std::string & key, const std::string & value, const std::vector<std::string> & pd_addrs_)
-        : learner_label_key(key), learner_label_value(value), pd_addrs(pd_addrs_)
-    {}
-};
-
 // Cluster represents a tikv-pd cluster.
 struct Cluster
 {
@@ -32,9 +22,9 @@ struct Cluster
     pd::OraclePtr oracle;
     LockResolverPtr lock_resolver;
 
-    Cluster(const ClusterConfig & config)
-        : pd_client(std::make_shared<pd::CodecClient>(config.pd_addrs)),
-          region_cache(std::make_shared<RegionCache>(pd_client, config.learner_label_key, config.learner_label_value)),
+    Cluster(const std::vector<std::string> & pd_addrs_, const std::string & learner_label_key, const std::string & learner_label_value)
+        : pd_client(std::make_shared<pd::CodecClient>(pd_addrs_)),
+          region_cache(std::make_shared<RegionCache>(pd_client, learner_label_key, learner_label_value)),
           rpc_client(std::make_shared<RpcClient>()),
           oracle(std::make_shared<pd::Oracle>(pd_client, std::chrono::milliseconds(oracle_update_interval))),
           lock_resolver(std::make_shared<LockResolver>(this))

@@ -29,7 +29,7 @@ void Scanner::next()
             }
         }
 
-        auto current = cache[idx];
+        auto & current = cache[idx];
         if (end_key.size() > 0 && current.key() >= end_key)
         {
             eof = true;
@@ -47,6 +47,7 @@ void Scanner::next()
 void Scanner::resolveCurrentLock(pingcap::kv::Backoffer & bo, kvrpcpb::KvPair & current)
 {
     auto value = snap.Get(bo, current.key());
+    std::cout << "resolve current: " << current.key() << " " << value << std::endl;
     current.set_allocated_error(nullptr);
     current.set_value(value);
 }
