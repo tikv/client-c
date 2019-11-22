@@ -1,3 +1,8 @@
+#pragma once
+
+#include <kvproto/metapb.pb.h>
+#include <kvproto/tikvpb.grpc.pb.h>
+
 namespace pingcap
 {
 namespace kv
