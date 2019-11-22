@@ -35,7 +35,7 @@ struct BankCase
 
     void initialize()
     {
-        std::cout << "bank case start to init\n";
+        std::cerr << "bank case start to init\n";
         std::vector<std::thread> threads;
         for (int i = 0; i < concurrency; i++)
         {
@@ -46,7 +46,7 @@ struct BankCase
             threads[i].join();
         }
         check_thread = std::thread([&]() { verify(); });
-        std::cout << "bank case end init\n";
+        std::cerr << "bank case end init\n";
     }
 
     void verify()
@@ -72,7 +72,7 @@ struct BankCase
 
     void Execute()
     {
-        std::cout << "bank case start to execute\n";
+        std::cerr << "bank case start to execute\n";
         std::vector<std::thread> threads;
         for (int i = 0; i < concurrency; i++)
         {
@@ -82,7 +82,7 @@ struct BankCase
         {
             threads[i].join();
         }
-        std::cout << "bank case end execute\n";
+        std::cerr << "bank case end execute\n";
     }
 
     void moveMoney()
