@@ -35,7 +35,7 @@ RUN git clone https://github.com/grpc/grpc.git && cd grpc && git checkout v1.14.
 RUN cd /
 
 RUN git clone https://github.com/pocoproject/poco.git && cd poco && git checkout poco-1.9.0-release && git submodule update --init \
- && cd /poco && mkdir .build && cd .build && cmake .. && make install -j $(nproc || grep -c ^processor /proc/cpuinfo)
+ && cd /poco && ./build_cmake.sh -DPOCO_STATIC=1 
 
 RUN cd /
 
