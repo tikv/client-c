@@ -22,6 +22,9 @@ public:
         box_id(std::stoi(std::getenv("BOX_ID"))),
         self_id(std::stoi(std::getenv("TEST_ID")))
     {
+        std::cerr << "manager addr: " << manager_addr<<std::endl;
+        std::cerr << "box id: " << box_id <<std::endl;
+        std::cerr << "self id: " << self_id <<std::endl;
         getConfig();
     }
 
