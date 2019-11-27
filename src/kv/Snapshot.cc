@@ -17,28 +17,23 @@ std::string Snapshot::Get(const std::string & key)
     Backoffer bo(GetMaxBackoff);
     for (;;)
     {
-        auto location = cache->locateKey(bo, key);
-        auto regionClient = RegionClient(cache, client, location.region);
-        auto request = new kvrpcpb::GetRequest();
+        auto location = cluster->region_cache->locateKey(bo, key);
+        auto region_client = RegionClient(cluster, location.region);
+        auto request = std::make_unique<kvrpcpb::GetRequest>();
         request->set_key(key);
         request->set_version(version);
 
-        auto context = request->mutable_context();
-        context->set_priority(::kvrpcpb::Normal);
-        context->set_not_fill_cache(false);
-        auto rpc_call = std::make_shared<RpcCall<kvrpcpb::GetRequest>>(request);
+        std::unique_ptr<kvrpcpb::GetResponse> response;
 
         try
         {
-            regionClient.sendReqToRegion(bo, rpc_call);
+            response = region_client.sendReqToRegion(bo, std::move(request));
         }
         catch (Exception & e)
         {
-            cache->dropRegion(location.region);
             bo.backoff(boRegionMiss, e);
             continue;
         }
-        auto response = rpc_call->getResp();
         if (response->has_error())
         {
             throw Exception("has key error", LockError);

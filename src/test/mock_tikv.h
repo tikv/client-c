@@ -96,6 +96,6 @@ inline ClusterPtr initCluster()
     return cluster;
 }
 
-} // namespace test
+} // namespace mockkv
 } // namespace kv
 } // namespace pingcap

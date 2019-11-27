@@ -1,5 +1,6 @@
 #include <pingcap/Exception.h>
-#include <pingcap/kv/Region.h>
+#include <pingcap/kv/RegionCache.h>
+#include <pingcap/pd/CodecClient.h>
 
 namespace pingcap
 {
@@ -86,7 +87,7 @@ RegionPtr RegionCache::loadRegionByID(Backoffer & bo, uint64_t region_id)
     {
         try
         {
-            auto [meta, leader] = pdClient->getRegionByID(region_id);
+            auto [meta, leader] = pd_client->getRegionByID(region_id);
 
             // If the region is not found in cache, it must be out of date and already be cleaned up. We can
             // skip the RPC by returning RegionError directly.
@@ -119,7 +120,7 @@ RegionPtr RegionCache::loadRegionByKey(Backoffer & bo, const std::string & key)
     {
         try
         {
-            auto [meta, leader] = pdClient->getRegionByKey(key);
+            auto [meta, leader] = pd_client->getRegionByKey(key);
             if (!meta.IsInitialized())
             {
                 throw Exception("region not found for region key " + key, RegionUnavailable);
@@ -149,7 +150,7 @@ metapb::Store RegionCache::loadStore(Backoffer & bo, uint64_t id)
         try
         {
             // TODO:: The store may be not ready, it's better to check store's state.
-            const auto & store = pdClient->getStore(id);
+            const auto & store = pd_client->getStore(id);
             return store;
         }
         catch (Exception & e)
@@ -254,7 +255,11 @@ void RegionCache::onRegionStale(Backoffer & bo, RPCContextPtr ctx, const errorpb
 
     for (int i = 0; i < stale_epoch.current_regions_size(); i++)
     {
-        auto & meta = stale_epoch.current_regions(i);
+        auto meta = stale_epoch.current_regions(i);
+        if (auto * pd = static_cast<pd::CodecClient *>(pd_client.get()))
+        {
+            pd->processRegionResult(meta);
+        }
         RegionPtr region = std::make_shared<Region>(meta, meta.peers(0), selectLearner(bo, meta));
         region->switchPeer(ctx->peer.store_id());
         insertRegionToCache(region);
@@ -273,7 +278,8 @@ std::pair<std::unordered_map<RegionVerID, std::vector<std::string>>, RegionVerID
         if (i == 0 || !loc.contains(key))
         {
             loc = locateKey(bo, key);
-            first = loc.region;
+            if (i == 0)
+                first = loc.region;
         }
         result_map[loc.region].push_back(key);
     }

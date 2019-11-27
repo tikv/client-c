@@ -44,7 +44,7 @@ void TwoPhaseCommitter::execute()
 
 void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & batch)
 {
-    auto req = new kvrpcpb::PrewriteRequest();
+    auto req = std::make_unique<kvrpcpb::PrewriteRequest>();
     for (const std::string & key : batch.keys)
     {
         auto * mut = req->add_mutations();
@@ -54,17 +54,17 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
     req->set_primary_lock(keys[0]);
     req->set_start_version(start_ts);
     req->set_lock_ttl(lock_ttl);
-    // TODO: use corrent txn size.
+    // TODO: use correct txn size.
     req->set_txn_size(500);
     req->set_primary_lock(primary_lock);
 
-    auto rpc_call = std::make_shared<pingcap::kv::RpcCall<kvrpcpb::PrewriteRequest>>(req);
-    RegionClient region_client(cluster->region_cache, cluster->rpc_client, batch.region);
+    std::unique_ptr<kvrpcpb::PrewriteResponse> response;
+    RegionClient region_client(cluster, batch.region);
     for (;;)
     {
         try
         {
-            region_client.sendReqToRegion(bo, rpc_call);
+            response = region_client.sendReqToRegion(bo, std::move(req));
         }
         catch (Exception & e)
         {
@@ -74,9 +74,7 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
             return;
         }
 
-        auto * res = rpc_call->getResp();
-
-        if (res->errors_size() != 0)
+        if (response->errors_size() != 0)
         {
             // TODO resolve lock and retry
             throw Exception("meet lock error", LockError);
@@ -88,7 +86,7 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
 
 void TwoPhaseCommitter::commitSingleBatch(Backoffer & bo, const BatchKeys & batch)
 {
-    auto req = new kvrpcpb::CommitRequest();
+    auto req = std::make_unique<kvrpcpb::CommitRequest>();
     for (const auto & key : batch.keys)
     {
         req->add_keys(key);
@@ -96,11 +94,11 @@ void TwoPhaseCommitter::commitSingleBatch(Backoffer & bo, const BatchKeys & batc
     req->set_start_version(start_ts);
     req->set_commit_version(commit_ts);
 
-    auto rpc_call = std::make_shared<pingcap::kv::RpcCall<kvrpcpb::CommitRequest>>(req);
-    RegionClient region_client(cluster->region_cache, cluster->rpc_client, batch.region);
+    std::unique_ptr<kvrpcpb::CommitResponse> response;
+    RegionClient region_client(cluster, batch.region);
     try
     {
-        region_client.sendReqToRegion(bo, rpc_call);
+        response = region_client.sendReqToRegion(bo, std::move(req));
     }
     catch (Exception & e)
     {
@@ -108,8 +106,7 @@ void TwoPhaseCommitter::commitSingleBatch(Backoffer & bo, const BatchKeys & batc
         commitKeys(bo, batch.keys);
         return;
     }
-    auto * res = rpc_call->getResp();
-    if (res->has_error())
+    if (response->has_error())
     {
         throw Exception("meet errors", LockError);
     }

@@ -1,7 +1,8 @@
 #pragma once
 
 #include <pingcap/kv/Backoff.h>
-#include <pingcap/kv/Region.h>
+#include <pingcap/kv/Cluster.h>
+#include <pingcap/kv/RegionCache.h>
 #include <pingcap/kv/Rpc.h>
 
 namespace pingcap
@@ -20,43 +21,41 @@ namespace kv
 
 struct RegionClient
 {
-    RegionCachePtr cache;
-    RpcClientPtr client;
+    Cluster * cluster;
+
     const RegionVerID region_id;
 
     Logger * log;
 
-    RegionClient(RegionCachePtr cache_, RpcClientPtr client_, const RegionVerID & id)
-        : cache(cache_), client(client_), region_id(id), log(&Logger::get("pingcap.tikv"))
-    {}
+    RegionClient(Cluster * cluster_, const RegionVerID & id) : cluster(cluster_), region_id(id), log(&Logger::get("pingcap.tikv")) {}
 
     // This method send a request to region, but is NOT Thread-Safe !!
     template <typename T>
-    void sendReqToRegion(Backoffer & bo, RpcCallPtr<T> rpc)
+    auto sendReqToRegion(Backoffer & bo, std::unique_ptr<T> && req)
     {
+        RpcCall<T> rpc(std::move(req));
         for (;;)
         {
-            RPCContextPtr ctx;
-            ctx = cache->getRPCContext(bo, region_id);
+            RPCContextPtr ctx = cluster->region_cache->getRPCContext(bo, region_id);
             const auto & store_addr = ctx->addr;
-            rpc->setCtx(ctx);
+            rpc.setCtx(ctx);
             try
             {
-                client->sendRequest(store_addr, rpc);
+                cluster->rpc_client->sendRequest(store_addr, rpc);
             }
             catch (const Exception & e)
             {
                 onSendFail(bo, e, ctx);
                 continue;
             }
-            auto resp = rpc->getResp();
+            auto resp = rpc.getResp();
             if (resp->has_region_error())
             {
                 onRegionError(bo, ctx, resp->region_error());
             }
             else
             {
-                return;
+                return std::move(resp);
             }
         }
     }
@@ -67,8 +66,6 @@ protected:
     // Normally, it happens when machine down or network partition between tidb and kv or process crash.
     void onSendFail(Backoffer & bo, const Exception & e, RPCContextPtr rpc_ctx);
 };
-
-using RegionClientPtr = std::shared_ptr<RegionClient>;
 
 } // namespace kv
 } // namespace pingcap

@@ -60,13 +60,13 @@ void Scanner::getData(Backoffer & bo)
     log->debug("get data for scanner");
     for (;;)
     {
-        auto loc = snap.cache->locateKey(bo, next_start_key);
+        auto loc = snap.cluster->region_cache->locateKey(bo, next_start_key);
         auto req_end_key = end_key;
         if (req_end_key.size() > 0 && loc.end_key.size() > 0 && loc.end_key < req_end_key)
             req_end_key = loc.end_key;
 
-        auto regionClient = RegionClient(snap.cache, snap.client, loc.region);
-        auto request = new kvrpcpb::ScanRequest();
+        auto region_client = RegionClient(snap.cluster, loc.region);
+        auto request = std::make_unique<kvrpcpb::ScanRequest>();
         request->set_start_key(next_start_key);
         request->set_end_key(req_end_key);
         request->set_limit(batch);
@@ -77,27 +77,25 @@ void Scanner::getData(Backoffer & bo)
         context->set_priority(::kvrpcpb::Normal);
         context->set_not_fill_cache(false);
 
-        auto rpc_call = std::make_shared<RpcCall<kvrpcpb::ScanRequest>>(request);
+        std::unique_ptr<kvrpcpb::ScanResponse> response;
         try
         {
-            regionClient.sendReqToRegion(bo, rpc_call);
+            response = region_client.sendReqToRegion(bo, std::move(request));
         }
         catch (Exception & e)
         {
-            snap.cache->dropRegion(loc.region);
             bo.backoff(boRegionMiss, e);
             continue;
         }
 
         // TODO Check safe point.
 
-        auto responce = rpc_call->getResp();
-        int pairs_size = responce->pairs_size();
+        int pairs_size = response->pairs_size();
         idx = 0;
         cache.clear();
         for (int i = 0; i < pairs_size; i++)
         {
-            auto current = responce->pairs(i);
+            auto current = response->pairs(i);
             if (current.has_error())
             {
                 // process lock
@@ -121,7 +119,7 @@ void Scanner::getData(Backoffer & bo)
             return;
         }
 
-        auto lastKey = responce->pairs(responce->pairs_size() - 1);
+        auto lastKey = response->pairs(response->pairs_size() - 1);
         next_start_key = prefixNext(lastKey.key());
         return;
     }

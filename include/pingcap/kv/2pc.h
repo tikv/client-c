@@ -23,7 +23,7 @@ private:
     int64_t start_ts;
     int64_t commit_ts;
 
-    ClusterPtr cluster;
+    Cluster * cluster;
 
     int lock_ttl; // TODO: set lock ttl by txn size.
 
@@ -56,9 +56,9 @@ private:
     void commitKeys(Backoffer & bo, const std::vector<std::string> & keys) { doActionOnKeys<ActionCommit>(bo, keys); }
 
     template <Action action>
-    void doActionOnKeys(Backoffer & bo, const std::vector<std::string> & key)
+    void doActionOnKeys(Backoffer & bo, const std::vector<std::string> & cur_keys)
     {
-        auto [groups, first_region] = cluster->region_cache->groupKeysByRegion(bo, keys);
+        auto [groups, first_region] = cluster->region_cache->groupKeysByRegion(bo, cur_keys);
         // TODO: Limit size of every batch !
         std::vector<BatchKeys> batches;
         batches.push_back(BatchKeys(first_region, groups[first_region]));
@@ -66,9 +66,9 @@ private:
 
         for (auto it = groups.begin(); it != groups.end(); it++)
         {
-            batches.push_back(BatchKeys(first_region, groups[first_region]));
+            batches.push_back(BatchKeys(it->first, it->second));
         }
-        if (action == ActionCommit || action == ActionCleanUp)
+        if constexpr (action == ActionCommit || action == ActionCleanUp)
         {
             doActionOnBatches<action>(bo, std::vector<BatchKeys>(batches.begin(), batches.begin() + 1));
             batches = std::vector<BatchKeys>(batches.begin() + 1, batches.end());

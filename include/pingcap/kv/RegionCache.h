@@ -131,7 +131,7 @@ class RegionCache
 {
 public:
     RegionCache(pd::ClientPtr pdClient_, std::string key_, std::string value_)
-        : pdClient(pdClient_), learner_key(std::move(key_)), learner_value(std::move(value_)), log(&Logger::get("pingcap.tikv"))
+        : pd_client(pdClient_), learner_key(std::move(key_)), learner_value(std::move(value_)), log(&Logger::get("pingcap.tikv"))
     {}
 
     RPCContextPtr getRPCContext(Backoffer & bo, const RegionVerID & id);
@@ -176,7 +176,7 @@ private:
 
     std::map<uint64_t, Store> stores;
 
-    pd::ClientPtr pdClient;
+    pd::ClientPtr pd_client;
 
     std::shared_mutex region_mutex;
 
@@ -189,7 +189,7 @@ private:
     Logger * log;
 };
 
-using RegionCachePtr = std::shared_ptr<RegionCache>;
+using RegionCachePtr = std::unique_ptr<RegionCache>;
 
 } // namespace kv
 } // namespace pingcap

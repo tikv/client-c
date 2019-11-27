@@ -18,13 +18,13 @@ using Buffer = std::map<std::string, std::string>;
 // Note that this implementation is only used for TEST right now.
 struct Txn
 {
-    ClusterPtr cluster;
+    Cluster * cluster;
 
     Buffer buffer;
 
     int64_t start_ts;
 
-    Txn(ClusterPtr cluster_) : cluster(cluster_), start_ts(cluster_->pd_client->getTS()) {}
+    Txn(Cluster * cluster_) : cluster(cluster_), start_ts(cluster_->pd_client->getTS()) {}
 
     void commit()
     {
