@@ -2,8 +2,6 @@
 
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
-#include <kvproto/metapb.pb.h>
-#include <kvproto/tikvpb.grpc.pb.h>
 #include <mutex>
 #include <type_traits>
 #include <vector>
