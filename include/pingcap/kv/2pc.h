@@ -23,7 +23,7 @@ private:
     int64_t start_ts;
     int64_t commit_ts;
 
-    ClusterPtr cluster;
+    Cluster * cluster;
 
     int lock_ttl; // TODO: set lock ttl by txn size.
 

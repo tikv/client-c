@@ -11,11 +11,11 @@ struct Scanner;
 
 struct Snapshot
 {
-    RegionCachePtr cache;
-    RpcClientPtr client;
+    Cluster * cluster;
+
     const uint64_t version;
 
-    Snapshot(RegionCachePtr cache_, RpcClientPtr client_, uint64_t ver) : cache(cache_), client(client_), version(ver) {}
+    Snapshot(Cluster * cluster_, uint64_t ver) : cluster(cluster_), version(ver) {}
 
     std::string Get(const std::string & key);
 

@@ -22,9 +22,8 @@ protected:
         mock_kv_cluster = mockkv::initCluster();
         std::vector<std::string> pd_addrs = mock_kv_cluster->pd_addrs;
 
-        pd::ClientPtr pd_client = std::make_shared<pd::Client>(pd_addrs);
-        test_cluster = createCluster(pd_client);
-        control_cluster = createCluster(pd_client);
+        test_cluster = createCluster(pd_addrs);
+        control_cluster = createCluster(pd_addrs);
     }
 
     mockkv::ClusterPtr mock_kv_cluster;
@@ -36,7 +35,7 @@ protected:
 TEST_F(TestWithMockKVRegionSplit, testSplitRegionGet)
 {
 
-    Txn txn(test_cluster);
+    Txn txn(test_cluster.get());
 
     txn.set("abc", "1");
     txn.set("abd", "2");
@@ -46,7 +45,7 @@ TEST_F(TestWithMockKVRegionSplit, testSplitRegionGet)
     txn.set("abz", "6");
     txn.commit();
 
-    Snapshot snap(test_cluster->region_cache, test_cluster->rpc_client, test_cluster->pd_client->getTS());
+    Snapshot snap(test_cluster.get(), test_cluster->pd_client->getTS());
 
     std::string result = snap.Get("abf");
 
@@ -57,11 +56,15 @@ TEST_F(TestWithMockKVRegionSplit, testSplitRegionGet)
     result = snap.Get("abc");
 
     ASSERT_EQ(result, "1");
+
+    result = snap.Get("abf");
+
+    ASSERT_EQ(result, "4");
 }
 
 TEST_F(TestWithMockKVRegionSplit, testSplitRegionScan)
 {
-    Txn txn(test_cluster);
+    Txn txn(test_cluster.get());
 
     txn.set("abc", "1");
     txn.set("abd", "2");
@@ -72,7 +75,7 @@ TEST_F(TestWithMockKVRegionSplit, testSplitRegionScan)
     txn.set("zzz", "7");
     txn.commit();
 
-    Snapshot snap(test_cluster->region_cache, test_cluster->rpc_client, test_cluster->pd_client->getTS());
+    Snapshot snap(test_cluster.get(), test_cluster->pd_client->getTS());
 
     auto scanner = snap.Scan("", "");
 

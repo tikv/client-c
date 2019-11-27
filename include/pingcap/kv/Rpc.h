@@ -2,6 +2,7 @@
 
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
+
 #include <mutex>
 #include <type_traits>
 #include <vector>
@@ -31,6 +32,7 @@ struct ConnArray
 
 using ConnArrayPtr = std::shared_ptr<ConnArray>;
 
+// RpcCall holds the request and response, and delegates RPC calls.
 template <class T>
 class RpcCall
 {
@@ -38,28 +40,12 @@ class RpcCall
     using Trait = RpcTypeTraits<T>;
     using S = typename Trait::ResultType;
 
-    T * req;
-    S * resp;
+    std::unique_ptr<T> req;
+    std::unique_ptr<S> resp;
     Logger * log;
 
 public:
-    RpcCall(T * t) : log(&Logger::get("pingcap.tikv"))
-    {
-        req = t;
-        resp = new S();
-    }
-
-    ~RpcCall()
-    {
-        if (req != nullptr)
-        {
-            delete req;
-        }
-        if (resp != nullptr)
-        {
-            delete resp;
-        }
-    }
+    RpcCall(std::unique_ptr<T> && req_) : req(std::move(req_)), resp(std::make_unique<S>()), log(&Logger::get("pingcap.tikv")) {}
 
     void setCtx(RPCContextPtr rpc_ctx)
     {
@@ -70,13 +56,13 @@ public:
         req->set_allocated_context(ctx);
     }
 
-    S * getResp() { return resp; }
+    std::unique_ptr<S> getResp() { return std::move(resp); }
 
     void call(std::unique_ptr<tikvpb::Tikv::Stub> stub)
     {
         grpc::ClientContext context;
         context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(3));
-        auto status = Trait::doRPCCall(&context, std::move(stub), *req, resp);
+        auto status = Trait::doRPCCall(&context, std::move(stub), *req, resp.get());
         if (!status.ok())
         {
             std::string err_msg = std::string(Trait::err_msg()) + std::to_string(status.error_code()) + ": " + status.error_message();
@@ -87,7 +73,7 @@ public:
 };
 
 template <typename T>
-using RpcCallPtr = std::shared_ptr<RpcCall<T>>;
+using RpcCallPtr = std::unique_ptr<RpcCall<T>>;
 
 struct RpcClient
 {
@@ -102,15 +88,15 @@ struct RpcClient
     ConnArrayPtr createConnArray(const std::string & addr);
 
     template <class T>
-    void sendRequest(std::string addr, RpcCallPtr<T> rpc)
+    void sendRequest(std::string addr, RpcCall<T> & rpc)
     {
         ConnArrayPtr connArray = getConnArray(addr);
         auto stub = tikvpb::Tikv::NewStub(connArray->get());
-        rpc->call(std::move(stub));
+        rpc.call(std::move(stub));
     }
 };
 
-using RpcClientPtr = std::shared_ptr<RpcClient>;
+using RpcClientPtr = std::unique_ptr<RpcClient>;
 
 } // namespace kv
 } // namespace pingcap

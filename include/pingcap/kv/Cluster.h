@@ -1,6 +1,5 @@
 #pragma once
 
-#include <pingcap/kv/RegionClient.h>
 #include <pingcap/kv/Rpc.h>
 #include <pingcap/pd/Client.h>
 
@@ -8,35 +7,27 @@ namespace pingcap
 {
 namespace kv
 {
-// Cluster represents a tikv-pd cluster.
+// Cluster represents a tikv+pd cluster.
 struct Cluster
 {
     pd::ClientPtr pd_client;
     RegionCachePtr region_cache;
     RpcClientPtr rpc_client;
 
-    Cluster(pd::ClientPtr pd_client_, RegionCachePtr region_cache_, RpcClientPtr rpc_client_)
-        : pd_client(pd_client_), region_cache(region_cache_), rpc_client(rpc_client_)
+    Cluster(const std::vector<std::string> & pd_addrs, const std::string & learner_key, const std::string & learner_value)
+        : pd_client(std::make_shared<pd::Client>(pd_addrs)),
+          region_cache(std::make_unique<RegionCache>(pd_client, learner_key, learner_value)),
+          rpc_client(std::make_unique<RpcClient>())
     {}
 
-    // Only server for test.
-    void splitRegion(const std::string & split_key)
-    {
-        Backoffer bo(splitRegionBackoff);
-        auto loc = region_cache->locateKey(bo, split_key);
-        RegionClient client(region_cache, rpc_client, loc.region);
-        auto * req = new kvrpcpb::SplitRegionRequest();
-        req->set_split_key(split_key);
-        auto rpc_call = std::make_shared<RpcCall<kvrpcpb::SplitRegionRequest>>(req);
-        client.sendReqToRegion(bo, rpc_call);
-        if (rpc_call->getResp()->has_region_error())
-        {
-            throw Exception(rpc_call->getResp()->region_error().message(), RegionUnavailable);
-        }
-    }
+    // TODO: When the cluster is closed, we should release all the resources
+    // (e.g. background threads) that cluster object holds so as to exit elegantly.
+    ~Cluster() {}
+
+    void splitRegion(const std::string & split_key);
 };
 
-using ClusterPtr = std::shared_ptr<Cluster>;
+using ClusterPtr = std::unique_ptr<Cluster>;
 
 } // namespace kv
 } // namespace pingcap

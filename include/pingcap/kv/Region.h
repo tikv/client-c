@@ -189,7 +189,7 @@ private:
     Logger * log;
 };
 
-using RegionCachePtr = std::shared_ptr<RegionCache>;
+using RegionCachePtr = std::unique_ptr<RegionCache>;
 
 } // namespace kv
 } // namespace pingcap
