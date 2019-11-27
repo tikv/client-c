@@ -18,7 +18,7 @@ std::string Snapshot::Get(const std::string & key)
     for (;;)
     {
         auto location = cluster->region_cache->locateKey(bo, key);
-        auto regionClient = RegionClient(cluster, location.region);
+        auto region_client = RegionClient(cluster, location.region);
         auto request = std::make_unique<kvrpcpb::GetRequest>();
         request->set_key(key);
         request->set_version(version);
@@ -27,7 +27,7 @@ std::string Snapshot::Get(const std::string & key)
 
         try
         {
-            response = regionClient.sendReqToRegion(bo, std::move(request));
+            response = region_client.sendReqToRegion(bo, std::move(request));
         }
         catch (Exception & e)
         {

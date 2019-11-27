@@ -8,7 +8,7 @@
 #include <vector>
 
 #include <pingcap/Log.h>
-#include <pingcap/kv/Region.h>
+#include <pingcap/kv/RegionCache.h>
 #include <pingcap/kv/internal/type_traits.h>
 
 namespace pingcap

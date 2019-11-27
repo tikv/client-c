@@ -35,31 +35,48 @@ protected:
 TEST_F(TestWithMockKVRegionSplit, testSplitRegionGet)
 {
 
-    Txn txn(test_cluster.get());
+    {
+        Txn txn(test_cluster.get());
 
-    txn.set("abc", "1");
-    txn.set("abd", "2");
-    txn.set("abe", "3");
-    txn.set("abf", "4");
-    txn.set("abg", "5");
-    txn.set("abz", "6");
-    txn.commit();
+        txn.set("abc", "1");
+        txn.set("abd", "2");
+        txn.set("abe", "3");
+        txn.set("abf", "4");
+        txn.set("abg", "5");
+        txn.set("abz", "6");
+        txn.commit();
+        Snapshot snap(test_cluster.get(), test_cluster->pd_client->getTS());
 
-    Snapshot snap(test_cluster.get(), test_cluster->pd_client->getTS());
+        std::string result = snap.Get("abf");
 
-    std::string result = snap.Get("abf");
+        ASSERT_EQ(result, "4");
 
-    ASSERT_EQ(result, "4");
+        control_cluster->splitRegion("abf");
 
-    control_cluster->splitRegion("abf");
+        result = snap.Get("abc");
 
-    result = snap.Get("abc");
+        ASSERT_EQ(result, "1");
 
-    ASSERT_EQ(result, "1");
+        result = snap.Get("abf");
 
-    result = snap.Get("abf");
+        ASSERT_EQ(result, "4");
+    }
 
-    ASSERT_EQ(result, "4");
+
+    {
+        Txn txn(test_cluster.get());
+
+        txn.set("abf", "6");
+        txn.set("abg", "5");
+        txn.set("abz", "4");
+        txn.commit();
+
+        Snapshot snap(test_cluster.get(), test_cluster->pd_client->getTS());
+        std::string result = snap.Get("abf");
+
+        ASSERT_EQ(result, "6");
+    }
+
 }
 
 TEST_F(TestWithMockKVRegionSplit, testSplitRegionScan)

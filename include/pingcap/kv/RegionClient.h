@@ -2,7 +2,7 @@
 
 #include <pingcap/kv/Backoff.h>
 #include <pingcap/kv/Cluster.h>
-#include <pingcap/kv/Region.h>
+#include <pingcap/kv/RegionCache.h>
 #include <pingcap/kv/Rpc.h>
 
 namespace pingcap
