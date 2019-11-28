@@ -35,8 +35,8 @@ RUN git clone https://github.com/grpc/grpc.git && cd grpc && git checkout v1.14.
 RUN cd /
 
 RUN git clone https://github.com/pocoproject/poco.git && cd poco && git checkout poco-1.9.0-release && git submodule update --init \
- && cd /poco && mkdir .build && cd .build && cmake .. && make install -j $(nproc || grep -c ^processor /proc/cpuinfo)
+ && cd /poco && ./build_cmake.sh -DPOCO_STATIC=1
 
 RUN cd /
 
-RUN git clone https://github.com/tikv/mock-tikv.git && cd mock-tikv && git checkout 49610391cd1f9f31a0956fc335590bf272ea4c06 && make failpoint-enable && make
+RUN git clone https://github.com/tikv/mock-tikv.git && cd mock-tikv && git checkout 4286274568cadff6dbc7a11d494c66b274aab5e0 && make failpoint-enable && make

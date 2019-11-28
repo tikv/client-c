@@ -7,7 +7,7 @@ namespace pingcap
 namespace kv
 {
 
-TwoPhaseCommitter::TwoPhaseCommitter(Txn * txn)
+TwoPhaseCommitter::TwoPhaseCommitter(Txn * txn) : log(&Logger::get("pingcap.kv"))
 {
     commited = false;
     lock_ttl = 3000;
@@ -38,7 +38,7 @@ void TwoPhaseCommitter::execute()
         {
             // TODO: Rollback keys.
         }
-        e.rethrow();
+        log->warning("write commit exception: " + e.displayText());
     }
 }
 
@@ -76,8 +76,25 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
 
         if (response->errors_size() != 0)
         {
-            // TODO resolve lock and retry
-            throw Exception("meet lock error", LockError);
+            std::vector<LockPtr> locks;
+            int size = response->errors_size();
+            for (int i = 0; i < size; i++)
+            {
+                const auto & err = response->errors(i);
+                if (err.has_already_exist())
+                {
+                    throw Exception("key : " + err.already_exist().key() + " has existed.", LogicalError);
+                }
+                auto lock = extractLockFromKeyErr(err);
+                locks.push_back(lock);
+            }
+            auto ms_before_exired = cluster->lock_resolver->ResolveLocks(bo, start_ts, locks);
+            if (ms_before_exired > 0)
+            {
+                bo.backoffWithMaxSleep(
+                    boTxnLock, ms_before_exired, Exception("2PC prewrite locked: " + std::to_string(locks.size()), LockError));
+            }
+            continue;
         }
 
         return;

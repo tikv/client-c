@@ -48,7 +48,9 @@ Exception Type2Exception(BackoffType tp)
     return Exception("Unknown Exception, tp is :" + std::to_string(tp));
 }
 
-void Backoffer::backoff(BackoffType tp, const Exception & exc)
+void Backoffer::backoff(pingcap::kv::BackoffType tp, const pingcap::Exception & exc) { backoffWithMaxSleep(tp, -1, exc); }
+
+void Backoffer::backoffWithMaxSleep(pingcap::kv::BackoffType tp, int max_sleep_time, const pingcap::Exception & exc)
 {
     if (exc.code() == MismatchClusterIDCode)
     {
@@ -66,7 +68,7 @@ void Backoffer::backoff(BackoffType tp, const Exception & exc)
         bo = newBackoff(tp);
         backoff_map[tp] = bo;
     }
-    total_sleep += bo->sleep();
+    total_sleep += bo->sleep(max_sleep_time);
     if (max_sleep > 0 && total_sleep > max_sleep)
     {
         // TODO:: Should Record all the errors!!

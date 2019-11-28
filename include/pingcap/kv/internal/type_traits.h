@@ -32,6 +32,8 @@ PINGCAP_DEFINE_TRAITS(Prewrite, KvPrewrite)
 PINGCAP_DEFINE_TRAITS(Scan, KvScan)
 PINGCAP_DEFINE_TRAITS(Get, KvGet)
 PINGCAP_DEFINE_TRAITS(ReadIndex, ReadIndex)
+PINGCAP_DEFINE_TRAITS(CheckTxnStatus, KvCheckTxnStatus)
+PINGCAP_DEFINE_TRAITS(ResolveLock, KvResolveLock)
 
 } // namespace kv
 } // namespace pingcap

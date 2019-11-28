@@ -4,21 +4,6 @@ namespace pingcap
 {
 namespace kv
 {
-inline std::string prefixNext(const std::string & str)
-{
-    auto new_str = str;
-    for (int i = int(str.size()); i > 0; i--)
-    {
-        char & c = new_str[i - 1];
-        c++;
-        if (c != 0)
-        {
-            return new_str;
-        }
-    }
-    return "";
-}
-
 void Scanner::next()
 {
     Backoffer bo(scanMaxBackoff);
@@ -44,15 +29,26 @@ void Scanner::next()
             }
         }
 
-        auto current = cache[idx];
+        auto & current = cache[idx];
         if (end_key.size() > 0 && current.key() >= end_key)
         {
             eof = true;
             valid = false;
         }
 
+        if (current.has_error())
+        {
+            resolveCurrentLock(bo, current);
+        }
         return;
     }
+}
+
+void Scanner::resolveCurrentLock(pingcap::kv::Backoffer & bo, kvrpcpb::KvPair & current)
+{
+    auto value = snap.Get(bo, current.key());
+    current.set_allocated_error(nullptr);
+    current.set_value(value);
 }
 
 void Scanner::getData(Backoffer & bo)
@@ -65,7 +61,8 @@ void Scanner::getData(Backoffer & bo)
         if (req_end_key.size() > 0 && loc.end_key.size() > 0 && loc.end_key < req_end_key)
             req_end_key = loc.end_key;
 
-        auto region_client = RegionClient(snap.cluster, loc.region);
+
+        auto regionClient = RegionClient(snap.cluster, loc.region);
         auto request = std::make_unique<kvrpcpb::ScanRequest>();
         request->set_start_key(next_start_key);
         request->set_end_key(req_end_key);
@@ -80,7 +77,7 @@ void Scanner::getData(Backoffer & bo)
         std::unique_ptr<kvrpcpb::ScanResponse> response;
         try
         {
-            response = region_client.sendReqToRegion(bo, std::move(request));
+            response = regionClient.sendReqToRegion(bo, std::move(request));
         }
         catch (Exception & e)
         {
@@ -98,8 +95,8 @@ void Scanner::getData(Backoffer & bo)
             auto current = response->pairs(i);
             if (current.has_error())
             {
-                // process lock
-                throw Exception("has key error", LockError);
+                auto lock = extractLockFromKeyErr(current.error());
+                current.set_key(lock->key);
             }
             cache.push_back(current);
         }
@@ -120,7 +117,7 @@ void Scanner::getData(Backoffer & bo)
         }
 
         auto lastKey = response->pairs(response->pairs_size() - 1);
-        next_start_key = prefixNext(lastKey.key());
+        next_start_key = alphabeticalNext(lastKey.key());
         return;
     }
 }
