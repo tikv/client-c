@@ -21,14 +21,14 @@ class Oracle
 {
     ClientPtr pd_client;
 
-    Logger * log;
-
     std::atomic_bool quit;
 
     std::atomic<uint64_t> last_ts;
 
     std::thread work_thread;
     std::chrono::milliseconds update_interval;
+
+    Logger * log;
 
 public:
     Oracle(ClientPtr pd_client_, std::chrono::milliseconds update_interval_)

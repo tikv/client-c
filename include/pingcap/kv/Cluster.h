@@ -4,6 +4,7 @@
 #include <pingcap/kv/Rpc.h>
 #include <pingcap/pd/Client.h>
 #include <pingcap/pd/CodecClient.h>
+#include <pingcap/pd/MockPDClient.h>
 #include <pingcap/pd/Oracle.h>
 
 namespace pingcap
@@ -22,6 +23,8 @@ struct Cluster
     pd::OraclePtr oracle;
 
     LockResolverPtr lock_resolver;
+
+    Cluster() : pd_client(std::make_shared<pd::MockPDClient>()) {}
 
     Cluster(const std::vector<std::string> & pd_addrs, const std::string & learner_key, const std::string & learner_value)
         : pd_client(std::make_shared<pd::CodecClient>(pd_addrs)),
