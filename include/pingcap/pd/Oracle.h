@@ -16,11 +16,10 @@ constexpr int physicalShiftBits = 18;
 
 inline int64_t extractPhysical(uint64_t ts) { return ts >> physicalShiftBits; }
 
+// Oracle provides strictly ascending timestamps.
 class Oracle
 {
     ClientPtr pd_client;
-
-    Logger * log;
 
     std::atomic_bool quit;
 
@@ -28,6 +27,8 @@ class Oracle
 
     std::thread work_thread;
     std::chrono::milliseconds update_interval;
+
+    Logger * log;
 
 public:
     Oracle(ClientPtr pd_client_, std::chrono::milliseconds update_interval_)
@@ -72,7 +73,7 @@ private:
     }
 };
 
-using OraclePtr = std::shared_ptr<Oracle>;
+using OraclePtr = std::unique_ptr<Oracle>;
 
 } // namespace pd
 } // namespace pingcap

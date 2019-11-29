@@ -76,7 +76,6 @@ TEST_F(TestWithMockKVRegionSplit, testSplitRegionGet)
 
         ASSERT_EQ(result, "6");
     }
-
 }
 
 TEST_F(TestWithMockKVRegionSplit, testSplitRegionScan)

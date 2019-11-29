@@ -7,6 +7,8 @@
 #include <pingcap/kv/Backoff.h>
 #include <pingcap/kv/Cluster.h>
 
+#include <fiu.h>
+
 namespace pingcap
 {
 namespace kv
@@ -30,6 +32,8 @@ private:
     std::string primary_lock;
     // commited means primary key has been written to kv stores.
     bool commited;
+
+    Logger * log;
 
 public:
     TwoPhaseCommitter(Txn * txn);
@@ -70,10 +74,17 @@ private:
         }
         if constexpr (action == ActionCommit || action == ActionCleanUp)
         {
+            if constexpr (action == ActionCommit)
+            {
+                fiu_do_on("all commit fail", return );
+            }
             doActionOnBatches<action>(bo, std::vector<BatchKeys>(batches.begin(), batches.begin() + 1));
             batches = std::vector<BatchKeys>(batches.begin() + 1, batches.end());
         }
-        doActionOnBatches<action>(bo, batches);
+        if (action != ActionCommit || !fiu_fail("rest commit fail"))
+        {
+            doActionOnBatches<action>(bo, batches);
+        }
     }
 
     template <Action action>

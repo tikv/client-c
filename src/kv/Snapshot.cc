@@ -15,6 +15,11 @@ constexpr int scan_batch_size = 256;
 std::string Snapshot::Get(const std::string & key)
 {
     Backoffer bo(GetMaxBackoff);
+    return Get(bo, key);
+}
+
+std::string Snapshot::Get(Backoffer & bo, const std::string & key)
+{
     for (;;)
     {
         auto location = cluster->region_cache->locateKey(bo, key);
@@ -36,7 +41,14 @@ std::string Snapshot::Get(const std::string & key)
         }
         if (response->has_error())
         {
-            throw Exception("has key error", LockError);
+            auto lock = extractLockFromKeyErr(response->error());
+            auto before_expired = cluster->lock_resolver->ResolveLocks(bo, version, {lock});
+            if (before_expired > 0)
+            {
+                bo.backoffWithMaxSleep(
+                    boTxnLockFast, before_expired, Exception("key error : " + response->error().ShortDebugString(), LockError));
+            }
+            continue;
         }
         return response->value();
     }
