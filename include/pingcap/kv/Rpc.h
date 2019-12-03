@@ -59,7 +59,7 @@ public:
 
     std::shared_ptr<S> getResp() { return resp; }
 
-    void call(std::unique_ptr<tikvpb::Tikv::Stub> stub, const std::string & addr)
+    void call(std::unique_ptr<tikvpb::Tikv::Stub> stub)
     {
         grpc::ClientContext context;
         context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(3));
@@ -94,7 +94,7 @@ struct RpcClient
         ConnArrayPtr connArray = getConnArray(addr);
         auto conn = connArray->get();
         auto stub = tikvpb::Tikv::NewStub(conn);
-        rpc.call(std::move(stub), addr);
+        rpc.call(std::move(stub));
     }
 };
 
