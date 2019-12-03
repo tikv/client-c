@@ -31,9 +31,9 @@ struct RegionClient
 
     // This method send a request to region, but is NOT Thread-Safe !!
     template <typename T>
-    auto sendReqToRegion(Backoffer & bo, std::unique_ptr<T> && req)
+    auto sendReqToRegion(Backoffer & bo, std::shared_ptr<T> req)
     {
-        RpcCall<T> rpc(std::move(req));
+        RpcCall<T> rpc(req);
         for (;;)
         {
             RPCContextPtr ctx = cluster->region_cache->getRPCContext(bo, region_id);
@@ -55,7 +55,7 @@ struct RegionClient
             }
             else
             {
-                return std::move(resp);
+                return resp;
             }
         }
     }

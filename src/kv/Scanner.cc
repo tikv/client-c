@@ -63,7 +63,7 @@ void Scanner::getData(Backoffer & bo)
 
 
         auto regionClient = RegionClient(snap.cluster, loc.region);
-        auto request = std::make_unique<kvrpcpb::ScanRequest>();
+        auto request = std::make_shared<kvrpcpb::ScanRequest>();
         request->set_start_key(next_start_key);
         request->set_end_key(req_end_key);
         request->set_limit(batch);
@@ -74,10 +74,10 @@ void Scanner::getData(Backoffer & bo)
         context->set_priority(::kvrpcpb::Normal);
         context->set_not_fill_cache(false);
 
-        std::unique_ptr<kvrpcpb::ScanResponse> response;
+        std::shared_ptr<kvrpcpb::ScanResponse> response;
         try
         {
-            response = regionClient.sendReqToRegion(bo, std::move(request));
+            response = regionClient.sendReqToRegion(bo, request);
         }
         catch (Exception & e)
         {
@@ -102,8 +102,6 @@ void Scanner::getData(Backoffer & bo)
         }
 
         log->trace("get pair size: " + std::to_string(pairs_size));
-        if (pairs_size > 0)
-            log->trace("pair start range: " + response->pairs(0).key());
 
         if (pairs_size < batch)
         {
@@ -120,7 +118,7 @@ void Scanner::getData(Backoffer & bo)
 
         auto lastKey = cache.back();
         next_start_key = alphabeticalNext(lastKey.key());
-        log->trace("scan next key: " + next_start_key );
+        log->trace("scan next key: " + next_start_key);
         return;
     }
 }

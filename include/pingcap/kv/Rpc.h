@@ -41,12 +41,12 @@ class RpcCall
     using Trait = RpcTypeTraits<T>;
     using S = typename Trait::ResultType;
 
-    std::unique_ptr<T> req;
-    std::unique_ptr<S> resp;
+    std::shared_ptr<T> req;
+    std::shared_ptr<S> resp;
     Logger * log;
 
 public:
-    RpcCall(std::unique_ptr<T> && req_) : req(std::move(req_)), resp(std::make_unique<S>()), log(&Logger::get("pingcap.tikv")) {}
+    RpcCall(std::shared_ptr<T> req_) : req(req_), resp(std::make_unique<S>()), log(&Logger::get("pingcap.tikv")) {}
 
     void setCtx(RPCContextPtr rpc_ctx)
     {
@@ -57,7 +57,7 @@ public:
         req->set_allocated_context(ctx);
     }
 
-    std::unique_ptr<S> getResp() { return std::move(resp); }
+    std::shared_ptr<S> getResp() { return resp; }
 
     void call(std::unique_ptr<tikvpb::Tikv::Stub> stub, const std::string & addr)
     {

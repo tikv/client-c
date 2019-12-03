@@ -49,7 +49,7 @@ struct hash<pingcap::kv::RegionVerID>
 {
     using argument_type = pingcap::kv::RegionVerID;
     using result_type = size_t;
-    size_t operator()(const pingcap::kv::RegionVerID & key) const { return key.id ; }
+    size_t operator()(const pingcap::kv::RegionVerID & key) const { return key.id; }
 };
 } // namespace std
 
