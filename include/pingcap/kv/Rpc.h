@@ -58,13 +58,26 @@ public:
 
     std::unique_ptr<S> getResp() { return std::move(resp); }
 
-    void call(std::unique_ptr<tikvpb::Tikv::Stub> stub)
+    void call(std::unique_ptr<tikvpb::Tikv::Stub> stub, const std::string & addr)
     {
         grpc::ClientContext context;
         context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(3));
         auto status = Trait::doRPCCall(&context, std::move(stub), *req, resp.get());
         if (!status.ok())
         {
+            std::cerr<<" failed addr: " << addr << std::endl;
+            if constexpr(std::is_same_v<T, ::kvrpcpb::GetRequest>)
+            {
+                std::cerr<<"get key: "<<req->key()<<std::endl;
+            }
+            else if constexpr( std::is_same_v<T, ::kvrpcpb::PrewriteRequest>)
+            {
+                std::cerr<<"prewrite key: "<<req->start_version()<<std::endl;
+            }
+            else if constexpr( std::is_same_v<T, ::kvrpcpb::CommitRequest>)
+            {
+                std::cerr<<"commit key"<< req->commit_version()<<std::endl;
+            }
             std::string err_msg = std::string(Trait::err_msg()) + std::to_string(status.error_code()) + ": " + status.error_message();
             log->error(err_msg);
             throw Exception(err_msg, GRPCErrorCode);
@@ -91,8 +104,12 @@ struct RpcClient
     void sendRequest(std::string addr, RpcCall<T> & rpc)
     {
         ConnArrayPtr connArray = getConnArray(addr);
-        auto stub = tikvpb::Tikv::NewStub(connArray->get());
-        rpc.call(std::move(stub));
+        auto conn = connArray->get();
+        //if (addr == "192.168.188.94:7502") {
+        //    std::cout << "state: " << conn->GetState(true) << std::endl;
+        //}
+        auto stub = tikvpb::Tikv::NewStub(conn);
+        rpc.call(std::move(stub), addr);
     }
 };
 

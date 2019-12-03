@@ -10,13 +10,16 @@ void RegionClient::onRegionError(Backoffer & bo, RPCContextPtr rpc_ctx, const er
     if (err.has_not_leader())
     {
         auto not_leader = err.not_leader();
-        if (not_leader.has_leader())
+        // TODO: It seems it will cause some other bugs that cannot recover , so we comment this part currently.
+        //if (not_leader.has_leader())
+        //{
+        //    log->information("not leader but has leader, result store is %d", (int) not_leader.leader().store_id());
+        //    cluster->region_cache->updateLeader(bo, rpc_ctx->region, not_leader.leader().store_id());
+        //    bo.backoff(boUpdateLeader, Exception("not leader", LeaderNotMatch));
+        //}
+        //else
         {
-            cluster->region_cache->updateLeader(bo, rpc_ctx->region, not_leader.leader().store_id());
-            bo.backoff(boUpdateLeader, Exception("not leader", LeaderNotMatch));
-        }
-        else
-        {
+            log->information("report not leader but doesn't have new leader");
             cluster->region_cache->dropRegion(rpc_ctx->region);
             bo.backoff(boRegionMiss, Exception("not leader", LeaderNotMatch));
         }

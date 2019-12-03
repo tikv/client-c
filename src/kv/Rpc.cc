@@ -34,6 +34,7 @@ ConnArrayPtr RpcClient::getConnArray(const std::string & addr)
 
 ConnArrayPtr RpcClient::createConnArray(const std::string & addr)
 {
+    std::cerr<<"create addr: "<< addr<<std::endl;
     auto conn_array = std::make_shared<ConnArray>(5, addr);
     conns[addr] = conn_array;
     return conn_array;

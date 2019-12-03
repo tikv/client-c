@@ -53,7 +53,7 @@ void Scanner::resolveCurrentLock(pingcap::kv::Backoffer & bo, kvrpcpb::KvPair & 
 
 void Scanner::getData(Backoffer & bo)
 {
-    log->debug("get data for scanner");
+    log->trace("get data for scanner");
     for (;;)
     {
         auto loc = snap.cluster->region_cache->locateKey(bo, next_start_key);
@@ -101,7 +101,9 @@ void Scanner::getData(Backoffer & bo)
             cache.push_back(current);
         }
 
-        log->debug("get pair size: " + std::to_string(pairs_size));
+        log->trace("get pair size: " + std::to_string(pairs_size));
+        if (pairs_size > 0)
+            log->trace("pair start range: " + response->pairs(0).key());
 
         if (pairs_size < batch)
         {
@@ -116,8 +118,9 @@ void Scanner::getData(Backoffer & bo)
             return;
         }
 
-        auto lastKey = response->pairs(response->pairs_size() - 1);
+        auto lastKey = cache.back();
         next_start_key = alphabeticalNext(lastKey.key());
+        log->trace("scan next key: " + next_start_key );
         return;
     }
 }

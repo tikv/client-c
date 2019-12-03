@@ -7,7 +7,7 @@ namespace pingcap
 namespace kv
 {
 
-TwoPhaseCommitter::TwoPhaseCommitter(Txn * txn) : log(&Logger::get("pingcap.kv"))
+TwoPhaseCommitter::TwoPhaseCommitter(Txn * txn) : log(&Logger::get("pingcap.tikv"))
 {
     commited = false;
     lock_ttl = 3000;
@@ -44,24 +44,24 @@ void TwoPhaseCommitter::execute()
 
 void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & batch)
 {
-    auto req = std::make_unique<kvrpcpb::PrewriteRequest>();
-    for (const std::string & key : batch.keys)
-    {
-        auto * mut = req->add_mutations();
-        mut->set_key(key);
-        mut->set_value(mutations[key]);
-    }
-    req->set_primary_lock(keys[0]);
-    req->set_start_version(start_ts);
-    req->set_lock_ttl(lock_ttl);
-    // TODO: use correct txn size.
-    req->set_txn_size(500);
-    req->set_primary_lock(primary_lock);
-
-    std::unique_ptr<kvrpcpb::PrewriteResponse> response;
-    RegionClient region_client(cluster, batch.region);
     for (;;)
     {
+        auto req = std::make_unique<kvrpcpb::PrewriteRequest>();
+        for (const std::string & key : batch.keys)
+        {
+            auto * mut = req->add_mutations();
+            mut->set_key(key);
+            mut->set_value(mutations[key]);
+        }
+        req->set_primary_lock(keys[0]);
+        req->set_start_version(start_ts);
+        req->set_lock_ttl(lock_ttl);
+        // TODO: use correct txn size.
+        req->set_txn_size(500);
+        req->set_primary_lock(primary_lock);
+
+        std::unique_ptr<kvrpcpb::PrewriteResponse> response;
+        RegionClient region_client(cluster, batch.region);
         try
         {
             response = region_client.sendReqToRegion(bo, std::move(req));
