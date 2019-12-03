@@ -5,7 +5,7 @@ namespace pingcap
 namespace kv
 {
 
-ConnArray::ConnArray(size_t max_size, std::string addr) : index(0)
+ConnArray::ConnArray(size_t max_size, std::string addr) : address(addr), index(0)
 {
     vec.resize(max_size);
     for (size_t i = 0; i < max_size; i++)
@@ -34,7 +34,6 @@ ConnArrayPtr RpcClient::getConnArray(const std::string & addr)
 
 ConnArrayPtr RpcClient::createConnArray(const std::string & addr)
 {
-    std::cerr<<"create addr: "<< addr<<std::endl;
     auto conn_array = std::make_shared<ConnArray>(5, addr);
     conns[addr] = conn_array;
     return conn_array;

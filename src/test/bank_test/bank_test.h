@@ -33,7 +33,8 @@ struct BankCase
         check_thread.join();
     }
 
-    void enable_check() {
+    void enable_check()
+    {
         check_thread = std::thread([&]() { verify(); });
     }
 
@@ -57,8 +58,9 @@ struct BankCase
     {
         for (;;)
         {
-            if (stop) {
-                std::cerr<<"end check\n";
+            if (stop)
+            {
+                std::cerr << "end check\n";
                 return;
             }
             int total = 0;
@@ -85,13 +87,13 @@ struct BankCase
                 for (int i = 0; i < account_cnt; i++)
                     if (key_count[i] != 1)
                     {
-                        std::cerr <<"key idx: "<< i <<" "<< key_count[i]<<std::endl;
+                        std::cerr << "key idx: " << i << " " << key_count[i] << std::endl;
                     }
             }
 
             std::cerr << "total: " << total << " account " << account_cnt << " cnt " << cnt << std::endl;
             assert(total == account_cnt * 1000);
-            std::this_thread::sleep_for(std::chrono::seconds(15));
+            std::this_thread::sleep_for(std::chrono::seconds(2));
         }
     }
 
@@ -110,36 +112,36 @@ struct BankCase
         std::cerr << "bank case end execute\n";
     }
     void moveMoneyOnce(std::mt19937 & generator)
-    {     int from, to;
-            for (;;)
-            {
-                from = generator() % account_cnt;
-                to = generator() % account_cnt;
-                if (to != from)
-                    break;
-            }
-            Txn txn(cluster);
+    {
+        int from, to;
+        for (;;)
+        {
+            from = generator() % account_cnt;
+            to = generator() % account_cnt;
+            if (to != from)
+                break;
+        }
+        Txn txn(cluster);
 
-            std::string rest;
-            bool exists;
-            std::tie(rest, exists) = txn.get(bank_key(from));
-            assert(exists);
-            if (rest == "")
-                return;
-            int rest_money = std::stoi(rest);
-            int money = generator() % rest_money;
+        std::string rest;
+        bool exists;
+        std::tie(rest, exists) = txn.get(bank_key(from));
+        assert(exists);
+        if (rest == "")
+            return;
+        int rest_money = std::stoi(rest);
+        int money = generator() % rest_money;
 
-            txn.set(bank_key(from), bank_value(rest_money - money));
+        txn.set(bank_key(from), bank_value(rest_money - money));
 
-            std::tie(rest, exists) = txn.get(bank_key(to));
-            assert(exists);
-            if (rest == "")
-                return;
+        std::tie(rest, exists) = txn.get(bank_key(to));
+        assert(exists);
+        if (rest == "")
+            return;
 
-            rest_money = std::stoi(rest);
-            txn.set(bank_key(to), bank_value(rest_money + money));
-            txn.commit();
-
+        rest_money = std::stoi(rest);
+        txn.set(bank_key(to), bank_value(rest_money + money));
+        txn.commit();
     }
 
     void moveMoney()
@@ -149,11 +151,13 @@ struct BankCase
         {
             if (stop)
                 return;
-            try {
+            try
+            {
                 moveMoneyOnce(generator);
             }
-            catch (Exception & e) {
-                std::cerr<< "move money failed: " << e.displayText() << std::endl;
+            catch (Exception & e)
+            {
+                std::cerr << "move money failed: " << e.displayText() << std::endl;
             }
         }
     }
