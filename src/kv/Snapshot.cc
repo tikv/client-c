@@ -20,19 +20,23 @@ std::string Snapshot::Get(const std::string & key)
 
 std::string Snapshot::Get(Backoffer & bo, const std::string & key)
 {
+    auto request = std::make_shared<kvrpcpb::GetRequest>();
+    request->set_key(key);
+    request->set_version(version);
+
+    auto context = request->mutable_context();
+    context->set_priority(::kvrpcpb::Normal);
+    context->set_not_fill_cache(false);
+
     for (;;)
     {
         auto location = cluster->region_cache->locateKey(bo, key);
         auto region_client = RegionClient(cluster, location.region);
-        auto request = std::make_unique<kvrpcpb::GetRequest>();
-        request->set_key(key);
-        request->set_version(version);
 
-        std::unique_ptr<kvrpcpb::GetResponse> response;
-
+        std::shared_ptr<kvrpcpb::GetResponse> response;
         try
         {
-            response = region_client.sendReqToRegion(bo, std::move(request));
+            response = region_client.sendReqToRegion(bo, request);
         }
         catch (Exception & e)
         {

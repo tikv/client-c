@@ -19,6 +19,7 @@ namespace kv
 struct ConnArray
 {
     std::mutex mutex;
+    std::string address;
 
     size_t index;
     std::vector<std::shared_ptr<grpc::Channel>> vec;
@@ -40,12 +41,12 @@ class RpcCall
     using Trait = RpcTypeTraits<T>;
     using S = typename Trait::ResultType;
 
-    std::unique_ptr<T> req;
-    std::unique_ptr<S> resp;
+    std::shared_ptr<T> req;
+    std::shared_ptr<S> resp;
     Logger * log;
 
 public:
-    RpcCall(std::unique_ptr<T> && req_) : req(std::move(req_)), resp(std::make_unique<S>()), log(&Logger::get("pingcap.tikv")) {}
+    RpcCall(std::shared_ptr<T> req_) : req(req_), resp(std::make_unique<S>()), log(&Logger::get("pingcap.tikv")) {}
 
     void setCtx(RPCContextPtr rpc_ctx)
     {
@@ -56,7 +57,7 @@ public:
         req->set_allocated_context(ctx);
     }
 
-    std::unique_ptr<S> getResp() { return std::move(resp); }
+    std::shared_ptr<S> getResp() { return resp; }
 
     void call(std::unique_ptr<tikvpb::Tikv::Stub> stub)
     {
@@ -91,7 +92,8 @@ struct RpcClient
     void sendRequest(std::string addr, RpcCall<T> & rpc)
     {
         ConnArrayPtr connArray = getConnArray(addr);
-        auto stub = tikvpb::Tikv::NewStub(connArray->get());
+        auto conn = connArray->get();
+        auto stub = tikvpb::Tikv::NewStub(conn);
         rpc.call(std::move(stub));
     }
 };

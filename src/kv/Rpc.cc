@@ -5,7 +5,7 @@ namespace pingcap
 namespace kv
 {
 
-ConnArray::ConnArray(size_t max_size, std::string addr) : index(0)
+ConnArray::ConnArray(size_t max_size, std::string addr) : address(addr), index(0)
 {
     vec.resize(max_size);
     for (size_t i = 0; i < max_size; i++)

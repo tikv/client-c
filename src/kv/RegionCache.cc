@@ -11,7 +11,10 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id)
 {
     for (;;)
     {
-        RegionPtr region = getRegionByID(bo, id);
+        auto it = regions.find(id);
+        if (it == regions.end())
+            return nullptr;
+        auto region = it->second;
         const auto & meta = region->meta;
         auto peer = region->peer;
 
@@ -105,6 +108,7 @@ RegionPtr RegionCache::loadRegionByID(Backoffer & bo, uint64_t region_id)
             {
                 region->switchPeer(leader.store_id());
             }
+            log->debug("load region id: " + std::to_string(region->meta.id()) + " leader store id " + std::to_string(leader.store_id()));
             return region;
         }
         catch (const Exception & e)
@@ -134,6 +138,7 @@ RegionPtr RegionCache::loadRegionByKey(Backoffer & bo, const std::string & key)
             {
                 region->switchPeer(leader.store_id());
             }
+            log->debug("load region id: " + std::to_string(region->meta.id()) + " leader store id " + std::to_string(leader.store_id()));
             return region;
         }
         catch (const Exception & e)
@@ -151,6 +156,7 @@ metapb::Store RegionCache::loadStore(Backoffer & bo, uint64_t id)
         {
             // TODO:: The store may be not ready, it's better to check store's state.
             const auto & store = pd_client->getStore(id);
+            log->information("load store id " + std::to_string(id) + " address %s", store.address());
             return store;
         }
         catch (Exception & e)
@@ -209,6 +215,7 @@ void RegionCache::insertRegionToCache(RegionPtr region)
 void RegionCache::dropRegion(const RegionVerID & region_id)
 {
     std::unique_lock<std::shared_mutex> lock(region_mutex);
+    log->information("try drop region " + region_id.toString());
     auto it1 = regions.find(region_id);
     if (it1 != regions.end())
     {
@@ -250,6 +257,7 @@ void RegionCache::updateLeader(Backoffer & bo, const RegionVerID & region_id, ui
 
 void RegionCache::onRegionStale(Backoffer & bo, RPCContextPtr ctx, const errorpb::EpochNotMatch & stale_epoch)
 {
+    log->information("region stale for region %d", (int)ctx->region.id);
 
     dropRegion(ctx->region);
 

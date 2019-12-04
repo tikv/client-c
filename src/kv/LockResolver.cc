@@ -76,18 +76,18 @@ TxnStatus LockResolver::getTxnStatus(
     for (;;)
     {
         auto loc = cluster->region_cache->locateKey(bo, primary);
-        auto req = std::make_unique<::kvrpcpb::CheckTxnStatusRequest>();
+        auto req = std::make_shared<::kvrpcpb::CheckTxnStatusRequest>();
 
         req->set_primary_key(primary);
         req->set_lock_ts(txn_id);
         req->set_caller_start_ts(caller_start_ts);
         req->set_current_ts(current_ts);
-        std::unique_ptr<::kvrpcpb::CheckTxnStatusResponse> response;
+        std::shared_ptr<::kvrpcpb::CheckTxnStatusResponse> response;
 
         RegionClient client(cluster, loc.region);
         try
         {
-            response = client.sendReqToRegion(bo, std::move(req));
+            response = client.sendReqToRegion(bo, req);
         }
         catch (Exception & e)
         {
@@ -122,7 +122,7 @@ void LockResolver::resolveLock(Backoffer & bo, LockPtr lock, TxnStatus & status,
         {
             return;
         }
-        auto req = std::make_unique<kvrpcpb::ResolveLockRequest>();
+        auto req = std::make_shared<kvrpcpb::ResolveLockRequest>();
         req->set_start_version(lock->txn_id);
         if (status.isCommited())
             req->set_commit_version(status.commit_ts);
@@ -131,10 +131,10 @@ void LockResolver::resolveLock(Backoffer & bo, LockPtr lock, TxnStatus & status,
             req->add_keys(lock->key);
         }
         RegionClient client(cluster, loc.region);
-        std::unique_ptr<kvrpcpb::ResolveLockResponse> response;
+        std::shared_ptr<kvrpcpb::ResolveLockResponse> response;
         try
         {
-            response = client.sendReqToRegion(bo, std::move(req));
+            response = client.sendReqToRegion(bo, req);
         }
         catch (Exception & e)
         {

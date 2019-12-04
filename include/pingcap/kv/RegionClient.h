@@ -31,12 +31,20 @@ struct RegionClient
 
     // This method send a request to region, but is NOT Thread-Safe !!
     template <typename T>
-    auto sendReqToRegion(Backoffer & bo, std::unique_ptr<T> && req)
+    auto sendReqToRegion(Backoffer & bo, std::shared_ptr<T> req)
     {
-        RpcCall<T> rpc(std::move(req));
+        RpcCall<T> rpc(req);
         for (;;)
         {
             RPCContextPtr ctx = cluster->region_cache->getRPCContext(bo, region_id);
+            if (ctx == nullptr)
+            {
+                // If the region is not found in cache, it must be out
+                // of date and already be cleaned up. We can skip the
+                // RPC by returning RegionError directly.
+
+                throw Exception("Region epoch not match!", RegionEpochNotMatch);
+            }
             const auto & store_addr = ctx->addr;
             rpc.setCtx(ctx);
             try
@@ -55,7 +63,7 @@ struct RegionClient
             }
             else
             {
-                return std::move(resp);
+                return resp;
             }
         }
     }

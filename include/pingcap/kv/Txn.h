@@ -6,6 +6,7 @@
 
 #include <pingcap/kv/2pc.h>
 #include <pingcap/kv/Cluster.h>
+#include <pingcap/kv/Snapshot.h>
 
 namespace pingcap
 {
@@ -33,6 +34,20 @@ struct Txn
     }
 
     void set(const std::string & key, const std::string & value) { buffer.emplace(key, value); }
+
+    std::pair<std::string, bool> get(const std::string & key)
+    {
+        auto it = buffer.find(key);
+        if (it != buffer.end())
+        {
+            return std::make_pair(it->second, true);
+        }
+        Snapshot snapshot(cluster, start_ts);
+        std::string value = snapshot.Get(key);
+        if (value == "")
+            return std::make_pair("", false);
+        return std::make_pair(value, true);
+    }
 
     void walkBuffer(std::function<void(const std::string &, const std::string &)> foo)
     {

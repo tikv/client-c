@@ -11,9 +11,9 @@ void Cluster::splitRegion(const std::string & split_key)
     Backoffer bo(splitRegionBackoff);
     auto loc = region_cache->locateKey(bo, split_key);
     RegionClient client(this, loc.region);
-    auto req = std::make_unique<kvrpcpb::SplitRegionRequest>();
+    auto req = std::make_shared<kvrpcpb::SplitRegionRequest>();
     req->set_split_key(split_key);
-    auto resp = client.sendReqToRegion(bo, std::move(req));
+    auto resp = client.sendReqToRegion(bo, req);
     if (resp->has_region_error())
     {
         throw Exception(resp->region_error().message(), RegionUnavailable);

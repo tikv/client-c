@@ -30,13 +30,16 @@ struct Store
 struct RegionVerID
 {
     uint64_t id;
-    uint64_t confVer;
+    uint64_t conf_ver;
     uint64_t ver;
 
     RegionVerID() = default;
-    RegionVerID(uint64_t id_, uint64_t conf_ver, uint64_t ver_) : id(id_), confVer(conf_ver), ver(ver_) {}
+    RegionVerID(uint64_t id_, uint64_t conf_ver_, uint64_t ver_) : id(id_), conf_ver(conf_ver_), ver(ver_) {}
 
-    bool operator==(const RegionVerID & rhs) const { return id == rhs.id && confVer == rhs.confVer && ver == rhs.ver; }
+    bool operator==(const RegionVerID & rhs) const { return id == rhs.id && conf_ver == rhs.conf_ver && ver == rhs.ver; }
+
+    // for debug output
+    std::string toString() const { return "{" + std::to_string(id) + "," + std::to_string(conf_ver) + "," + std::to_string(ver) + "}"; }
 };
 
 } // namespace kv
@@ -49,7 +52,7 @@ struct hash<pingcap::kv::RegionVerID>
 {
     using argument_type = pingcap::kv::RegionVerID;
     using result_type = size_t;
-    size_t operator()(const pingcap::kv::RegionVerID & key) const { return key.id ^ key.confVer ^ key.ver; }
+    size_t operator()(const pingcap::kv::RegionVerID & key) const { return key.id; }
 };
 } // namespace std
 
