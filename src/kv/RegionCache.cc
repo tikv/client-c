@@ -11,7 +11,10 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id)
 {
     for (;;)
     {
-        RegionPtr region = getRegionByID(bo, id);
+        auto it = regions.find(id);
+        if (it == regions.end())
+            return nullptr;
+        auto region = it->second;
         const auto & meta = region->meta;
         auto peer = region->peer;
 
@@ -212,7 +215,7 @@ void RegionCache::insertRegionToCache(RegionPtr region)
 void RegionCache::dropRegion(const RegionVerID & region_id)
 {
     std::unique_lock<std::shared_mutex> lock(region_mutex);
-    log->information("try drop region " + std::to_string(region_id.id));
+    log->information("try drop region " + region_id.toString());
     auto it1 = regions.find(region_id);
     if (it1 != regions.end())
     {

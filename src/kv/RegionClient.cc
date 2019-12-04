@@ -12,7 +12,7 @@ void RegionClient::onRegionError(Backoffer & bo, RPCContextPtr rpc_ctx, const er
         auto not_leader = err.not_leader();
         if (not_leader.has_leader())
         {
-            log->information("not leader but has leader, result store is %d", (int) not_leader.leader().store_id());
+            log->information("not leader but has leader, result store is %d", (int)not_leader.leader().store_id());
             cluster->region_cache->updateLeader(bo, rpc_ctx->region, not_leader.leader().store_id());
             bo.backoff(boUpdateLeader, Exception("not leader", LeaderNotMatch));
         }

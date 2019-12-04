@@ -37,6 +37,14 @@ struct RegionClient
         for (;;)
         {
             RPCContextPtr ctx = cluster->region_cache->getRPCContext(bo, region_id);
+            if (ctx == nullptr)
+            {
+                // If the region is not found in cache, it must be out
+                // of date and already be cleaned up. We can skip the
+                // RPC by returning RegionError directly.
+
+                throw Exception("Region epoch not match!", RegionEpochNotMatch);
+            }
             const auto & store_addr = ctx->addr;
             rpc.setCtx(ctx);
             try
