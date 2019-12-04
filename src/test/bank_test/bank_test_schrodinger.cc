@@ -20,7 +20,7 @@ void RunBankCaseOnline(int account, int con, int run_time)
         std::this_thread::sleep_for(std::chrono::seconds(run_time));
         bank.close();
     });
-    bank.Execute();
+    bank.execute();
     close_thread.join();
 }
 
@@ -47,7 +47,7 @@ void RunBankCaseLocal(const std::vector<std::string> & pd_addr, int account, int
         std::this_thread::sleep_for(std::chrono::seconds(run_time));
         bank.close();
     });
-    bank.Execute();
+    bank.execute();
     close_thread.join();
 }
 

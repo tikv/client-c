@@ -97,7 +97,7 @@ struct BankCase
         }
     }
 
-    void Execute()
+    void execute()
     {
         std::cerr << "bank case start to execute\n";
         std::vector<std::thread> threads;
@@ -168,7 +168,6 @@ struct BankCase
 
     void initAccount()
     {
-        int set_cnt = 0;
         for (;;)
         {
             if (stop)
@@ -179,7 +178,6 @@ struct BankCase
             Txn txn(cluster);
             for (int i = start_idx * batch_size; i < start_idx * batch_size + batch_size; i++)
             {
-                set_cnt++;
                 txn.set(bank_key(i), bank_value(1000));
             }
             txn.commit();

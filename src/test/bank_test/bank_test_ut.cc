@@ -42,7 +42,7 @@ TEST_F(TestBankLoop, testBankForever)
         bank.close();
     });
 
-    bank.Execute();
+    bank.execute();
     close_thread.join();
 }
 
