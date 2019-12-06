@@ -161,6 +161,8 @@ public:
 private:
     RegionPtr loadRegionByKey(Backoffer & bo, const std::string & key);
 
+    RegionPtr getRegionByIDFromCache(const RegionVerID & region_id);
+
     RegionPtr loadRegionByID(Backoffer & bo, uint64_t region_id);
 
     metapb::Store loadStore(Backoffer & bo, uint64_t id);

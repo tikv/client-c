@@ -11,10 +11,9 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id)
 {
     for (;;)
     {
-        auto it = regions.find(id);
-        if (it == regions.end())
+        auto region = getRegionByIDFromCache(id);
+        if (region == nullptr)
             return nullptr;
-        auto region = it->second;
         const auto & meta = region->meta;
         auto peer = region->peer;
 
@@ -30,6 +29,15 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id)
         }
         return std::make_shared<RPCContext>(id, meta, peer, addr);
     }
+}
+
+RegionPtr RegionCache::getRegionByIDFromCache(const RegionVerID & id)
+{
+    std::shared_lock<std::shared_mutex> lock(region_mutex);
+    auto it = regions.find(id);
+    if (it == regions.end())
+        return nullptr;
+    return it->second;
 }
 
 RegionPtr RegionCache::getRegionByID(Backoffer & bo, const RegionVerID & id)
@@ -138,7 +146,8 @@ RegionPtr RegionCache::loadRegionByKey(Backoffer & bo, const std::string & key)
             {
                 region->switchPeer(leader.store_id());
             }
-            log->debug("load region id: " + std::to_string(region->meta.id()) + " leader store id " + std::to_string(leader.store_id()));
+            log->debug("load region by key: " + key + " region id is: " + std::to_string(region->meta.id()) + " leader store id "
+                + std::to_string(leader.store_id()));
             return region;
         }
         catch (const Exception & e)
