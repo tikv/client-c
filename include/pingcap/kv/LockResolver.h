@@ -13,7 +13,7 @@ namespace pingcap
 namespace kv
 {
 
-class Cluster;
+struct Cluster;
 
 // TxnStatus represents a txn's final status. It should be Lock or Commit or Rollback.
 struct TxnStatus
