@@ -7,6 +7,8 @@
 #include <shared_mutex>
 #include <thread>
 
+#include <grpcpp/channel.h>
+
 #include <pingcap/Log.h>
 #include <pingcap/pd/IClient.h>
 
