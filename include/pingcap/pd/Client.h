@@ -8,6 +8,8 @@
 #include <thread>
 
 #include <grpcpp/channel.h>
+#include <grpcpp/create_channel.h>
+#include <grpcpp/security/credentials.h>
 
 #include <pingcap/Log.h>
 #include <pingcap/pd/IClient.h>
@@ -69,15 +71,24 @@ private:
 
     void switchLeader(const ::google::protobuf::RepeatedPtrField<std::string> &);
 
-    std::unique_ptr<pdpb::PD::Stub> leaderStub();
+    struct PDConnClient
+    {
+        std::shared_ptr<grpc::Channel> channel;
+        std::unique_ptr<pdpb::PD::Stub> stub;
+        PDConnClient(std::string addr)
+        {
+            channel = grpc::CreateChannel(addr, grpc::InsecureChannelCredentials());
+            stub = pdpb::PD::NewStub(channel);
+        }
+    };
+
+    std::shared_ptr<PDConnClient> leaderClient();
 
     pdpb::GetMembersResponse getMembers(std::string);
 
     pdpb::RequestHeader * requestHeader();
 
-    std::shared_ptr<grpc::Channel> getOrCreateGRPCConn(const std::string &);
-
-    std::unique_ptr<pdpb::PD::Stub> stub_ptr;
+    std::shared_ptr<PDConnClient> getOrCreateGRPCConn(const std::string &);
 
     std::shared_mutex leader_mutex;
 
@@ -85,7 +96,7 @@ private:
 
     std::mutex update_leader_mutex;
 
-    std::unordered_map<std::string, std::shared_ptr<grpc::Channel>> channel_map;
+    std::unordered_map<std::string, std::shared_ptr<PDConnClient>> channel_map;
 
     std::vector<std::string> urls;
 
