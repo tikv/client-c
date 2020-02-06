@@ -10,11 +10,11 @@ ConnArray::ConnArray(size_t max_size, std::string addr) : address(addr), index(0
     vec.resize(max_size);
     for (size_t i = 0; i < max_size; i++)
     {
-        vec[i] = grpc::CreateChannel(addr, grpc::InsecureChannelCredentials());
+        vec[i] = std::make_shared<KvConnClient>(addr);
     }
 }
 
-std::shared_ptr<grpc::Channel> ConnArray::get()
+std::shared_ptr<KvConnClient> ConnArray::get()
 {
     std::lock_guard<std::mutex> lock(mutex);
     index = (index + 1) % vec.size();

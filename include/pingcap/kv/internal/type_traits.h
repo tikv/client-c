@@ -8,6 +8,16 @@ namespace pingcap
 namespace kv
 {
 
+// create and destroy stub but not destroy channel may case memory leak, so we bound channel and stub in same struct.
+struct KvConnClient {
+    std::shared_ptr<grpc::Channel> channel;
+    std::unique_ptr<tikvpb::Tikv::Stub> stub;
+    KvConnClient(std::string addr) {
+        channel = grpc::CreateChannel(addr, grpc::InsecureChannelCredentials());
+        stub = tikvpb::Tikv::NewStub(channel);
+    }
+};
+
 template <class T>
 struct RpcTypeTraits
 {
@@ -20,9 +30,9 @@ template<> struct RpcTypeTraits<::kvrpcpb::NAME##Request> \
     using ResultType = ::kvrpcpb::NAME##Response; \
     static const char * err_msg() { return #NAME" Failed"; } \
     static ::grpc::Status doRPCCall( \
-        grpc::ClientContext * context, std::unique_ptr<tikvpb::Tikv::Stub> stub, const RequestType & req, ResultType * res) \
+        grpc::ClientContext * context, std::shared_ptr<KvConnClient> client, const RequestType & req, ResultType * res) \
     {\
-        return stub->METHOD(context, req, res); \
+        return client->stub->METHOD(context, req, res); \
     }\
 };
 

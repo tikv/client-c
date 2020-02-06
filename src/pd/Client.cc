@@ -1,6 +1,4 @@
 #include <Poco/URI.h>
-#include <grpcpp/create_channel.h>
-#include <grpcpp/security/credentials.h>
 
 #include <pingcap/Exception.h>
 #include <pingcap/pd/Client.h>
@@ -56,7 +54,7 @@ Client::~Client()
 
 bool Client::isMock() { return false; }
 
-std::shared_ptr<grpc::Channel> Client::getOrCreateGRPCConn(const std::string & addr)
+std::shared_ptr<Client::PDConnClient> Client::getOrCreateGRPCConn(const std::string & addr)
 {
     std::lock_guard<std::mutex> lk(channel_map_mutex);
     auto it = channel_map.find(addr);
@@ -66,23 +64,22 @@ std::shared_ptr<grpc::Channel> Client::getOrCreateGRPCConn(const std::string & a
     }
     // TODO Check Auth
     Poco::URI uri(addr);
-    auto channel_ptr = grpc::CreateChannel(uri.getHost() + ":" + std::to_string(uri.getPort()), grpc::InsecureChannelCredentials());
+    auto client_ptr = std::make_shared<PDConnClient>(uri.getHost() + ":" + std::to_string(uri.getPort()));
+    channel_map[addr] = client_ptr;
 
-    channel_map[addr] = channel_ptr;
-
-    return channel_ptr;
+    return client_ptr;
 }
 
 pdpb::GetMembersResponse Client::getMembers(std::string url)
 {
-    auto cc = getOrCreateGRPCConn(url);
+    auto client = getOrCreateGRPCConn(url);
     auto resp = pdpb::GetMembersResponse{};
 
     grpc::ClientContext context;
 
     context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
 
-    auto status = pdpb::PD::NewStub(cc)->GetMembers(&context, pdpb::GetMembersRequest{}, &resp);
+    auto status = client->stub->GetMembers(&context, pdpb::GetMembersRequest{}, &resp);
     if (!status.ok())
     {
         std::string err_msg = "get member failed: " + std::to_string(status.error_code()) + ": " + status.error_message();
@@ -92,11 +89,11 @@ pdpb::GetMembersResponse Client::getMembers(std::string url)
     return resp;
 }
 
-std::unique_ptr<pdpb::PD::Stub> Client::leaderStub()
+std::shared_ptr<Client::PDConnClient> Client::leaderClient()
 {
     std::shared_lock lk(leader_mutex);
-    auto cc = getOrCreateGRPCConn(leader);
-    return pdpb::PD::NewStub(cc);
+    auto client = getOrCreateGRPCConn(leader);
+    return client;
 }
 
 void Client::initClusterID()
@@ -221,7 +218,7 @@ uint64_t Client::getTS()
 
     context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
 
-    auto stream = leaderStub()->Tso(&context);
+    auto stream = leaderClient()->stub->Tso(&context);
     if (!stream->Write(request))
     {
         std::string err_msg = ("write tso failed\n ");
@@ -251,7 +248,7 @@ uint64_t Client::getGCSafePoint()
 
     context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
 
-    auto status = leaderStub()->GetGCSafePoint(&context, request, &response);
+    auto status = leaderClient()->stub->GetGCSafePoint(&context, request, &response);
     if (!status.ok())
     {
         err_msg = "get safe point failed: " + std::to_string(status.error_code()) + ": " + status.error_message();
@@ -274,7 +271,7 @@ std::pair<metapb::Region, metapb::Peer> Client::getRegionByKey(const std::string
     context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
     request.set_region_key(key);
 
-    auto status = leaderStub()->GetRegion(&context, request, &response);
+    auto status = leaderClient()->stub->GetRegion(&context, request, &response);
     if (!status.ok())
     {
         std::string err_msg = ("get region failed: " + std::to_string(status.error_code()) + " : " + status.error_message());
@@ -300,7 +297,7 @@ std::pair<metapb::Region, metapb::Peer> Client::getRegionByID(uint64_t region_id
 
     context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
 
-    auto status = leaderStub()->GetRegionByID(&context, request, &response);
+    auto status = leaderClient()->stub->GetRegionByID(&context, request, &response);
     if (!status.ok())
     {
         std::string err_msg = ("get region by id failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
@@ -327,7 +324,7 @@ metapb::Store Client::getStore(uint64_t store_id)
 
     context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
 
-    auto status = leaderStub()->GetStore(&context, request, &response);
+    auto status = leaderClient()->stub->GetStore(&context, request, &response);
     if (!status.ok())
     {
         std::string err_msg = ("get store failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
