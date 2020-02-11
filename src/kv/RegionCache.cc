@@ -225,15 +225,15 @@ void RegionCache::dropRegion(const RegionVerID & region_id)
 {
     std::unique_lock<std::shared_mutex> lock(region_mutex);
     log->information("try drop region " + region_id.toString());
-    auto it1 = regions.find(region_id);
-    if (it1 != regions.end())
+    auto iter_by_id = regions.find(region_id);
+    if (iter_by_id != regions.end())
     {
-        regions.erase(it1);
-        auto it = regions_map.find(it1->second->endKey());
-        if (it != regions_map.end())
+        auto iter_by_key = regions_map.find(iter_by_id->second->endKey());
+        if (iter_by_key != regions_map.end())
         {
-            regions_map.erase(it);
+            regions_map.erase(iter_by_key);
         }
+        regions.erase(iter_by_id);
         log->information("drop region " + std::to_string(region_id.id) + " because of send failure");
     }
 }
