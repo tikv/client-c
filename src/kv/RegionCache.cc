@@ -146,8 +146,6 @@ RegionPtr RegionCache::loadRegionByKey(Backoffer & bo, const std::string & key)
             {
                 region->switchPeer(leader.store_id());
             }
-            log->debug("load region by key: " + key + " region id is: " + std::to_string(region->meta.id()) + " leader store id "
-                + std::to_string(leader.store_id()));
             return region;
         }
         catch (const Exception & e)

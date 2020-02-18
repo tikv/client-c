@@ -59,6 +59,7 @@ struct RegionClient
             auto resp = rpc.getResp();
             if (resp->has_region_error())
             {
+                log->warning("region " + region_id.toString() + " find error: " + resp->region_error().message());
                 onRegionError(bo, ctx, resp->region_error());
             }
             else
