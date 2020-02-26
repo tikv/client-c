@@ -8,6 +8,15 @@
 namespace pingcap {
 namespace coprocessor {
 
+enum ReqType : int16_t {
+    Select = 101,
+    Index = 102,
+    DAG = 103,
+    Analyze = 104,
+    Checksum = 105,
+};
+
+
 struct KeyRange {
     std::string start_key;
     std::string end_key;
@@ -62,6 +71,7 @@ private:
     std::vector<copTask> handle_task_impl(kv::Backoffer & bo, const copTask & task);
     void handle_task(const copTask & task);
 
+    Request * cop_req;
     std::vector<copTask> tasks;
     size_t idx = 0;
     kv::Cluster * cluster;
@@ -70,7 +80,6 @@ private:
     std::mutex error_mutex;
 
     std::vector<std::string> results;
-    Request * cop_req;
     Exception cop_error;
 
     Logger * log;
