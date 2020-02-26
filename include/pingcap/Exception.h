@@ -23,7 +23,8 @@ enum ErrorCodes : int
     ServerIsBusy = 12,
     LeaderNotMatch = 13,
     RegionEpochNotMatch = 14,
-    UnknownError = 15
+    UnknownError = 15,
+    CoprocessorError = 16
 };
 
 class Exception : public Poco::Exception
@@ -37,6 +38,8 @@ public:
 
     Exception * clone() const override { return new Exception(*this); }
     void rethrow() const override { throw *this; }
+
+    bool empty() const { return code() == 0 && message().empty(); }
 };
 
 } // namespace pingcap

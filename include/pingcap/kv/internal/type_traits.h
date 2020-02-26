@@ -2,6 +2,7 @@
 
 #include <kvproto/metapb.pb.h>
 #include <kvproto/tikvpb.grpc.pb.h>
+#include <kvproto/coprocessor.pb.h>
 
 namespace pingcap {
 namespace kv {
@@ -19,10 +20,10 @@ struct KvConnClient {
 
 template <class T> struct RpcTypeTraits {};
 
-#define PINGCAP_DEFINE_TRAITS(NAME, METHOD)                                    \
-  template <> struct RpcTypeTraits<::kvrpcpb::NAME##Request> {                 \
-    using RequestType = ::kvrpcpb::NAME##Request;                              \
-    using ResultType = ::kvrpcpb::NAME##Response;                              \
+#define PINGCAP_DEFINE_TRAITS(NAMESPACE, NAME, METHOD)                                    \
+  template <> struct RpcTypeTraits<::NAMESPACE::NAME##Request> {                 \
+    using RequestType = ::NAMESPACE::NAME##Request;                              \
+    using ResultType = ::NAMESPACE::NAME##Response;                              \
     static const char *err_msg() { return #NAME " Failed"; }                   \
     static ::grpc::Status doRPCCall(grpc::ClientContext *context,              \
                                     std::shared_ptr<KvConnClient> client,      \
@@ -31,14 +32,15 @@ template <class T> struct RpcTypeTraits {};
     }                                                                          \
   };
 
-PINGCAP_DEFINE_TRAITS(SplitRegion, SplitRegion)
-PINGCAP_DEFINE_TRAITS(Commit, KvCommit)
-PINGCAP_DEFINE_TRAITS(Prewrite, KvPrewrite)
-PINGCAP_DEFINE_TRAITS(Scan, KvScan)
-PINGCAP_DEFINE_TRAITS(Get, KvGet)
-PINGCAP_DEFINE_TRAITS(ReadIndex, ReadIndex)
-PINGCAP_DEFINE_TRAITS(CheckTxnStatus, KvCheckTxnStatus)
-PINGCAP_DEFINE_TRAITS(ResolveLock, KvResolveLock)
+PINGCAP_DEFINE_TRAITS(kvrpcpb, SplitRegion, SplitRegion)
+PINGCAP_DEFINE_TRAITS(kvrpcpb, Commit, KvCommit)
+PINGCAP_DEFINE_TRAITS(kvrpcpb, Prewrite, KvPrewrite)
+PINGCAP_DEFINE_TRAITS(kvrpcpb, Scan, KvScan)
+PINGCAP_DEFINE_TRAITS(kvrpcpb, Get, KvGet)
+PINGCAP_DEFINE_TRAITS(kvrpcpb, ReadIndex, ReadIndex)
+PINGCAP_DEFINE_TRAITS(kvrpcpb, CheckTxnStatus, KvCheckTxnStatus)
+PINGCAP_DEFINE_TRAITS(kvrpcpb, ResolveLock, KvResolveLock)
+PINGCAP_DEFINE_TRAITS(coprocessor, , Coprocessor)
 
 } // namespace kv
 } // namespace pingcap
