@@ -1,11 +1,14 @@
 #include <pingcap/coprocessor/Client.h>
 
-namespace pingcap {
-namespace coprocessor {
+namespace pingcap
+{
+namespace coprocessor
+{
 
-std::vector<copTask> buildCopTasks(kv::Backoffer & bo, kv::Cluster * cluster, std::vector<KeyRange> ranges, Request * cop_req) {
+std::vector<copTask> buildCopTasks(kv::Backoffer & bo, kv::Cluster * cluster, std::vector<KeyRange> ranges, Request * cop_req)
+{
     std::vector<copTask> tasks;
-    while(ranges.size() > 0)
+    while (ranges.size() > 0)
     {
         auto loc = cluster->region_cache->locateKey(bo, ranges[0].start_key);
 
@@ -24,7 +27,8 @@ std::vector<copTask> buildCopTasks(kv::Backoffer & bo, kv::Cluster * cluster, st
         }
         std::vector<KeyRange> task_ranges(ranges.begin(), ranges.begin() + i);
         auto & bound = ranges[i];
-        if (loc.contains(bound.start_key)) {
+        if (loc.contains(bound.start_key))
+        {
             task_ranges.push_back(KeyRange{bound.start_key, loc.end_key});
             bound.start_key = loc.end_key;
         }
@@ -46,10 +50,11 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
     auto req = std::make_shared<::coprocessor::Request>();
     req->set_tp(task.req->tp);
     req->set_start_ts(task.req->start_ts);
-    req->set_data(task.req->data.data());
+    req->set_data(task.req->data);
     req->set_is_cache_enabled(false);
     auto * context = req->mutable_context();
-    for (const auto & range : task.ranges) {
+    for (const auto & range : task.ranges)
+    {
         auto * pb_range = req->add_ranges();
         range.set_pb_range(pb_range);
     }
@@ -86,11 +91,12 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
     return {};
 }
 
-void ResponseIter::handle_task(const copTask & task) {
+void ResponseIter::handle_task(const copTask & task)
+{
     kv::Backoffer bo(kv::copNextMaxBackoff);
     std::vector<copTask> remain_tasks({task});
     size_t idx = 0;
-    while(idx < remain_tasks.size())
+    while (idx < remain_tasks.size())
     {
         try
         {
@@ -106,9 +112,9 @@ void ResponseIter::handle_task(const copTask & task) {
             cop_error = e;
             break;
         }
-        idx ++;
+        idx++;
     }
 }
 
-}
-}
+} // namespace coprocessor
+} // namespace pingcap
