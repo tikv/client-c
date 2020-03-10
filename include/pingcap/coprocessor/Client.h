@@ -19,11 +19,12 @@ enum ReqType : int16_t
     Checksum = 105,
 };
 
-
 struct KeyRange
 {
     std::string start_key;
     std::string end_key;
+    KeyRange(const std::string & start_key_, const std::string & end_key_) :
+    start_key(start_key_), end_key(end_key_) {}
     void set_pb_range(::coprocessor::KeyRange * range) const
     {
         range->set_start(start_key);

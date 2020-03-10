@@ -1,18 +1,17 @@
 #pragma once
 
+#include <grpcpp/channel.h>
+#include <grpcpp/create_channel.h>
+#include <grpcpp/security/credentials.h>
 #include <kvproto/pdpb.grpc.pb.h>
+#include <pingcap/Log.h>
+#include <pingcap/pd/IClient.h>
+
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
 #include <shared_mutex>
 #include <thread>
-
-#include <grpcpp/channel.h>
-#include <grpcpp/create_channel.h>
-#include <grpcpp/security/credentials.h>
-
-#include <pingcap/Log.h>
-#include <pingcap/pd/IClient.h>
 
 namespace pingcap
 {

@@ -2,14 +2,13 @@
 
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
+#include <pingcap/Log.h>
+#include <pingcap/kv/RegionCache.h>
+#include <pingcap/kv/internal/type_traits.h>
 
 #include <mutex>
 #include <type_traits>
 #include <vector>
-
-#include <pingcap/Log.h>
-#include <pingcap/kv/RegionCache.h>
-#include <pingcap/kv/internal/type_traits.h>
 
 namespace pingcap
 {
@@ -59,10 +58,10 @@ public:
 
     std::shared_ptr<S> getResp() { return resp; }
 
-    void call(std::shared_ptr<KvConnClient> client)
+    void call(std::shared_ptr<KvConnClient> client, int timeout)
     {
         grpc::ClientContext context;
-        context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(3));
+        context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(timeout));
         auto status = Trait::doRPCCall(&context, client, *req, resp.get());
         if (!status.ok())
         {
@@ -89,11 +88,11 @@ struct RpcClient
     ConnArrayPtr createConnArray(const std::string & addr);
 
     template <class T>
-    void sendRequest(std::string addr, RpcCall<T> & rpc)
+    void sendRequest(std::string addr, RpcCall<T> & rpc, int timeout)
     {
         ConnArrayPtr connArray = getConnArray(addr);
         auto connClient = connArray->get();
-        rpc.call(connClient);
+        rpc.call(connClient, timeout);
     }
 };
 

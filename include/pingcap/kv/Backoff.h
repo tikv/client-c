@@ -1,12 +1,12 @@
 #pragma once
 
+#include <pingcap/Exception.h>
+
 #include <cmath>
 #include <iostream>
 #include <map>
 #include <memory>
 #include <thread>
-
-#include <pingcap/Exception.h>
 
 namespace pingcap
 {

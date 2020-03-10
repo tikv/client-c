@@ -1,5 +1,4 @@
 #include <Poco/URI.h>
-
 #include <pingcap/Exception.h>
 #include <pingcap/pd/Client.h>
 

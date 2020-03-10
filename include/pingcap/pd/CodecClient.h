@@ -2,6 +2,7 @@
 
 #include <pingcap/Exception.h>
 #include <pingcap/pd/Client.h>
+
 #include <sstream>
 
 namespace pingcap

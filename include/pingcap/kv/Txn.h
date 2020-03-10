@@ -1,12 +1,12 @@
 #pragma once
 
-#include <functional>
-#include <map>
-#include <string>
-
 #include <pingcap/kv/2pc.h>
 #include <pingcap/kv/Cluster.h>
 #include <pingcap/kv/Snapshot.h>
+
+#include <functional>
+#include <map>
+#include <string>
 
 namespace pingcap
 {

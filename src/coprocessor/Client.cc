@@ -16,7 +16,7 @@ std::vector<copTask> buildCopTasks(kv::Backoffer & bo, kv::Cluster * cluster, st
         for (i = 0; i < ranges.size(); i++)
         {
             const auto & range = ranges[i];
-            if (!loc.contains(range.end_key) || loc.end_key == range.end_key)
+            if (!(loc.contains(range.end_key) || loc.end_key == range.end_key))
                 break;
         }
         // all ranges belong to same region.
@@ -63,7 +63,7 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
     std::shared_ptr<::coprocessor::Response> resp;
     try
     {
-        resp = client.sendReqToRegion(bo, req);
+        resp = client.sendReqToRegion(bo, req, kv::copTimeout);
     }
     catch (Exception & e)
     {
