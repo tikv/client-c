@@ -1,13 +1,12 @@
 #pragma once
 
-#include <unordered_map>
-#include <vector>
-
+#include <fiu.h>
 #include <pingcap/Exception.h>
 #include <pingcap/kv/Backoff.h>
 #include <pingcap/kv/Cluster.h>
 
-#include <fiu.h>
+#include <unordered_map>
+#include <vector>
 
 namespace pingcap
 {

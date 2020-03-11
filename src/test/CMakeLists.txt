@@ -10,7 +10,7 @@ list(APPEND test_libs
     fiu
     gRPC::grpc++_unsecure)
 
-add_executable(kv_client_ut io_or_region_error_get_test.cc region_split_test.cc lock_resolve_test.cc)
+add_executable(kv_client_ut io_or_region_error_get_test.cc region_split_test.cc lock_resolve_test.cc coprocessor_test.cc)
 target_include_directories(kv_client_ut PUBLIC ${test_includes})
 target_link_libraries(kv_client_ut ${test_libs} )
 
