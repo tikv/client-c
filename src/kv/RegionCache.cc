@@ -7,7 +7,7 @@ namespace pingcap
 namespace kv
 {
 
-RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id)
+RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id, const StoreType store_type)
 {
     for (;;)
     {
@@ -15,23 +15,33 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id)
         if (region == nullptr)
             return nullptr;
         const auto & meta = region->meta;
-        auto peer = region->peer;
+        std::vector<metapb::Peer> peers;
+        if (store_type == TiKV)
+            peers.push_back(region->peer);
+        else
+            peers = selectLearner(bo, meta);
 
-        std::string addr = getStore(bo, peer.store_id()).addr;
-        if (addr == "")
+        for (auto peer : peers)
         {
-            dropRegion(id);
-            dropStore(peer.store_id());
-            bo.backoff(boRegionMiss,
-                Exception("miss store, region id is: " + std::to_string(id.id) + " store id is: " + std::to_string(peer.store_id()),
-                    StoreNotReady));
-            continue;
+            std::string addr = getStore(bo, peer.store_id()).addr;
+            if (addr == "") {
+                //dropRegion(id);
+                dropStore(peer.store_id());
+                bo.backoff(boRegionMiss,
+                           Exception("miss store, region id is: " + std::to_string(id.id) + " store id is: " +
+                                     std::to_string(peer.store_id()),
+                                     StoreNotReady));
+                continue;
+            }
+            return std::make_shared<RPCContext>(id, meta, peer, addr);
         }
-        return std::make_shared<RPCContext>(id, meta, peer, addr);
+        dropRegion(id);
+        bo.backoff(boRegionMiss,
+                   Exception("miss store, region id is: " + std::to_string(id.id), StoreNotReady));
     }
 }
 
-RegionPtr RegionCache::getRegionByIDFromCache(const RegionVerID & id)
+    RegionPtr RegionCache::getRegionByIDFromCache(const RegionVerID & id)
 {
     std::shared_lock<std::shared_mutex> lock(region_mutex);
     auto it = regions.find(id);

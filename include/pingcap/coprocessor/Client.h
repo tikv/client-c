@@ -46,6 +46,7 @@ struct copTask
     kv::RegionVerID region_id;
     std::vector<KeyRange> ranges;
     Request * req;
+    kv::StoreType store_type;
 };
 
 class ResponseIter

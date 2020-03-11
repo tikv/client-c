@@ -22,7 +22,7 @@ std::vector<copTask> buildCopTasks(kv::Backoffer & bo, kv::Cluster * cluster, st
         // all ranges belong to same region.
         if (i == ranges.size())
         {
-            tasks.push_back(copTask{loc.region, ranges, cop_req});
+            tasks.push_back(copTask{loc.region, ranges, cop_req, kv::TiFlash});
             break;
         }
         std::vector<KeyRange> task_ranges(ranges.begin(), ranges.begin() + i);
@@ -32,7 +32,7 @@ std::vector<copTask> buildCopTasks(kv::Backoffer & bo, kv::Cluster * cluster, st
             task_ranges.push_back(KeyRange{bound.start_key, loc.end_key});
             bound.start_key = loc.end_key;
         }
-        tasks.push_back(copTask{loc.region, task_ranges, cop_req});
+        tasks.push_back(copTask{loc.region, task_ranges, cop_req, kv::TiFlash});
         ranges.erase(ranges.begin(), ranges.begin() + i);
     }
     return tasks;
@@ -52,7 +52,7 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
     req->set_start_ts(task.req->start_ts);
     req->set_data(task.req->data);
     req->set_is_cache_enabled(false);
-    auto * context = req->mutable_context();
+    //auto * context = req->mutable_context();
     for (const auto & range : task.ranges)
     {
         auto * pb_range = req->add_ranges();
@@ -63,7 +63,7 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
     std::shared_ptr<::coprocessor::Response> resp;
     try
     {
-        resp = client.sendReqToRegion(bo, req, kv::copTimeout);
+        resp = client.sendReqToRegion(bo, req, kv::copTimeout, task.store_type);
     }
     catch (Exception & e)
     {
