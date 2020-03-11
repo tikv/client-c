@@ -1,12 +1,12 @@
 #pragma once
 
-#include <queue>
-#include <string>
-
 #include <kvproto/tikvpb.grpc.pb.h>
 #include <pingcap/Exception.h>
 #include <pingcap/Log.h>
 #include <pingcap/kv/RegionCache.h>
+
+#include <queue>
+#include <string>
 
 namespace pingcap
 {

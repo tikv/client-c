@@ -1,10 +1,10 @@
 #pragma once
 
-#include <chrono>
-
 #include <pingcap/Exception.h>
 #include <pingcap/Log.h>
 #include <pingcap/pd/IClient.h>
+
+#include <chrono>
 #include <thread>
 
 namespace pingcap
