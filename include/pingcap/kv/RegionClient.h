@@ -10,6 +10,9 @@ namespace pingcap
 namespace kv
 {
 
+constexpr int dailTimeout = 5;
+constexpr int copTimeout = 20;
+
 // RegionClient sends KV/Cop requests to tikv server (corresponding to `RegionRequestSender` in go-client). It handles network errors and some region errors internally.
 //
 // Typically, a KV/Cop requests is bind to a region, all keys that are involved in the request should be located in the region.
@@ -31,12 +34,12 @@ struct RegionClient
 
     // This method send a request to region, but is NOT Thread-Safe !!
     template <typename T>
-    auto sendReqToRegion(Backoffer & bo, std::shared_ptr<T> req)
+    auto sendReqToRegion(Backoffer & bo, std::shared_ptr<T> req, int timeout = dailTimeout, StoreType store_type = TiKV)
     {
         RpcCall<T> rpc(req);
         for (;;)
         {
-            RPCContextPtr ctx = cluster->region_cache->getRPCContext(bo, region_id);
+            RPCContextPtr ctx = cluster->region_cache->getRPCContext(bo, region_id, store_type);
             if (ctx == nullptr)
             {
                 // If the region is not found in cache, it must be out
@@ -49,7 +52,7 @@ struct RegionClient
             rpc.setCtx(ctx);
             try
             {
-                cluster->rpc_client->sendRequest(store_addr, rpc);
+                cluster->rpc_client->sendRequest(store_addr, rpc, timeout);
             }
             catch (const Exception & e)
             {
@@ -59,6 +62,7 @@ struct RegionClient
             auto resp = rpc.getResp();
             if (resp->has_region_error())
             {
+                log->warning("region " + region_id.toString() + " find error: " + resp->region_error().message());
                 onRegionError(bo, ctx, resp->region_error());
             }
             else

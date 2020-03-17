@@ -1,12 +1,12 @@
-#include "mock_tikv.h"
-#include "test_helper.h"
-
 #include <pingcap/Exception.h>
 #include <pingcap/kv/Snapshot.h>
 #include <pingcap/kv/Txn.h>
 
 #include <cassert>
 #include <iostream>
+
+#include "mock_tikv.h"
+#include "test_helper.h"
 
 namespace
 {

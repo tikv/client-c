@@ -1,12 +1,12 @@
 #pragma once
 
+#include <pingcap/Exception.h>
+
 #include <cmath>
 #include <iostream>
 #include <map>
 #include <memory>
 #include <thread>
-
-#include <pingcap/Exception.h>
 
 namespace pingcap
 {
@@ -86,6 +86,8 @@ constexpr int prewriteMaxBackoff = 20000;
 constexpr int commitMaxBackoff = 41000;
 constexpr int splitRegionBackoff = 20000;
 constexpr int cleanupMaxBackoff = 20000;
+constexpr int copBuildTaskMaxBackoff = 5000;
+constexpr int copNextMaxBackoff = 20000;
 
 using BackoffPtr = std::shared_ptr<Backoff>;
 
