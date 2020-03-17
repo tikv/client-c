@@ -67,7 +67,8 @@ TEST_F(TestCoprocessor, testBuildTask1)
     pingcap::coprocessor::ResponseIter iter = pingcap::coprocessor::Client::send(test_cluster.get(), &req);
     iter.prepare();
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++)
+    {
         auto [_, has_next] = iter.next();
         ASSERT_EQ(has_next, true);
     }

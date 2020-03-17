@@ -5,7 +5,7 @@ namespace pingcap
 namespace coprocessor
 {
 
-std::vector<copTask> buildCopTasks(kv::Backoffer & bo, kv::Cluster * cluster, std::vector<KeyRange> ranges, Request * cop_req)
+std::vector<copTask> buildCopTasks(kv::Backoffer & bo, kv::Cluster * cluster, std::vector<KeyRange> ranges, Request * cop_req, kv::StoreType store_type)
 {
     std::vector<copTask> tasks;
     while (ranges.size() > 0)
@@ -22,7 +22,7 @@ std::vector<copTask> buildCopTasks(kv::Backoffer & bo, kv::Cluster * cluster, st
         // all ranges belong to same region.
         if (i == ranges.size())
         {
-            tasks.push_back(copTask{loc.region, ranges, cop_req});
+            tasks.push_back(copTask{loc.region, ranges, cop_req, store_type});
             break;
         }
         std::vector<KeyRange> task_ranges(ranges.begin(), ranges.begin() + i);
@@ -32,16 +32,16 @@ std::vector<copTask> buildCopTasks(kv::Backoffer & bo, kv::Cluster * cluster, st
             task_ranges.push_back(KeyRange{bound.start_key, loc.end_key});
             bound.start_key = loc.end_key;
         }
-        tasks.push_back(copTask{loc.region, task_ranges, cop_req});
+        tasks.push_back(copTask{loc.region, task_ranges, cop_req, store_type});
         ranges.erase(ranges.begin(), ranges.begin() + i);
     }
     return tasks;
 }
 
-ResponseIter Client::send(kv::Cluster * cluster, Request * cop_req)
+ResponseIter Client::send(kv::Cluster * cluster, Request * cop_req, kv::StoreType store_type)
 {
     kv::Backoffer bo(kv::copBuildTaskMaxBackoff);
-    auto tasks = buildCopTasks(bo, cluster, cop_req->ranges, cop_req);
+    auto tasks = buildCopTasks(bo, cluster, cop_req->ranges, cop_req, store_type);
     return ResponseIter(cop_req, std::move(tasks), cluster);
 }
 
@@ -63,12 +63,12 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
     std::shared_ptr<::coprocessor::Response> resp;
     try
     {
-        resp = client.sendReqToRegion(bo, req, kv::copTimeout);
+        resp = client.sendReqToRegion(bo, req, kv::copTimeout, task.store_type);
     }
     catch (Exception & e)
     {
         bo.backoff(kv::boRegionMiss, e);
-        return buildCopTasks(bo, cluster, task.ranges, cop_req);
+        return buildCopTasks(bo, cluster, task.ranges, cop_req, task.store_type);
     }
     if (resp->has_locked())
     {
@@ -78,7 +78,7 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
         {
             bo.backoffWithMaxSleep(kv::boTxnLockFast, before_expired, Exception(resp->locked().DebugString(), ErrorCodes::LockError));
         }
-        return buildCopTasks(bo, cluster, task.ranges, cop_req);
+        return buildCopTasks(bo, cluster, task.ranges, cop_req, task.store_type);
     }
 
     const std::string & err_msg = resp->other_error();

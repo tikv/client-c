@@ -14,6 +14,12 @@ namespace pingcap
 namespace kv
 {
 
+enum StoreType
+{
+    TiKV,
+    TiFlash
+};
+
 struct Store
 {
     uint64_t id;
@@ -136,7 +142,7 @@ public:
         : pd_client(pdClient_), learner_key(std::move(key_)), learner_value(std::move(value_)), log(&Logger::get("pingcap.tikv"))
     {}
 
-    RPCContextPtr getRPCContext(Backoffer & bo, const RegionVerID & id);
+    RPCContextPtr getRPCContext(Backoffer & bo, const RegionVerID & id, const StoreType store_type = TiKV);
 
     void updateLeader(Backoffer & bo, const RegionVerID & region_id, uint64_t leader_store_id);
 

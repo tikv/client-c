@@ -46,6 +46,7 @@ struct copTask
     kv::RegionVerID region_id;
     std::vector<KeyRange> ranges;
     Request * req;
+    kv::StoreType store_type;
 };
 
 class ResponseIter
@@ -101,7 +102,7 @@ private:
 
 struct Client
 {
-    static ResponseIter send(kv::Cluster * cluster, Request * cop_req);
+    static ResponseIter send(kv::Cluster * cluster, Request * cop_req, kv::StoreType store_type = kv::TiKV);
 };
 
 } // namespace coprocessor
