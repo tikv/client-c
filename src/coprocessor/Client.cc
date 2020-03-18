@@ -38,11 +38,11 @@ std::vector<copTask> buildCopTasks(kv::Backoffer & bo, kv::Cluster * cluster, st
     return tasks;
 }
 
-ResponseIter Client::send(kv::Cluster * cluster, Request * cop_req, kv::StoreType store_type)
+ResponseIter Client::send(kv::Cluster * cluster, Request * cop_req, int concurrency, kv::StoreType store_type)
 {
     kv::Backoffer bo(kv::copBuildTaskMaxBackoff);
     auto tasks = buildCopTasks(bo, cluster, cop_req->ranges, cop_req, store_type);
-    return ResponseIter(cop_req, std::move(tasks), cluster);
+    return ResponseIter(cop_req, std::move(tasks), cluster, concurrency);
 }
 
 std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const copTask & task)
@@ -52,7 +52,6 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
     req->set_start_ts(task.req->start_ts);
     req->set_data(task.req->data);
     req->set_is_cache_enabled(false);
-    auto * context = req->mutable_context();
     for (const auto & range : task.ranges)
     {
         auto * pb_range = req->add_ranges();
@@ -87,7 +86,8 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
         throw Exception("Coprocessor error: " + err_msg, ErrorCodes::CoprocessorError);
     }
     std::lock_guard<std::mutex> lk(results_mutex);
-    results.push_back(resp->data());
+    results.push(Result(resp->data()));
+    cond_var.notify_one();
     return {};
 }
 
@@ -108,8 +108,10 @@ void ResponseIter::handle_task(const copTask & task)
         }
         catch (const pingcap::Exception & e)
         {
-            std::lock_guard<std::mutex> lk(error_mutex);
-            cop_error = e;
+            log->error("coprocessor meets error : ", e.displayText());
+            std::lock_guard<std::mutex> lk(results_mutex);
+            results.push(Result(e));
+            cond_var.notify_one();
             break;
         }
         idx++;
