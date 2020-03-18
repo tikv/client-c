@@ -86,7 +86,7 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
         throw Exception("Coprocessor error: " + err_msg, ErrorCodes::CoprocessorError);
     }
     std::lock_guard<std::mutex> lk(results_mutex);
-    results.push(Result(resp->data()));
+    results.push(Result(resp));
     cond_var.notify_one();
     return {};
 }

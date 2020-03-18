@@ -56,12 +56,16 @@ class ResponseIter
 {
 public:
     struct Result {
-        std::string data;
+        std::shared_ptr<::coprocessor::Response> resp;
         Exception error;
 
         Result() {}
-        Result(std::string && data_) : data(std::move(data_)) {}
+        Result(std::shared_ptr<::coprocessor::Response> resp_) : resp(resp_) {}
         Result(const Exception & err) : error(err) {}
+
+        const std::string & data() {
+            return resp->data();
+        }
     };
 
     ResponseIter(Request * req_, std::vector<copTask> && tasks_, kv::Cluster * cluster_, int concurrency_)
@@ -98,7 +102,9 @@ public:
         }
         if (results.size() > 0)
         {
-            return std::make_pair(results.front(), true);
+            auto ret =  std::make_pair(results.front(), true);
+            results.pop();
+            return ret;
         }
         else {
             return std::make_pair(Result(), false);
