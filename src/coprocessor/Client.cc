@@ -1,6 +1,6 @@
+#include <fiu-local.h>
 #include <pingcap/coprocessor/Client.h>
 
-#include <fiu-local.h>
 #include <chrono>
 
 namespace pingcap
@@ -10,7 +10,8 @@ namespace coprocessor
 
 using namespace std::chrono_literals;
 
-std::vector<copTask> buildCopTasks(kv::Backoffer & bo, kv::Cluster * cluster, std::vector<KeyRange> ranges, Request * cop_req, kv::StoreType store_type)
+std::vector<copTask> buildCopTasks(
+    kv::Backoffer & bo, kv::Cluster * cluster, std::vector<KeyRange> ranges, Request * cop_req, kv::StoreType store_type)
 {
     std::vector<copTask> tasks;
     while (ranges.size() > 0)
@@ -91,9 +92,7 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
         throw Exception("Coprocessor error: " + err_msg, ErrorCodes::CoprocessorError);
     }
 
-    fiu_do_on("sleep_before_push_result", {
-        std::this_thread::sleep_for(1s);
-    });
+    fiu_do_on("sleep_before_push_result", { std::this_thread::sleep_for(1s); });
 
     std::lock_guard<std::mutex> lk(results_mutex);
     results.push(Result(resp));
