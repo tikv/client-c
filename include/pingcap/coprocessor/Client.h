@@ -127,7 +127,7 @@ private:
                 unfinished_thread--;
                 return;
             }
-            std::unique_lock<std::mutex> lk(fetch_mutex);
+            std::unique_lock<std::mutex> lk(fetch_task_mutex);
             if (tasks.size() == task_index)
             {
                 unfinished_thread--;
@@ -152,7 +152,7 @@ private:
     int concurrency;
 
     std::mutex results_mutex;
-    std::mutex fetch_mutex;
+    std::mutex fetch_task_mutex;
 
     std::queue<Result> results;
     Exception cop_error;
