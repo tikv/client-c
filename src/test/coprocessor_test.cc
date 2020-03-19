@@ -1,3 +1,5 @@
+#include <fiu-control.h>
+#include <fiu.h>
 #include <pingcap/coprocessor/Client.h>
 
 #include "mock_tikv.h"
@@ -7,7 +9,8 @@ namespace pingcap
 {
 namespace coprocessor
 {
-std::vector<copTask> buildCopTasks(kv::Backoffer & bo, kv::Cluster * cluster, std::vector<KeyRange> ranges, Request * cop_req);
+std::vector<copTask> buildCopTasks(
+    kv::Backoffer & bo, kv::Cluster * cluster, std::vector<KeyRange> ranges, Request * cop_req, kv::StoreType);
 }
 } // namespace pingcap
 
@@ -22,6 +25,8 @@ class TestCoprocessor : public testing::Test
 protected:
     void SetUp() override
     {
+        fiu_init(0);
+
         mock_kv_cluster = mockkv::initCluster();
         std::vector<std::string> pd_addrs = mock_kv_cluster->pd_addrs;
 
@@ -47,7 +52,7 @@ TEST_F(TestCoprocessor, testBuildTask1)
     std::vector<pingcap::coprocessor::KeyRange> ranges;
     ranges.emplace_back("a", "z");
 
-    auto tasks = pingcap::coprocessor::buildCopTasks(bo, test_cluster.get(), ranges, nullptr);
+    auto tasks = pingcap::coprocessor::buildCopTasks(bo, test_cluster.get(), ranges, nullptr, kv::StoreType::TiKV);
 
     ASSERT_EQ(tasks.size(), 2);
 
@@ -64,8 +69,9 @@ TEST_F(TestCoprocessor, testBuildTask1)
     req.start_ts = test_cluster->pd_client->getTS();
     req.ranges.emplace_back("a", "z");
 
-    pingcap::coprocessor::ResponseIter iter = pingcap::coprocessor::Client::send(test_cluster.get(), &req);
-    iter.prepare();
+    fiu_enable("sleep_before_push_result", 1, NULL, 0);
+    pingcap::coprocessor::ResponseIter iter = pingcap::coprocessor::Client::send(test_cluster.get(), &req, 8);
+    iter.open();
 
     for (int i = 0; i < 4; i++)
     {
