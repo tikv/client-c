@@ -10,7 +10,7 @@ namespace pingcap
 namespace coprocessor
 {
 std::vector<copTask> buildCopTasks(
-    kv::Backoffer & bo, kv::Cluster * cluster, std::vector<KeyRange> ranges, Request * cop_req, kv::StoreType);
+    kv::Backoffer & bo, kv::Cluster * cluster, std::vector<KeyRange> ranges, Request * cop_req, kv::StoreType, Logger * log = &Logger::get("pingcap/coprocessor"));
 }
 } // namespace pingcap
 

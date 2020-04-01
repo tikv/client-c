@@ -32,6 +32,10 @@ struct KeyRange
         range->set_start(start_key);
         range->set_end(end_key);
     }
+    bool operator < (const KeyRange & rhs) const
+    {
+        return start_key < rhs.start_key;
+    }
 };
 
 struct Request
@@ -66,13 +70,13 @@ public:
         const std::string & data() { return resp->data(); }
     };
 
-    ResponseIter(Request * req_, std::vector<copTask> && tasks_, kv::Cluster * cluster_, int concurrency_)
+    ResponseIter(Request * req_, std::vector<copTask> && tasks_, kv::Cluster * cluster_, int concurrency_, Logger * log_)
         : cop_req(req_),
           tasks(std::move(tasks_)),
           cluster(cluster_),
           concurrency(concurrency_),
           cancelled(false),
-          log(&Logger::get("pingcap/coprocessor"))
+          log(log_)
     {}
 
     ~ResponseIter()
