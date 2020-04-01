@@ -14,7 +14,6 @@ std::vector<copTask> buildCopTasks(
     kv::Backoffer & bo, kv::Cluster * cluster, std::vector<KeyRange> ranges, Request * cop_req, kv::StoreType store_type, Logger * log)
 {
     log->debug("build " + std::to_string(ranges.size()) + " ranges.");
-    sort(ranges.begin(), ranges.end());
     std::vector<copTask> tasks;
     while (ranges.size() > 0)
     {
