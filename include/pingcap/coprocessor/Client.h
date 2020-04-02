@@ -27,11 +27,16 @@ struct KeyRange
     std::string start_key;
     std::string end_key;
     KeyRange(const std::string & start_key_, const std::string & end_key_) : start_key(start_key_), end_key(end_key_) {}
+    KeyRange(KeyRange &&) = default;
+    KeyRange(const KeyRange &) = default;
+    KeyRange & operator=(const KeyRange &) = default;
+    KeyRange & operator=(KeyRange &&) = default;
     void set_pb_range(::coprocessor::KeyRange * range) const
     {
         range->set_start(start_key);
         range->set_end(end_key);
     }
+    bool operator<(const KeyRange & rhs) const { return start_key < rhs.start_key; }
 };
 
 struct Request
@@ -66,13 +71,8 @@ public:
         const std::string & data() { return resp->data(); }
     };
 
-    ResponseIter(Request * req_, std::vector<copTask> && tasks_, kv::Cluster * cluster_, int concurrency_)
-        : cop_req(req_),
-          tasks(std::move(tasks_)),
-          cluster(cluster_),
-          concurrency(concurrency_),
-          cancelled(false),
-          log(&Logger::get("pingcap/coprocessor"))
+    ResponseIter(Request * req_, std::vector<copTask> && tasks_, kv::Cluster * cluster_, int concurrency_, Logger * log_)
+        : cop_req(req_), tasks(std::move(tasks_)), cluster(cluster_), concurrency(concurrency_), cancelled(false), log(log_)
     {}
 
     ~ResponseIter()

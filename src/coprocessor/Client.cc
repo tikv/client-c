@@ -11,8 +11,9 @@ namespace coprocessor
 using namespace std::chrono_literals;
 
 std::vector<copTask> buildCopTasks(
-    kv::Backoffer & bo, kv::Cluster * cluster, std::vector<KeyRange> ranges, Request * cop_req, kv::StoreType store_type)
+    kv::Backoffer & bo, kv::Cluster * cluster, std::vector<KeyRange> ranges, Request * cop_req, kv::StoreType store_type, Logger * log)
 {
+    log->debug("build " + std::to_string(ranges.size()) + " ranges.");
     std::vector<copTask> tasks;
     while (ranges.size() > 0)
     {
@@ -41,14 +42,17 @@ std::vector<copTask> buildCopTasks(
         tasks.push_back(copTask{loc.region, task_ranges, cop_req, store_type});
         ranges.erase(ranges.begin(), ranges.begin() + i);
     }
+    log->debug("has " + std::to_string(tasks.size()) + " tasks.");
     return tasks;
 }
 
 ResponseIter Client::send(kv::Cluster * cluster, Request * cop_req, int concurrency, kv::StoreType store_type)
 {
     kv::Backoffer bo(kv::copBuildTaskMaxBackoff);
-    auto tasks = buildCopTasks(bo, cluster, cop_req->ranges, cop_req, store_type);
-    return ResponseIter(cop_req, std::move(tasks), cluster, concurrency);
+    auto log = &Logger::get("pingcap/coprocessor");
+    sort(cop_req->ranges.begin(), cop_req->ranges.end());
+    auto tasks = buildCopTasks(bo, cluster, cop_req->ranges, cop_req, store_type, log);
+    return ResponseIter(cop_req, std::move(tasks), cluster, concurrency, log);
 }
 
 std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const copTask & task)
@@ -73,7 +77,7 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
     catch (Exception & e)
     {
         bo.backoff(kv::boRegionMiss, e);
-        return buildCopTasks(bo, cluster, task.ranges, cop_req, task.store_type);
+        return buildCopTasks(bo, cluster, task.ranges, cop_req, task.store_type, log);
     }
     if (resp->has_locked())
     {
@@ -83,7 +87,7 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
         {
             bo.backoffWithMaxSleep(kv::boTxnLockFast, before_expired, Exception(resp->locked().DebugString(), ErrorCodes::LockError));
         }
-        return buildCopTasks(bo, cluster, task.ranges, cop_req, task.store_type);
+        return buildCopTasks(bo, cluster, task.ranges, cop_req, task.store_type, log);
     }
 
     const std::string & err_msg = resp->other_error();
