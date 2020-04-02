@@ -27,6 +27,10 @@ struct KeyRange
     std::string start_key;
     std::string end_key;
     KeyRange(const std::string & start_key_, const std::string & end_key_) : start_key(start_key_), end_key(end_key_) {}
+    KeyRange(KeyRange &&) = default;
+    KeyRange(const KeyRange &) = default;
+    KeyRange & operator=(const KeyRange &) = default;
+    KeyRange & operator=(KeyRange &&) = default;
     void set_pb_range(::coprocessor::KeyRange * range) const
     {
         range->set_start(start_key);
