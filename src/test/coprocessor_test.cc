@@ -5,15 +5,6 @@
 #include "mock_tikv.h"
 #include "test_helper.h"
 
-namespace pingcap
-{
-namespace coprocessor
-{
-std::vector<copTask> buildCopTasks(kv::Backoffer & bo, kv::Cluster * cluster, std::vector<KeyRange> ranges, Request * cop_req,
-    kv::StoreType, Logger * log = &Logger::get("pingcap/coprocessor"));
-}
-} // namespace pingcap
-
 namespace
 {
 
@@ -52,7 +43,8 @@ TEST_F(TestCoprocessor, testBuildTask1)
     std::vector<pingcap::coprocessor::KeyRange> ranges;
     ranges.emplace_back("a", "z");
 
-    auto tasks = pingcap::coprocessor::buildCopTasks(bo, test_cluster.get(), ranges, nullptr, kv::StoreType::TiKV);
+    auto tasks = pingcap::coprocessor::buildCopTasks(
+        bo, test_cluster.get(), ranges, nullptr, kv::StoreType::TiKV, &Logger::get("pingcap/coprocessor"));
 
     ASSERT_EQ(tasks.size(), 2);
 
