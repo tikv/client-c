@@ -44,16 +44,15 @@ struct Request
     int64_t tp;
     uint64_t start_ts;
     std::string data;
+    std::vector<KeyRange> ranges;
     int64_t schema_version;
 };
-
-using RequestPtr = std::shared_ptr<Request>;
 
 struct copTask
 {
     kv::RegionVerID region_id;
     std::vector<KeyRange> ranges;
-    RequestPtr req;
+    Request * req;
     kv::StoreType store_type;
 };
 
@@ -72,8 +71,8 @@ public:
         const std::string & data() { return resp->data(); }
     };
 
-    ResponseIter(std::vector<copTask> && tasks_, kv::Cluster * cluster_, int concurrency_, Logger * log_)
-        : tasks(std::move(tasks_)), cluster(cluster_), concurrency(concurrency_), cancelled(false), log(log_)
+    ResponseIter(Request * req_, std::vector<copTask> && tasks_, kv::Cluster * cluster_, int concurrency_, Logger * log_)
+        : cop_req(req_), tasks(std::move(tasks_)), cluster(cluster_), concurrency(concurrency_), cancelled(false), log(log_)
     {}
 
     ~ResponseIter()
@@ -144,6 +143,7 @@ private:
     std::vector<copTask> handle_task_impl(kv::Backoffer & bo, const copTask & task);
     void handle_task(const copTask & task);
 
+    Request * cop_req;
     size_t task_index = 0;
     std::vector<copTask> tasks;
     std::vector<std::thread> worker_threads;
@@ -164,8 +164,10 @@ private:
     Logger * log;
 };
 
-std::vector<copTask> buildCopTasks(
-    kv::Backoffer & bo, kv::Cluster * cluster, std::vector<KeyRange> ranges, RequestPtr cop_req, kv::StoreType store_type, Logger * log);
+struct Client
+{
+    static ResponseIter send(kv::Cluster * cluster, Request * cop_req, int concurrency, kv::StoreType store_type = kv::TiKV);
+};
 
 } // namespace coprocessor
 } // namespace pingcap
