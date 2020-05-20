@@ -20,6 +20,7 @@ struct TxnStatus
 {
     uint64_t ttl;
     uint64_t commit_ts;
+    ::kvrpcpb::Action action;
     bool isCommited() { return ttl == 0 && commit_ts > 0; }
 };
 
@@ -30,6 +31,8 @@ const uint64_t defaultLockTTL = 3000;
 
 const uint64_t maxLockTTL = 120000;
 
+const uint64_t ttlFactor = 6000;
+
 // Lock represents a lock from tikv server.
 struct Lock
 {
@@ -38,13 +41,22 @@ struct Lock
     uint64_t txn_id;
     uint64_t ttl;
     uint64_t txn_size;
+    ::kvrpcpb::Op lock_type;
+    uint64_t lock_for_update_ts;
 
     Lock(const ::kvrpcpb::LockInfo & l)
-        : key(l.key()), primary(l.primary_lock()), txn_id(l.lock_version()), ttl(l.lock_ttl()), txn_size(l.txn_size())
+        : key(l.key()), primary(l.primary_lock()), txn_id(l.lock_version()), ttl(l.lock_ttl()), txn_size(l.txn_size()), lock_type(l.lock_type()), lock_for_update_ts(l.lock_for_update_ts())
     {}
 };
 
 using LockPtr = std::shared_ptr<Lock>;
+
+inline std::string getLockInfo(LockPtr & lock)
+{
+    return "key: " + lock->key + " primary: " + lock->primary + " txn_start_ts: " + std::to_string(lock->txn_id) +
+        " lock_for_update_ts: " + std::to_string(lock->lock_for_update_ts) + " ttl: " + std::to_string(lock->ttl) +
+        " type: " + std::to_string(lock->lock_type);
+}
 
 inline LockPtr extractLockFromKeyErr(const ::kvrpcpb::KeyError & key_err)
 {
@@ -92,7 +104,11 @@ public:
     // 3) Send `ResolveLock` cmd to the lock's region to resolve all locks belong to
     //    the same transaction.
 
-    int64_t ResolveLocks(Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> locks);
+    int64_t ResolveLocks(Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks, std::vector<uint64_t> & pushed);
+
+    int64_t resolveLocks(Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks, std::vector<uint64_t> & pushed, bool for_write);
+
+    int64_t resolveLocksForWrite(Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks);
 
 private:
     void saveResolved(uint64_t txn_id, const TxnStatus & status)
@@ -123,10 +139,13 @@ private:
     void resolveLock(Backoffer & bo, LockPtr lock, TxnStatus & status, std::unordered_set<RegionVerID> & set);
 
 
+    void resolvePessimisticLock(Backoffer & bo, LockPtr lock, std::unordered_set<RegionVerID> & set);
+
+
     TxnStatus getTxnStatusFromLock(Backoffer & bo, LockPtr lock, uint64_t caller_start_ts);
 
 
-    TxnStatus getTxnStatus(Backoffer & bo, uint64_t txn_id, const std::string & primary, uint64_t caller_start_ts, uint64_t current_ts);
+    TxnStatus getTxnStatus(Backoffer & bo, uint64_t txn_id, const std::string & primary, uint64_t caller_start_ts, uint64_t current_ts, bool rollback_if_not_exists);
 
     Cluster * cluster;
     std::shared_mutex mu;

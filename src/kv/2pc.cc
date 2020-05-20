@@ -7,10 +7,37 @@ namespace pingcap
 namespace kv
 {
 
+uint64_t extractPhysical(uint64_t timestamp)
+{
+    return timestamp >> physical_shift_bits;
+}
+
+uint64_t tnxLockTTL(std::chrono::milliseconds start, uint64_t txn_size)
+{
+    uint64_t lock_ttl = defaultLockTTL;
+
+    if (txn_size >=  txnCommitBatchSize)
+    {
+        uint64_t txn_size_mb = txn_size / bytesPerMiB;
+        lock_ttl = (uint64_t)(ttlFactor * sqrt(txn_size_mb));
+        if (lock_ttl < defaultLockTTL)
+        {
+            lock_ttl = defaultLockTTL;
+        }
+        if (lock_ttl > managedLockTTL)
+        {
+            lock_ttl = managedLockTTL;
+        }
+    }
+
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()) - start;
+
+    return lock_ttl + elapsed.count();
+}
+
 TwoPhaseCommitter::TwoPhaseCommitter(Txn * txn) : log(&Logger::get("pingcap.tikv"))
 {
     commited = false;
-    lock_ttl = 3000;
     txn->walkBuffer([&](const std::string & key, const std::string & value) {
         keys.push_back(key);
         mutations.emplace(key, value);
@@ -18,6 +45,8 @@ TwoPhaseCommitter::TwoPhaseCommitter(Txn * txn) : log(&Logger::get("pingcap.tikv
     cluster = txn->cluster;
     start_ts = txn->start_ts;
     primary_lock = keys[0];
+    txn_size = mutations.size();
+    lock_ttl = tnxLockTTL(txn->start_time, txn_size);
 }
 
 void TwoPhaseCommitter::execute()
@@ -31,6 +60,8 @@ void TwoPhaseCommitter::execute()
         Backoffer commit_bo(commitMaxBackoff);
         commitKeys(commit_bo, keys);
         // TODO: Process commit exception
+
+        ttl_manager.close();
     }
     catch (Exception & e)
     {
@@ -44,6 +75,8 @@ void TwoPhaseCommitter::execute()
 
 void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & batch)
 {
+    uint64_t batch_txn_size = region_txn_size[batch.region.id];
+
     for (;;)
     {
         auto req = std::make_shared<kvrpcpb::PrewriteRequest>();
@@ -53,12 +86,12 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
             mut->set_key(key);
             mut->set_value(mutations[key]);
         }
-        req->set_primary_lock(keys[0]);
+        req->set_primary_lock(primary_lock);
         req->set_start_version(start_ts);
         req->set_lock_ttl(lock_ttl);
-        // TODO: use correct txn size.
-        req->set_txn_size(500);
-        req->set_primary_lock(primary_lock);
+        req->set_txn_size(batch_txn_size);
+        // TODO: set right min_commit_ts for pessimistic lock
+        req->set_min_commit_ts(start_ts + 1);
 
         std::shared_ptr<kvrpcpb::PrewriteResponse> response;
         RegionClient region_client(cluster, batch.region);
@@ -88,13 +121,23 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
                 auto lock = extractLockFromKeyErr(err);
                 locks.push_back(lock);
             }
-            auto ms_before_exired = cluster->lock_resolver->ResolveLocks(bo, start_ts, locks);
+            auto ms_before_exired = cluster->lock_resolver->resolveLocksForWrite(bo, start_ts, locks);
             if (ms_before_exired > 0)
             {
                 bo.backoffWithMaxSleep(
                     boTxnLock, ms_before_exired, Exception("2PC prewrite locked: " + std::to_string(locks.size()), LockError));
             }
             continue;
+        }
+        else
+        {
+            if (batch.keys[0] == primary_lock)
+            {
+                if (txn_size > 32 * 1024 * 1024)
+                {
+                    ttl_manager.run(*this);
+                }
+            }
         }
 
         return;
@@ -129,6 +172,56 @@ void TwoPhaseCommitter::commitSingleBatch(Backoffer & bo, const BatchKeys & batc
     }
 
     commited = true;
+}
+
+uint64_t sendTxnHeartBeat(Backoffer & bo, Cluster * cluster, std::string & primary_key, uint64_t start_ts, uint64_t ttl)
+{
+    for (;;)
+    {
+        auto loc = cluster->region_cache->locateKey(bo, primary_key);
+
+        auto req = std::make_shared<::kvrpcpb::TxnHeartBeatRequest>();
+        req->set_primary_lock(primary_key);
+        req->set_start_version(start_ts);
+        req->set_advise_lock_ttl(ttl);
+
+        RegionClient client(cluster, loc.region);
+        std::shared_ptr<kvrpcpb::TxnHeartBeatResponse> response;
+        try
+        {
+            response = client.sendReqToRegion(bo, req);
+        }
+        catch (Exception & e)
+        {
+            bo.backoff(boRegionMiss, e);
+            continue;
+        }
+        if (response->has_error())
+        {
+            throw Exception("unexpected err :" + response->error().ShortDebugString(), ErrorCodes::UnknownError);
+        }
+
+        return response->lock_ttl();
+    }
+}
+
+void TTLManager::keepAlive(TwoPhaseCommitter & committer)
+{
+    for (;;)
+    {
+        if (state.load(std::memory_order_acquire) == StateClosed)
+        {
+            return;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(managedLockTTL / 2));
+
+        // TODO: Checks maximum lifetime for the TTLManager
+        Backoffer bo(pessimisticLockMaxBackoff);
+        uint64_t now = committer.cluster->oracle->getLowResolutionTimestamp();
+        uint64_t uptime = extractPhysical(now) - extractPhysical(committer.start_ts);
+        uint64_t new_ttl = uptime + managedLockTTL;
+        std::ignore = sendTxnHeartBeat(bo, committer.cluster, committer.primary_lock, committer.start_ts, new_ttl);
+    }
 }
 
 } // namespace kv

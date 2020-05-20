@@ -62,6 +62,10 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
     req->set_start_ts(task.req->start_ts);
     req->set_data(task.req->data);
     req->set_is_cache_enabled(false);
+    for (auto ts : cluster->min_commit_ts_pushed)
+    {
+        req->mutable_context()->add_resolved_locks(ts);
+    }
     for (const auto & range : task.ranges)
     {
         auto * pb_range = req->add_ranges();
@@ -82,7 +86,13 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
     if (resp->has_locked())
     {
         kv::LockPtr lock = std::make_shared<kv::Lock>(resp->locked());
-        auto before_expired = cluster->lock_resolver->ResolveLocks(bo, task.req->start_ts, {lock});
+        std::vector<uint64_t> pushed;
+        std::vector<kv::LockPtr> locks{lock};
+        auto before_expired = cluster->lock_resolver->ResolveLocks(bo, task.req->start_ts, locks, pushed);
+        if (!pushed.empty())
+        {
+            cluster->min_commit_ts_pushed.insert(pushed.begin(), pushed.end());
+        }
         if (before_expired > 0)
         {
             bo.backoffWithMaxSleep(kv::boTxnLockFast, before_expired, Exception(resp->locked().DebugString(), ErrorCodes::LockError));

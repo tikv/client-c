@@ -125,12 +125,15 @@ private:
             {
                 log->information("cop task has been cancelled");
                 unfinished_thread--;
+                cond_var.notify_one();
                 return;
             }
             std::unique_lock<std::mutex> lk(fetch_task_mutex);
             if (tasks.size() == task_index)
             {
                 unfinished_thread--;
+                lk.unlock();
+                cond_var.notify_one();
                 return;
             }
             const copTask & task = tasks[task_index];

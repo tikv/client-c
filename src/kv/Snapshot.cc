@@ -20,20 +20,23 @@ std::string Snapshot::Get(const std::string & key)
 
 std::string Snapshot::Get(Backoffer & bo, const std::string & key)
 {
-    auto request = std::make_shared<kvrpcpb::GetRequest>();
-    request->set_key(key);
-    request->set_version(version);
-
-    auto context = request->mutable_context();
-    context->set_priority(::kvrpcpb::Normal);
-    context->set_not_fill_cache(false);
-
     for (;;)
     {
+        auto request = std::make_shared<kvrpcpb::GetRequest>();
+        request->set_key(key);
+        request->set_version(version);
+        ::kvrpcpb::Context * context = request->mutable_context();
+        context->set_priority(::kvrpcpb::Normal);
+        context->set_not_fill_cache(false);
+        for (auto ts : cluster->min_commit_ts_pushed)
+        {
+            context->add_resolved_locks(ts);
+        }
+
         auto location = cluster->region_cache->locateKey(bo, key);
         auto region_client = RegionClient(cluster, location.region);
 
-        std::shared_ptr<kvrpcpb::GetResponse> response;
+        std::shared_ptr<::kvrpcpb::GetResponse> response;
         try
         {
             response = region_client.sendReqToRegion(bo, request);
@@ -46,7 +49,14 @@ std::string Snapshot::Get(Backoffer & bo, const std::string & key)
         if (response->has_error())
         {
             auto lock = extractLockFromKeyErr(response->error());
-            auto before_expired = cluster->lock_resolver->ResolveLocks(bo, version, {lock});
+            std::vector<LockPtr> locks{lock};
+            std::vector<uint64_t> pushed;
+            auto before_expired = cluster->lock_resolver->ResolveLocks(bo, version, locks, pushed);
+
+            if (!pushed.empty())
+            {
+                cluster->min_commit_ts_pushed.insert(pushed.begin(), pushed.end());
+            }
             if (before_expired > 0)
             {
                 bo.backoffWithMaxSleep(

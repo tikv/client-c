@@ -4,9 +4,11 @@
 #include <pingcap/Exception.h>
 #include <pingcap/kv/Backoff.h>
 #include <pingcap/kv/Cluster.h>
+#include <pingcap/kv/LockResolver.h>
 
 #include <unordered_map>
 #include <vector>
+#include <math.h>
 
 namespace pingcap
 {
@@ -14,6 +16,57 @@ namespace kv
 {
 
 struct Txn;
+
+struct TwoPhaseCommitter;
+
+constexpr uint64_t physical_shift_bits = 18;
+
+constexpr uint64_t managedLockTTL = 20000; // 20s
+
+constexpr uint64_t txnCommitBatchSize = 16 * 1024;
+
+const uint64_t bytesPerMiB = 1024 * 1024;
+
+uint64_t extractPhysical(uint64_t timestamp);
+
+uint64_t sendTxnHeartBeat(Backoffer & bo, Cluster * cluster, std::string & primary_key, uint64_t start_ts, uint64_t ttl);
+
+uint64_t tnxLockTTL(std::chrono::milliseconds start, uint64_t txn_size);
+
+struct TTLManager
+{
+private:
+    enum TTLManagerState
+    {
+        StateUninitialized = 0,
+        StateRunning,
+        StateClosed
+    };
+
+    std::atomic<uint32_t> state;
+
+public:
+    TTLManager(): state{StateUninitialized} {}
+
+    void run(TwoPhaseCommitter & committer)
+    {
+        // Run only once.
+        uint32_t expected = StateUninitialized;
+        if (!state.compare_exchange_strong(expected, StateRunning, std::memory_order_acquire, std::memory_order_relaxed))
+        {
+            return;
+        }
+        keepAlive(committer);
+    }
+
+    void close()
+    {
+        uint32_t expected = StateRunning;
+        state.compare_exchange_strong(expected, StateClosed, std::memory_order_acq_rel);
+    }
+
+    void keepAlive(TwoPhaseCommitter & committer);
+};
 
 struct TwoPhaseCommitter
 {
@@ -26,13 +79,22 @@ private:
 
     Cluster * cluster;
 
-    int lock_ttl; // TODO: set lock ttl by txn size.
+    std::unordered_map<uint64_t, int> region_txn_size;
+    uint64_t txn_size;
+
+    int lock_ttl;
 
     std::string primary_lock;
     // commited means primary key has been written to kv stores.
     bool commited;
 
+    TTLManager ttl_manager;
+
     Logger * log;
+
+    friend class TTLManager;
+
+    friend class TestTwoPhaseCommitter;
 
 public:
     TwoPhaseCommitter(Txn * txn);
@@ -95,6 +157,7 @@ private:
         {
             if constexpr (action == ActionPrewrite)
             {
+                region_txn_size[batch.region.id] = batch.keys.size();
                 prewriteSingleBatch(bo, batch);
             }
             else if constexpr (action == ActionCommit)
@@ -107,6 +170,25 @@ private:
     void prewriteSingleBatch(Backoffer & bo, const BatchKeys & batch);
 
     void commitSingleBatch(Backoffer & bo, const BatchKeys & batch);
+};
+
+
+// Just for test purpose
+struct TestTwoPhaseCommitter
+{
+private:
+    TwoPhaseCommitter committer;
+
+public:
+    TestTwoPhaseCommitter(Txn * txn): committer{txn} {}
+
+    void prewriteKeys(Backoffer & bo, const std::vector<std::string> & keys) { committer.prewriteKeys(bo, keys); }
+
+    void commitKeys(Backoffer & bo, const std::vector<std::string> & keys) { committer.commitKeys(bo, keys); }
+
+    std::vector<std::string> keys() { return committer.keys; }
+
+    void setCommitTS(int64_t commit_ts) { committer.commit_ts = commit_ts; }
 };
 
 } // namespace kv

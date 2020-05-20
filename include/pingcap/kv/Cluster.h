@@ -24,6 +24,8 @@ struct Cluster
 
     LockResolverPtr lock_resolver;
 
+    std::unordered_set<uint64_t> min_commit_ts_pushed;
+
     Cluster() : pd_client(std::make_shared<pd::MockPDClient>()) {}
 
     Cluster(const std::vector<std::string> & pd_addrs, const std::string & learner_key, const std::string & learner_value)
