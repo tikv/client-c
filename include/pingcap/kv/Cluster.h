@@ -44,32 +44,27 @@ struct Cluster
     void splitRegion(const std::string & split_key);
 };
 
-struct ClusterHelper
+struct MinCommitTSPushed
 {
-    Cluster * cluster;
-
-    std::unordered_set<uint64_t> min_commit_ts_pushed;
+    std::unordered_set<uint64_t> container;
 
     std::mutex mutex;
 
-    ClusterHelper(Cluster * cluster_): cluster{cluster_} {}
+    MinCommitTSPushed() {};
 
-    ClusterHelper(ClusterHelper & cluster_helper)
-    {
-        cluster = cluster_helper.cluster;
-    }
+    MinCommitTSPushed(MinCommitTSPushed & min_commit_ts_pushed) {};
 
-    inline void add_resolved_locks(std::vector<uint64_t> & tss)
+    inline void add_timestamps(std::vector<uint64_t> & tss)
     {
         std::lock_guard guard{mutex};
-        min_commit_ts_pushed.insert(tss.begin(), tss.end());
+        container.insert(tss.begin(), tss.end());
     }
 
-    inline std::vector<uint64_t> get_resolved_locks()
+    inline std::vector<uint64_t> get_timestamps()
     {
         std::lock_guard guard{mutex};
         std::vector<uint64_t> result;
-        std::copy(min_commit_ts_pushed.begin(), min_commit_ts_pushed.end(), std::back_inserter(result));
+        std::copy(container.begin(), container.end(), std::back_inserter(result));
         return result;
     }
 };
