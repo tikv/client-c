@@ -7,10 +7,55 @@
 
 #include "../test_helper.h"
 
+namespace pingcap
+{
+namespace kv
+{
+
+// Just for test purpose
+struct TestTwoPhaseCommitter
+{
+private:
+    TwoPhaseCommitter committer;
+
+public:
+    TestTwoPhaseCommitter(Txn *txn) : committer{txn} {}
+
+    void prewriteKeys(Backoffer &bo, const std::vector<std::string> &keys) { committer.prewriteKeys(bo, keys); }
+
+    void commitKeys(Backoffer &bo, const std::vector<std::string> &keys) { committer.commitKeys(bo, keys); }
+
+    std::vector<std::string> keys() { return committer.keys; }
+
+    void setCommitTS(int64_t commit_ts) { committer.commit_ts = commit_ts; }
+};
+
+}
+}
+
 namespace {
 
 using namespace pingcap;
 using namespace pingcap::kv;
+
+struct TestUtil
+{
+    static std::string get_random_string(size_t length)
+    {
+        auto randchar = []() -> char
+        {
+            const char charset[] =
+            "0123456789"
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            "abcdefghijklmnopqrstuvwxyz";
+            const size_t max_index = (sizeof(charset) - 1);
+            return charset[ rand() % max_index ];
+        };
+        std::string str(length, 0);
+        std::generate_n(str.begin(), length, randchar);
+        return str;
+    }
+};
 
 class TestWith2PCRealTiKV : public testing::Test {
 protected:
@@ -96,7 +141,6 @@ TEST_F(TestWith2PCRealTiKV, commitAfterReadByOtherTxn) {
         auto result3 = txn2.get("c");
         ASSERT_EQ(result3.second, true);
         ASSERT_EQ(result3.first, "c");
-        test_cluster->min_commit_ts_pushed.clear();
 
         // commit after read by other txn
         committer.setCommitTS(test_cluster->pd_client->getTS());
@@ -108,22 +152,6 @@ TEST_F(TestWith2PCRealTiKV, commitAfterReadByOtherTxn) {
         ASSERT_EQ(snap2.Get("b"), "b1");
         ASSERT_EQ(snap2.Get("c"), "c1");
     }
-}
-
-std::string test_random_string(size_t length)
-{
-    auto randchar = []() -> char
-    {
-        const char charset[] =
-        "0123456789"
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz";
-        const size_t max_index = (sizeof(charset) - 1);
-        return charset[ rand() % max_index ];
-    };
-    std::string str(length, 0);
-    std::generate_n(str.begin(), length, randchar);
-    return str;
 }
 
 TEST_F(TestWith2PCRealTiKV, testLargeTxn) {
@@ -148,29 +176,33 @@ TEST_F(TestWith2PCRealTiKV, testLargeTxn) {
         txn1.set("a", "a1");
         txn1.set("b", "b1");
         txn1.set("c", "c1");
-        for (size_t i = 0 ; i < 1024 * 1024; i++)
+        for (size_t i = 0 ; i < 40 * 1024 * 1024; i++)
         {
             if (i % 1000 == 0)
             {
                 std::cout << "print " << std::to_string(i) << std::endl;
             }
-            std::string rand_str = test_random_string(rand() % 90 + 10);
+            std::string rand_str = TestUtil::get_random_string(rand() % 90 + 10);
             txn1.set(rand_str, rand_str);
         }
 
-        std::cout << "set completed\n" << std::flush;
         TestTwoPhaseCommitter committer{&txn1};
         Backoffer prewrite_bo(prewriteMaxBackoff);
-        committer.prewriteKeys(prewrite_bo, committer.keys());
+        try {
+            committer.prewriteKeys(prewrite_bo, committer.keys());
+        }
+        catch(Exception & e)
+        {
+            std::cout << "Prewrite Failed: " << e.message() << std::endl;
+        }
+
 
         Snapshot snap1(test_cluster.get());
         ASSERT_EQ(snap1.Get("a"), "a0");
         ASSERT_EQ(snap1.Get("b"), "b0");
         ASSERT_EQ(snap1.Get("c"), "c0");
 
-        std::cout << "before sleep\n";
         std::this_thread::sleep_for(std::chrono::milliseconds(10000));
-        std::cout << "after sleep\n";
 
         try
         {
@@ -180,7 +212,7 @@ TEST_F(TestWith2PCRealTiKV, testLargeTxn) {
         }
         catch (Exception & e)
         {
-            std::cout << "\nCommit Failed.\n";
+            std::cout << "Commit Failed: " << e.message() << std::endl;
         }
 
         Snapshot snap2(test_cluster.get());

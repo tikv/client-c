@@ -24,7 +24,7 @@ struct Cluster
 
     LockResolverPtr lock_resolver;
 
-    std::unordered_set<uint64_t> min_commit_ts_pushed;
+
 
     Cluster() : pd_client(std::make_shared<pd::MockPDClient>()) {}
 
@@ -42,6 +42,36 @@ struct Cluster
 
     // Only used by Test and this is not safe !
     void splitRegion(const std::string & split_key);
+};
+
+struct ClusterHelper
+{
+    Cluster * cluster;
+
+    std::unordered_set<uint64_t> min_commit_ts_pushed;
+
+    std::mutex mutex;
+
+    ClusterHelper(Cluster * cluster_): cluster{cluster_} {}
+
+    ClusterHelper(ClusterHelper & cluster_helper)
+    {
+        cluster = cluster_helper.cluster;
+    }
+
+    inline void add_resolved_locks(std::vector<uint64_t> & tss)
+    {
+        std::lock_guard guard{mutex};
+        min_commit_ts_pushed.insert(tss.begin(), tss.end());
+    }
+
+    inline std::vector<uint64_t> get_resolved_locks()
+    {
+        std::lock_guard guard{mutex};
+        std::vector<uint64_t> result;
+        std::copy(min_commit_ts_pushed.begin(), min_commit_ts_pushed.end(), std::back_inserter(result));
+        return result;
+    }
 };
 
 using ClusterPtr = std::unique_ptr<Cluster>;

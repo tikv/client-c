@@ -1,18 +1,22 @@
 #include <pingcap/kv/2pc.h>
 #include <pingcap/kv/RegionClient.h>
 #include <pingcap/kv/Txn.h>
+#include <pingcap/pd/Oracle.h>
 
 namespace pingcap
 {
 namespace kv
 {
 
-uint64_t extractPhysical(uint64_t timestamp)
-{
-    return timestamp >> physical_shift_bits;
-}
+constexpr uint64_t managedLockTTL = 20000; // 20s
 
-uint64_t tnxLockTTL(std::chrono::milliseconds start, uint64_t txn_size)
+constexpr uint64_t txnCommitBatchSize = 16 * 1024;
+
+constexpr uint64_t bytesPerMiB = 1024 * 1024;
+
+constexpr uint64_t ttlManagerRunThreshold = 32 * 1024 * 1024;
+
+uint64_t txnLockTTL(std::chrono::milliseconds start, uint64_t txn_size)
 {
     uint64_t lock_ttl = defaultLockTTL;
 
@@ -35,7 +39,8 @@ uint64_t tnxLockTTL(std::chrono::milliseconds start, uint64_t txn_size)
     return lock_ttl + elapsed.count();
 }
 
-TwoPhaseCommitter::TwoPhaseCommitter(Txn * txn) : log(&Logger::get("pingcap.tikv"))
+TwoPhaseCommitter::TwoPhaseCommitter(Txn * txn)
+    : log(&Logger::get("pingcap.tikv"))
 {
     commited = false;
     txn->walkBuffer([&](const std::string & key, const std::string & value) {
@@ -46,7 +51,7 @@ TwoPhaseCommitter::TwoPhaseCommitter(Txn * txn) : log(&Logger::get("pingcap.tikv
     start_ts = txn->start_ts;
     primary_lock = keys[0];
     txn_size = mutations.size();
-    lock_ttl = tnxLockTTL(txn->start_time, txn_size);
+    lock_ttl = txnLockTTL(txn->start_time, txn_size);
 }
 
 void TwoPhaseCommitter::execute()
@@ -133,9 +138,11 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
         {
             if (batch.keys[0] == primary_lock)
             {
-                if (txn_size > 32 * 1024 * 1024)
+                // After writing the primary key, if the size of the transaction is large than 32M,
+                // start the ttlManager. The ttlManager will be closed in tikvTxn.Commit().
+                if (txn_size > ttlManagerRunThreshold)
                 {
-                    ttl_manager.run(*this);
+                    ttl_manager.run(this);
                 }
             }
         }
@@ -205,7 +212,7 @@ uint64_t sendTxnHeartBeat(Backoffer & bo, Cluster * cluster, std::string & prima
     }
 }
 
-void TTLManager::keepAlive(TwoPhaseCommitter & committer)
+void TTLManager::keepAlive(TwoPhaseCommitter * committer)
 {
     for (;;)
     {
@@ -217,10 +224,10 @@ void TTLManager::keepAlive(TwoPhaseCommitter & committer)
 
         // TODO: Checks maximum lifetime for the TTLManager
         Backoffer bo(pessimisticLockMaxBackoff);
-        uint64_t now = committer.cluster->oracle->getLowResolutionTimestamp();
-        uint64_t uptime = extractPhysical(now) - extractPhysical(committer.start_ts);
+        uint64_t now = committer->cluster->oracle->getLowResolutionTimestamp();
+        uint64_t uptime = pd::extractPhysical(now) - pd::extractPhysical(committer->start_ts);
         uint64_t new_ttl = uptime + managedLockTTL;
-        std::ignore = sendTxnHeartBeat(bo, committer.cluster, committer.primary_lock, committer.start_ts, new_ttl);
+        std::ignore = sendTxnHeartBeat(bo, committer->cluster, committer->primary_lock, committer->start_ts, new_ttl);
     }
 }
 

@@ -12,11 +12,11 @@ struct Scanner;
 
 struct Snapshot
 {
-    Cluster * cluster;
+    ClusterHelper cluster_helper;
     const int64_t version;
 
-    Snapshot(Cluster * cluster_, uint64_t version_) : cluster(cluster_), version(version_) {}
-    Snapshot(Cluster * cluster_) : cluster(cluster_), version(cluster_->pd_client->getTS()) {}
+    Snapshot(Cluster * cluster_, uint64_t version_) : cluster_helper(cluster_), version(version_) {}
+    Snapshot(Cluster * cluster_) : cluster_helper(cluster_), version(cluster_->pd_client->getTS()) {}
 
     std::string Get(const std::string & key);
     std::string Get(Backoffer & bo, const std::string & key);

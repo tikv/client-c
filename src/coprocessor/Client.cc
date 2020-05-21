@@ -62,7 +62,7 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
     req->set_start_ts(task.req->start_ts);
     req->set_data(task.req->data);
     req->set_is_cache_enabled(false);
-    for (auto ts : cluster->min_commit_ts_pushed)
+    for (auto ts : cluster_helper.get_resolved_locks())
     {
         req->mutable_context()->add_resolved_locks(ts);
     }
@@ -72,7 +72,7 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
         range.set_pb_range(pb_range);
     }
 
-    kv::RegionClient client(cluster, task.region_id);
+    kv::RegionClient client(cluster_helper.cluster, task.region_id);
     std::shared_ptr<::coprocessor::Response> resp;
     try
     {
@@ -81,23 +81,23 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
     catch (Exception & e)
     {
         bo.backoff(kv::boRegionMiss, e);
-        return buildCopTasks(bo, cluster, task.ranges, cop_req, task.store_type, log);
+        return buildCopTasks(bo, cluster_helper.cluster, task.ranges, cop_req, task.store_type, log);
     }
     if (resp->has_locked())
     {
         kv::LockPtr lock = std::make_shared<kv::Lock>(resp->locked());
         std::vector<uint64_t> pushed;
         std::vector<kv::LockPtr> locks{lock};
-        auto before_expired = cluster->lock_resolver->ResolveLocks(bo, task.req->start_ts, locks, pushed);
+        auto before_expired = cluster_helper.cluster->lock_resolver->ResolveLocks(bo, task.req->start_ts, locks, pushed);
         if (!pushed.empty())
         {
-            cluster->min_commit_ts_pushed.insert(pushed.begin(), pushed.end());
+            cluster_helper.add_resolved_locks(pushed);
         }
         if (before_expired > 0)
         {
             bo.backoffWithMaxSleep(kv::boTxnLockFast, before_expired, Exception(resp->locked().DebugString(), ErrorCodes::LockError));
         }
-        return buildCopTasks(bo, cluster, task.ranges, cop_req, task.store_type, log);
+        return buildCopTasks(bo, cluster_helper.cluster, task.ranges, cop_req, task.store_type, log);
     }
 
     const std::string & err_msg = resp->other_error();

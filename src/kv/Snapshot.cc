@@ -28,13 +28,13 @@ std::string Snapshot::Get(Backoffer & bo, const std::string & key)
         ::kvrpcpb::Context * context = request->mutable_context();
         context->set_priority(::kvrpcpb::Normal);
         context->set_not_fill_cache(false);
-        for (auto ts : cluster->min_commit_ts_pushed)
+        for (auto ts : cluster_helper.get_resolved_locks())
         {
             context->add_resolved_locks(ts);
         }
 
-        auto location = cluster->region_cache->locateKey(bo, key);
-        auto region_client = RegionClient(cluster, location.region);
+        auto location = cluster_helper.cluster->region_cache->locateKey(bo, key);
+        auto region_client = RegionClient(cluster_helper.cluster, location.region);
 
         std::shared_ptr<::kvrpcpb::GetResponse> response;
         try
@@ -51,11 +51,11 @@ std::string Snapshot::Get(Backoffer & bo, const std::string & key)
             auto lock = extractLockFromKeyErr(response->error());
             std::vector<LockPtr> locks{lock};
             std::vector<uint64_t> pushed;
-            auto before_expired = cluster->lock_resolver->ResolveLocks(bo, version, locks, pushed);
+            auto before_expired = cluster_helper.cluster->lock_resolver->ResolveLocks(bo, version, locks, pushed);
 
             if (!pushed.empty())
             {
-                cluster->min_commit_ts_pushed.insert(pushed.begin(), pushed.end());
+                cluster_helper.add_resolved_locks(pushed);
             }
             if (before_expired > 0)
             {

@@ -6,9 +6,10 @@
 #include <pingcap/kv/Cluster.h>
 #include <pingcap/kv/LockResolver.h>
 
+#include <cmath>
 #include <unordered_map>
 #include <vector>
-#include <math.h>
+#include <thread>
 
 namespace pingcap
 {
@@ -19,19 +20,9 @@ struct Txn;
 
 struct TwoPhaseCommitter;
 
-constexpr uint64_t physical_shift_bits = 18;
-
-constexpr uint64_t managedLockTTL = 20000; // 20s
-
-constexpr uint64_t txnCommitBatchSize = 16 * 1024;
-
-const uint64_t bytesPerMiB = 1024 * 1024;
-
-uint64_t extractPhysical(uint64_t timestamp);
-
 uint64_t sendTxnHeartBeat(Backoffer & bo, Cluster * cluster, std::string & primary_key, uint64_t start_ts, uint64_t ttl);
 
-uint64_t tnxLockTTL(std::chrono::milliseconds start, uint64_t txn_size);
+uint64_t txnLockTTL(std::chrono::milliseconds start, uint64_t txn_size);
 
 struct TTLManager
 {
@@ -48,7 +39,7 @@ private:
 public:
     TTLManager(): state{StateUninitialized} {}
 
-    void run(TwoPhaseCommitter & committer)
+    void run(TwoPhaseCommitter * committer)
     {
         // Run only once.
         uint32_t expected = StateUninitialized;
@@ -56,7 +47,9 @@ public:
         {
             return;
         }
-        keepAlive(committer);
+
+        std::thread worker{&TTLManager::keepAlive, this, committer};
+        worker.detach();
     }
 
     void close()
@@ -65,7 +58,7 @@ public:
         state.compare_exchange_strong(expected, StateClosed, std::memory_order_acq_rel);
     }
 
-    void keepAlive(TwoPhaseCommitter & committer);
+    void keepAlive(TwoPhaseCommitter * committer);
 };
 
 struct TwoPhaseCommitter
@@ -170,25 +163,6 @@ private:
     void prewriteSingleBatch(Backoffer & bo, const BatchKeys & batch);
 
     void commitSingleBatch(Backoffer & bo, const BatchKeys & batch);
-};
-
-
-// Just for test purpose
-struct TestTwoPhaseCommitter
-{
-private:
-    TwoPhaseCommitter committer;
-
-public:
-    TestTwoPhaseCommitter(Txn * txn): committer{txn} {}
-
-    void prewriteKeys(Backoffer & bo, const std::vector<std::string> & keys) { committer.prewriteKeys(bo, keys); }
-
-    void commitKeys(Backoffer & bo, const std::vector<std::string> & keys) { committer.commitKeys(bo, keys); }
-
-    std::vector<std::string> keys() { return committer.keys; }
-
-    void setCommitTS(int64_t commit_ts) { committer.commit_ts = commit_ts; }
 };
 
 } // namespace kv

@@ -72,7 +72,7 @@ public:
     };
 
     ResponseIter(Request * req_, std::vector<copTask> && tasks_, kv::Cluster * cluster_, int concurrency_, Logger * log_)
-        : cop_req(req_), tasks(std::move(tasks_)), cluster(cluster_), concurrency(concurrency_), cancelled(false), log(log_)
+        : cop_req(req_), tasks(std::move(tasks_)), cluster_helper(cluster_), concurrency(concurrency_), cancelled(false), log(log_)
     {}
 
     ~ResponseIter()
@@ -151,7 +151,7 @@ private:
     std::vector<copTask> tasks;
     std::vector<std::thread> worker_threads;
 
-    kv::Cluster * cluster;
+    kv::ClusterHelper cluster_helper;
     int concurrency;
 
     std::mutex results_mutex;

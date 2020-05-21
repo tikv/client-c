@@ -56,13 +56,13 @@ void Scanner::getData(Backoffer & bo)
     log->trace("get data for scanner");
     for (;;)
     {
-        auto loc = snap.cluster->region_cache->locateKey(bo, next_start_key);
+        auto loc = snap.cluster_helper.cluster->region_cache->locateKey(bo, next_start_key);
         auto req_end_key = end_key;
         if (req_end_key.size() > 0 && loc.end_key.size() > 0 && loc.end_key < req_end_key)
             req_end_key = loc.end_key;
 
 
-        auto regionClient = RegionClient(snap.cluster, loc.region);
+        auto regionClient = RegionClient(snap.cluster_helper.cluster, loc.region);
         auto request = std::make_shared<kvrpcpb::ScanRequest>();
         request->set_start_key(next_start_key);
         request->set_end_key(req_end_key);
