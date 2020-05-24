@@ -168,7 +168,6 @@ TEST_F(TestWith2PCRealTiKV, testLargeTxn) {
         ASSERT_EQ(snap.Get("b"), "b0");
         ASSERT_EQ(snap.Get("c"), "c0");
     }
-    std::cout << "prewrite begin" << std::endl << std::flush;
 
     // Prewrite.
     {
@@ -230,6 +229,5 @@ TEST_F(TestWith2PCRealTiKV, testLargeTxn) {
         ASSERT_EQ(snap2.Get("c"), "c1");
     }
 }
-
 
 }

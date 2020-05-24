@@ -124,7 +124,8 @@ private:
     template <Action action>
     void doActionOnKeys(Backoffer & bo, const std::vector<std::string> & cur_keys)
     {
-        auto [groups, _] = cluster->region_cache->groupKeysByRegion(bo, cur_keys);
+        auto [groups, first_region] = cluster->region_cache->groupKeysByRegion(bo, cur_keys);
+        std::ignore = first_region;
 
         // TODO: presplit region when needed
         std::vector<BatchKeys> batches;

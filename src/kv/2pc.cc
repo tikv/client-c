@@ -237,7 +237,6 @@ void TTLManager::keepAlive(TwoPhaseCommitter * committer)
         uint64_t now = committer->cluster->oracle->getLowResolutionTimestamp();
         uint64_t uptime = pd::extractPhysical(now) - pd::extractPhysical(committer->start_ts);
         uint64_t new_ttl = uptime + managedLockTTL;
-        std::cout << "primary key: " << committer->primary_lock << std::endl;
         try
         {
             std::ignore = sendTxnHeartBeat(bo, committer->cluster, committer->primary_lock, committer->start_ts, new_ttl);
