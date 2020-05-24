@@ -20,7 +20,7 @@ if (ENABLE_TESTS)
 endif()
 
 add_library(kv_client ${kvClient_sources})
-target_include_directories(kv_client PUBLIC ${KVPROTO_INCLUDE_DIR} ${kvClient_INCLUDE_DIR} ${fiu_include_dirs})
+target_include_directories(kv_client PUBLIC ${KVPROTO_INCLUDE_DIR} ${kvClient_INCLUDE_DIR} ${fiu_include_dirs} ${kvClient_SOURCE_DIR}/src/spdlog/include)
 target_link_libraries(kv_client kvproto ${Poco_Foundation_LIBRARY} fiu)
 
 if (ENABLE_TESTS)

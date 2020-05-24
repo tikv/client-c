@@ -161,7 +161,7 @@ public:
     Store getStore(Backoffer & bo, uint64_t id);
 
     std::pair<std::unordered_map<RegionVerID, std::vector<std::string>>, RegionVerID> groupKeysByRegion(
-        Backoffer & bo, const std::vector<std::string> & keys);
+        Backoffer & bo, const std::vector<std::string> & keys, const std::function<bool(const std::string &, std::string &)> &filter = nullptr);
 
 private:
     RegionPtr loadRegionByKey(Backoffer & bo, const std::string & key);

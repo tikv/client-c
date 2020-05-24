@@ -10,11 +10,17 @@
 #include <unordered_map>
 #include <vector>
 #include <thread>
+#include <spdlog/spdlog.h>
 
 namespace pingcap
 {
 namespace kv
 {
+constexpr uint32_t preSplitDetectThreshold = 100000;
+
+constexpr uint32_t preSplitSizeThreshold = 32 << 20;
+
+constexpr uint32_t txnCommitBatchSize = 16 * 1024;
 
 struct Txn;
 
@@ -36,8 +42,11 @@ private:
 
     std::atomic<uint32_t> state;
 
+    bool worker_runned;
+    std::thread * worker;
+
 public:
-    TTLManager(): state{StateUninitialized} {}
+    TTLManager(): state{StateUninitialized}, worker_runned{false} {}
 
     void run(TwoPhaseCommitter * committer)
     {
@@ -47,15 +56,20 @@ public:
         {
             return;
         }
+        spdlog::info("ttl manager run");
 
-        std::thread worker{&TTLManager::keepAlive, this, committer};
-        worker.detach();
+        worker_runned = true;
+        worker = new std::thread{&TTLManager::keepAlive, this, committer};
     }
 
     void close()
     {
         uint32_t expected = StateRunning;
         state.compare_exchange_strong(expected, StateClosed, std::memory_order_acq_rel);
+        if (worker_runned && worker->joinable())
+        {
+            worker->join();
+        }
     }
 
     void keepAlive(TwoPhaseCommitter * committer);
@@ -116,15 +130,58 @@ private:
     template <Action action>
     void doActionOnKeys(Backoffer & bo, const std::vector<std::string> & cur_keys)
     {
-        auto [groups, first_region] = cluster->region_cache->groupKeysByRegion(bo, cur_keys);
-        // TODO: Limit size of every batch !
-        std::vector<BatchKeys> batches;
-        batches.push_back(BatchKeys(first_region, groups[first_region]));
-        groups.erase(first_region);
+        spdlog::info("doActionOnKeys keys size: " + std::to_string(cur_keys.size()));
+        auto [groups, _] = cluster->region_cache->groupKeysByRegion(bo, cur_keys);
 
-        for (auto it = groups.begin(); it != groups.end(); it++)
+        bool pre_splited = false;
+        for (auto & group : groups)
         {
-            batches.push_back(BatchKeys(it->first, it->second));
+            if (group.second.size() >= preSplitDetectThreshold)
+            {
+                if (preSplitIn2PC(group.first, group.second))
+                    pre_splited = true;
+            }
+        }
+        if (pre_splited)
+        {
+            auto result = cluster->region_cache->groupKeysByRegion(bo, cur_keys);
+            groups = result.first;
+        }
+
+        std::vector<BatchKeys> batches;
+        uint64_t primary_idx = std::numeric_limits<uint64_t>::max();
+        for (auto & group : groups)
+        {
+            uint32_t end = 0;
+            for (uint32_t start = 0; start < group.second.size(); start = end)
+            {
+                uint64_t size = 0;
+                std::vector<std::string> sub_keys;
+                for (end = start; end < group.second.size() && size < txnCommitBatchSize; end++)
+                {
+                    auto & key = group.second[end];
+                    size += key.size();
+                    if constexpr (action == ActionPrewrite)
+                        size += mutations[key].size();
+
+                    if (key == primary_lock)
+                        primary_idx = batches.size();
+                    sub_keys.push_back(key);
+                }
+                batches.emplace_back(BatchKeys(group.first, sub_keys));
+            }
+        }
+        std::vector<BatchKeys> new_batches;
+        if (primary_idx != std::numeric_limits<uint64_t>::max())
+        {
+            spdlog::info("primary index: " + std::to_string(primary_idx));
+            new_batches.emplace_back(batches[primary_idx]);
+        }
+        for (size_t i = 0; i < batches.size(); i++)
+        {
+            if (i == primary_idx)
+                continue;
+            new_batches.emplace_back(batches[i]);
         }
         if constexpr (action == ActionCommit || action == ActionCleanUp)
         {
@@ -141,20 +198,28 @@ private:
         }
     }
 
+    // TODO: scatter region
+    bool preSplitIn2PC(RegionVerID region_id, std::vector<std::string> & keys);
+
     template <Action action>
     void doActionOnBatches(Backoffer & bo, const std::vector<BatchKeys> & batches)
     {
         if (batches.empty())
             return;
+        spdlog::info("batches size: " + std::to_string(batches.size()));
         for (const auto & batch : batches)
         {
+            spdlog::info("region info: " + batch.region.toString());
+            spdlog::info("key: " + std::to_string(batch.keys.size()));
             if constexpr (action == ActionPrewrite)
             {
+                spdlog::info("prewrite");
                 region_txn_size[batch.region.id] = batch.keys.size();
                 prewriteSingleBatch(bo, batch);
             }
             else if constexpr (action == ActionCommit)
             {
+                spdlog::info("commit");
                 commitSingleBatch(bo, batch);
             }
         }

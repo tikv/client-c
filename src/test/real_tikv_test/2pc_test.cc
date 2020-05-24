@@ -60,7 +60,7 @@ struct TestUtil
 class TestWith2PCRealTiKV : public testing::Test {
 protected:
     void SetUp() override {
-        std::vector<std::string> pd_addrs{"127.0.0.1:2379"};
+        std::vector<std::string> pd_addrs{"172.16.5.59:2379"};
 
         test_cluster = createCluster(pd_addrs);
     }
@@ -155,7 +155,6 @@ TEST_F(TestWith2PCRealTiKV, commitAfterReadByOtherTxn) {
 }
 
 TEST_F(TestWith2PCRealTiKV, testLargeTxn) {
-
     // Commit.
     {
         Txn txn(test_cluster.get());
@@ -169,6 +168,7 @@ TEST_F(TestWith2PCRealTiKV, testLargeTxn) {
         ASSERT_EQ(snap.Get("b"), "b0");
         ASSERT_EQ(snap.Get("c"), "c0");
     }
+    std::cout << "prewrite begin" << std::endl << std::flush;
 
     // Prewrite.
     {
@@ -176,19 +176,28 @@ TEST_F(TestWith2PCRealTiKV, testLargeTxn) {
         txn1.set("a", "a1");
         txn1.set("b", "b1");
         txn1.set("c", "c1");
-        for (size_t i = 0 ; i < 40 * 1024 * 1024; i++)
+        std::unordered_set<std::string> inserted_keys;
+        for (size_t i = 0 ; i < 10 * 1024; i++)
         {
-            if (i % 1000 == 0)
+            if (i % 10000 == 0)
             {
-                std::cout << "print " << std::to_string(i) << std::endl;
+                std::cout << "process to " << std::to_string(i) << std::endl;
             }
-            std::string rand_str = TestUtil::get_random_string(rand() % 90 + 10);
-            txn1.set(rand_str, rand_str);
+            for (;;)
+            {
+                std::string rand_str = TestUtil::get_random_string(rand() % 30 + 10);
+                if (inserted_keys.find(rand_str) == inserted_keys.end())
+                {
+                    txn1.set(rand_str, rand_str);
+                    break;
+                }
+            }
         }
 
         TestTwoPhaseCommitter committer{&txn1};
         Backoffer prewrite_bo(prewriteMaxBackoff);
-        try {
+        try
+        {
             committer.prewriteKeys(prewrite_bo, committer.keys());
         }
         catch(Exception & e)

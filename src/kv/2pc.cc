@@ -10,11 +10,13 @@ namespace kv
 
 constexpr uint64_t managedLockTTL = 20000; // 20s
 
-constexpr uint64_t txnCommitBatchSize = 16 * 1024;
-
 constexpr uint64_t bytesPerMiB = 1024 * 1024;
 
-constexpr uint64_t ttlManagerRunThreshold = 32 * 1024 * 1024;
+//constexpr uint64_t ttlManagerRunThreshold = 32 * 1024 * 1024;
+
+// TODO: use the right ttlManagerRunThreshold
+// use a small threshold to simplify test here
+constexpr uint64_t ttlManagerRunThreshold = 1024 * 1024;
 
 uint64_t txnLockTTL(std::chrono::milliseconds start, uint64_t txn_size)
 {
@@ -51,7 +53,9 @@ TwoPhaseCommitter::TwoPhaseCommitter(Txn * txn)
     start_ts = txn->start_ts;
     primary_lock = keys[0];
     txn_size = mutations.size();
-    lock_ttl = txnLockTTL(txn->start_time, txn_size);
+    // TODO: make prewrite concurrent to complete prewrite before lock_ttl expired
+//    lock_ttl = txnLockTTL(txn->start_time, txn_size);
+    lock_ttl = managedLockTTL;
 }
 
 void TwoPhaseCommitter::execute()
@@ -76,6 +80,28 @@ void TwoPhaseCommitter::execute()
         }
         log->warning("write commit exception: " + e.displayText());
     }
+}
+
+bool TwoPhaseCommitter::preSplitIn2PC(RegionVerID region_id, std::vector<std::string> & keys)
+{
+    uint64_t region_size = 0;
+    std::vector<std::string> split_keys;
+    for (uint32_t i = 0; i < keys.size(); i++)
+    {
+        region_size += keys[i].size();
+        region_size += mutations[keys[i]].size();
+        if (region_size >= preSplitSizeThreshold)
+        {
+            region_size = 0;
+            split_keys.push_back(keys[i]);
+        }
+    }
+    if (split_keys.empty())
+    {
+        return false;
+    }
+    cluster->splitRegions(split_keys);
+    return true;
 }
 
 void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & batch)
@@ -108,6 +134,7 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
         {
             // Region Error.
             bo.backoff(boRegionMiss, e);
+            spdlog::info("prewrite meet exception: " + e.message());
             prewriteKeys(bo, batch.keys);
             return;
         }
@@ -170,12 +197,13 @@ void TwoPhaseCommitter::commitSingleBatch(Backoffer & bo, const BatchKeys & batc
     catch (Exception & e)
     {
         bo.backoff(boRegionMiss, e);
+        spdlog::info("commit meet exception: " + e.message());
         commitKeys(bo, batch.keys);
         return;
     }
     if (response->has_error())
     {
-        throw Exception("meet errors", LockError);
+        throw Exception("meet errors: " + response->error().ShortDebugString(), LockError);
     }
 
     commited = true;
@@ -205,6 +233,7 @@ uint64_t sendTxnHeartBeat(Backoffer & bo, Cluster * cluster, std::string & prima
         }
         if (response->has_error())
         {
+
             throw Exception("unexpected err :" + response->error().ShortDebugString(), ErrorCodes::UnknownError);
         }
 
@@ -227,7 +256,15 @@ void TTLManager::keepAlive(TwoPhaseCommitter * committer)
         uint64_t now = committer->cluster->oracle->getLowResolutionTimestamp();
         uint64_t uptime = pd::extractPhysical(now) - pd::extractPhysical(committer->start_ts);
         uint64_t new_ttl = uptime + managedLockTTL;
-        std::ignore = sendTxnHeartBeat(bo, committer->cluster, committer->primary_lock, committer->start_ts, new_ttl);
+        std::cout << "primary key: " << committer->primary_lock << std::endl;
+        try
+        {
+            std::ignore = sendTxnHeartBeat(bo, committer->cluster, committer->primary_lock, committer->start_ts, new_ttl);
+        }
+        catch(...)
+        {
+            return;
+        }
     }
 }
 

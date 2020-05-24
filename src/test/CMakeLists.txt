@@ -1,4 +1,4 @@
-list (APPEND test_includes ${KVPROTO_INCLUDE_DIR} ${kvClient_INCLUDE_DIR} ${fiu_include_dirs})
+list (APPEND test_includes ${KVPROTO_INCLUDE_DIR} ${kvClient_INCLUDE_DIR} ${fiu_include_dirs} ${kvClient_SOURCE_DIR}/src/spdlog/include)
 
 list(APPEND test_libs
     kvproto
