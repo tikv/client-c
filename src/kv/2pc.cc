@@ -117,7 +117,6 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
         {
             // Region Error.
             bo.backoff(boRegionMiss, e);
-            spdlog::info("prewrite meet exception: " + e.message());
             prewriteKeys(bo, batch.keys);
             return;
         }

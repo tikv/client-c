@@ -10,7 +10,6 @@
 #include <unordered_map>
 #include <vector>
 #include <thread>
-#include <spdlog/spdlog.h>
 
 namespace pingcap
 {
@@ -52,7 +51,6 @@ public:
         {
             return;
         }
-        spdlog::info("ttl manager run");
 
         worker_runned = true;
         worker = new std::thread{&TTLManager::keepAlive, this, committer};
@@ -126,7 +124,6 @@ private:
     template <Action action>
     void doActionOnKeys(Backoffer & bo, const std::vector<std::string> & cur_keys)
     {
-        spdlog::info("doActionOnKeys keys size: " + std::to_string(cur_keys.size()));
         auto [groups, _] = cluster->region_cache->groupKeysByRegion(bo, cur_keys);
 
         // TODO: presplit region when needed
@@ -156,7 +153,6 @@ private:
         std::vector<BatchKeys> new_batches;
         if (primary_idx != std::numeric_limits<uint64_t>::max())
         {
-            spdlog::info("primary index: " + std::to_string(primary_idx));
             new_batches.emplace_back(batches[primary_idx]);
         }
         for (size_t i = 0; i < batches.size(); i++)
@@ -171,7 +167,6 @@ private:
             {
                 fiu_do_on("all commit fail", return );
             }
-            std::cout << "message before doActionOnBatches\n";
             doActionOnBatches<action>(bo, std::vector<BatchKeys>(batches.begin(), batches.begin() + 1));
             batches = std::vector<BatchKeys>(batches.begin() + 1, batches.end());
         }
@@ -186,20 +181,15 @@ private:
     {
         if (batches.empty())
             return;
-        spdlog::info("batches size: " + std::to_string(batches.size()));
         for (const auto & batch : batches)
         {
-            spdlog::info("region info: " + batch.region.toString());
-            spdlog::info("key: " + std::to_string(batch.keys.size()));
             if constexpr (action == ActionPrewrite)
             {
-                spdlog::info("prewrite");
                 region_txn_size[batch.region.id] = batch.keys.size();
                 prewriteSingleBatch(bo, batch);
             }
             else if constexpr (action == ActionCommit)
             {
-                spdlog::info("commit");
                 commitSingleBatch(bo, batch);
             }
         }
