@@ -177,7 +177,7 @@ TEST_F(TestWith2PCRealTiKV, testLargeTxn) {
         txn1.set("b", "b1");
         txn1.set("c", "c1");
         std::unordered_set<std::string> inserted_keys;
-        for (size_t i = 0 ; i < 10 * 1024; i++)
+        for (size_t i = 0 ; i < 513 * 1024; i++)
         {
             if (i % 10000 == 0)
             {

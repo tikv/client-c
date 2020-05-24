@@ -16,10 +16,6 @@ namespace pingcap
 {
 namespace kv
 {
-constexpr uint32_t preSplitDetectThreshold = 100000;
-
-constexpr uint32_t preSplitSizeThreshold = 32 << 20;
-
 constexpr uint32_t txnCommitBatchSize = 16 * 1024;
 
 struct Txn;
@@ -133,21 +129,7 @@ private:
         spdlog::info("doActionOnKeys keys size: " + std::to_string(cur_keys.size()));
         auto [groups, _] = cluster->region_cache->groupKeysByRegion(bo, cur_keys);
 
-        bool pre_splited = false;
-        for (auto & group : groups)
-        {
-            if (group.second.size() >= preSplitDetectThreshold)
-            {
-                if (preSplitIn2PC(group.first, group.second))
-                    pre_splited = true;
-            }
-        }
-        if (pre_splited)
-        {
-            auto result = cluster->region_cache->groupKeysByRegion(bo, cur_keys);
-            groups = result.first;
-        }
-
+        // TODO: presplit region when needed
         std::vector<BatchKeys> batches;
         uint64_t primary_idx = std::numeric_limits<uint64_t>::max();
         for (auto & group : groups)
@@ -189,6 +171,7 @@ private:
             {
                 fiu_do_on("all commit fail", return );
             }
+            std::cout << "message before doActionOnBatches\n";
             doActionOnBatches<action>(bo, std::vector<BatchKeys>(batches.begin(), batches.begin() + 1));
             batches = std::vector<BatchKeys>(batches.begin() + 1, batches.end());
         }
@@ -197,9 +180,6 @@ private:
             doActionOnBatches<action>(bo, batches);
         }
     }
-
-    // TODO: scatter region
-    bool preSplitIn2PC(RegionVerID region_id, std::vector<std::string> & keys);
 
     template <Action action>
     void doActionOnBatches(Backoffer & bo, const std::vector<BatchKeys> & batches)

@@ -289,8 +289,7 @@ void RegionCache::onRegionStale(Backoffer & bo, RPCContextPtr ctx, const errorpb
     }
 }
 
-std::pair<std::unordered_map<RegionVerID, std::vector<std::string>>, RegionVerID> RegionCache::groupKeysByRegion(
-    Backoffer & bo, const std::vector<std::string> & keys, const std::function<bool(const std::string &, std::string &)> &filter)
+std::pair<std::unordered_map<RegionVerID, std::vector<std::string>>, RegionVerID> RegionCache::groupKeysByRegion(Backoffer & bo, const std::vector<std::string> & keys)
 {
     std::unordered_map<RegionVerID, std::vector<std::string>> result_map;
     KeyLocation loc;
@@ -302,8 +301,6 @@ std::pair<std::unordered_map<RegionVerID, std::vector<std::string>>, RegionVerID
         if (!first_found || !loc.contains(key))
         {
             loc = locateKey(bo, key);
-            if (filter && filter(key, loc.start_key))
-                continue;
             if (!first_found)
             {
                 first_found = true;

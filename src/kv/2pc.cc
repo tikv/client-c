@@ -16,7 +16,7 @@ constexpr uint64_t bytesPerMiB = 1024 * 1024;
 
 // TODO: use the right ttlManagerRunThreshold
 // use a small threshold to simplify test here
-constexpr uint64_t ttlManagerRunThreshold = 1024 * 1024;
+constexpr uint64_t ttlManagerRunThreshold = 512 * 1024;
 
 uint64_t txnLockTTL(std::chrono::milliseconds start, uint64_t txn_size)
 {
@@ -53,9 +53,14 @@ TwoPhaseCommitter::TwoPhaseCommitter(Txn * txn)
     start_ts = txn->start_ts;
     primary_lock = keys[0];
     txn_size = mutations.size();
-    // TODO: make prewrite concurrent to complete prewrite before lock_ttl expired
-//    lock_ttl = txnLockTTL(txn->start_time, txn_size);
-    lock_ttl = managedLockTTL;
+    // TODO: use right lock_ttl
+    // currently prewrite is not concurrent, so the right lock_ttl is not enough for prewrite to complete
+    // lock_ttl = txnLockTTL(txn->start_time, txn_size);
+    lock_ttl = defaultLockTTL;
+    if (txn_size > ttlManagerRunThreshold)
+    {
+        lock_ttl = managedLockTTL;
+    }
 }
 
 void TwoPhaseCommitter::execute()
@@ -80,28 +85,6 @@ void TwoPhaseCommitter::execute()
         }
         log->warning("write commit exception: " + e.displayText());
     }
-}
-
-bool TwoPhaseCommitter::preSplitIn2PC(RegionVerID region_id, std::vector<std::string> & keys)
-{
-    uint64_t region_size = 0;
-    std::vector<std::string> split_keys;
-    for (uint32_t i = 0; i < keys.size(); i++)
-    {
-        region_size += keys[i].size();
-        region_size += mutations[keys[i]].size();
-        if (region_size >= preSplitSizeThreshold)
-        {
-            region_size = 0;
-            split_keys.push_back(keys[i]);
-        }
-    }
-    if (split_keys.empty())
-    {
-        return false;
-    }
-    cluster->splitRegions(split_keys);
-    return true;
 }
 
 void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & batch)
@@ -197,7 +180,6 @@ void TwoPhaseCommitter::commitSingleBatch(Backoffer & bo, const BatchKeys & batc
     catch (Exception & e)
     {
         bo.backoff(boRegionMiss, e);
-        spdlog::info("commit meet exception: " + e.message());
         commitKeys(bo, batch.keys);
         return;
     }

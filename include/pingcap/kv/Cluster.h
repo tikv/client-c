@@ -41,7 +41,7 @@ struct Cluster
     ~Cluster() {}
 
     // Only used by Test and this is not safe !
-    void splitRegions(const std::vector<std::string> & split_keys);
+    void splitRegion(const std::string & split_key);
 };
 
 struct MinCommitTSPushed
