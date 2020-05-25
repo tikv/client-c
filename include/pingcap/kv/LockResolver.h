@@ -72,6 +72,8 @@ struct TxnExpireTime
     bool initialized;
     int64_t txn_expire;
 
+    TxnExpireTime() : initialized{false}, txn_expire{0} {}
+
     void update(int64_t lock_expire)
     {
         if (lock_expire <= 0)
