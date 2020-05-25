@@ -4,8 +4,8 @@ list(APPEND test_libs
     kvproto
     kv_client
     ${Protobuf_LIBRARY}
-    ${Poco_Net_LIBRARY}
-    PocoJSON
+    Poco::Net
+    Poco::JSON
     gtest_main
     fiu
     gRPC::grpc++_unsecure)
