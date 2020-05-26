@@ -60,7 +60,7 @@ struct TestUtil
 class TestWith2PCRealTiKV : public testing::Test {
 protected:
     void SetUp() override {
-        std::vector<std::string> pd_addrs{"172.16.5.59:2379"};
+        std::vector<std::string> pd_addrs{"127.0.0.1:2379"};
 
         test_cluster = createCluster(pd_addrs);
     }
