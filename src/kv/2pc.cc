@@ -12,11 +12,8 @@ constexpr uint64_t managedLockTTL = 20000; // 20s
 
 constexpr uint64_t bytesPerMiB = 1024 * 1024;
 
-//constexpr uint64_t ttlManagerRunThreshold = 32 * 1024 * 1024;
+constexpr uint64_t ttlManagerRunThreshold = 32 * 1024 * 1024;
 
-// TODO: use the right ttlManagerRunThreshold
-// use a small threshold to simplify test here
-constexpr uint64_t ttlManagerRunThreshold = 512 * 1024;
 
 uint64_t txnLockTTL(std::chrono::milliseconds start, uint64_t txn_size)
 {

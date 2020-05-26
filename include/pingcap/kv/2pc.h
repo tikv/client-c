@@ -37,22 +37,22 @@ private:
 
     std::atomic<uint32_t> state;
 
-    bool worker_runned;
+    bool worker_running;
     std::thread * worker;
 
 public:
-    TTLManager(): state{StateUninitialized}, worker_runned{false} {}
+    TTLManager(): state{StateUninitialized}, worker_running{false} {}
 
     void run(TwoPhaseCommitter * committer)
     {
-        // Run only once.
+        // Run only once and start a background thread to refresh lock ttl
         uint32_t expected = StateUninitialized;
         if (!state.compare_exchange_strong(expected, StateRunning, std::memory_order_acquire, std::memory_order_relaxed))
         {
             return;
         }
 
-        worker_runned = true;
+        worker_running = true;
         worker = new std::thread{&TTLManager::keepAlive, this, committer};
     }
 
@@ -60,9 +60,10 @@ public:
     {
         uint32_t expected = StateRunning;
         state.compare_exchange_strong(expected, StateClosed, std::memory_order_acq_rel);
-        if (worker_runned && worker->joinable())
+        if (worker_running && worker->joinable())
         {
             worker->join();
+            worker_running = false;
         }
     }
 
@@ -151,17 +152,11 @@ private:
                 batches.emplace_back(BatchKeys(group.first, sub_keys));
             }
         }
-        std::vector<BatchKeys> new_batches;
-        if (primary_idx != std::numeric_limits<uint64_t>::max())
+        if (primary_idx != std::numeric_limits<uint64_t>::max() && primary_idx != 0)
         {
-            new_batches.emplace_back(batches[primary_idx]);
+            std::swap(batches[0], batches[primary_idx]);
         }
-        for (size_t i = 0; i < batches.size(); i++)
-        {
-            if (i == primary_idx)
-                continue;
-            new_batches.emplace_back(batches[i]);
-        }
+
         if constexpr (action == ActionCommit || action == ActionCleanUp)
         {
             if constexpr (action == ActionCommit)
