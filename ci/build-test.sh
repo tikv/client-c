@@ -1,13 +1,15 @@
 #!/bin/bash
 
+set -xe
+
+
 SCRIPTPATH="$( cd "$(dirname "$0")" ; pwd -P )"
 SRCPATH=$(cd $SCRIPTPATH/..; pwd -P)
 NPROC=$(nproc || grep -c ^processor /proc/cpuinfo)
 
 if [ -d "$SRCPATH/third_party/kvproto" ]; then
   cd "$SRCPATH/third_party/kvproto"
-  rm -rf cpp/kvproto
-  ./generate_cpp.sh
+  ./scripts/generate_cpp.sh
   cd -
 fi
 
