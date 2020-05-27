@@ -23,9 +23,14 @@ struct Txn
 
     Buffer buffer;
 
-    int64_t start_ts;
+    uint64_t start_ts;
 
-    Txn(Cluster * cluster_) : cluster(cluster_), start_ts(cluster_->pd_client->getTS()) {}
+    std::chrono::milliseconds start_time;
+
+    Txn(Cluster * cluster_) : cluster(cluster_), start_ts(cluster_->pd_client->getTS())
+    {
+        start_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
+    }
 
     void commit()
     {

@@ -1,11 +1,11 @@
 #include <pingcap/kv/Cluster.h>
 #include <pingcap/kv/RegionClient.h>
+#include <cmath>
 
 namespace pingcap
 {
 namespace kv
 {
-
 void Cluster::splitRegion(const std::string & split_key)
 {
     Backoffer bo(splitRegionBackoff);

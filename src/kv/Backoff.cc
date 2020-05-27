@@ -24,6 +24,8 @@ BackoffPtr newBackoff(BackoffType tp)
             return std::make_shared<Backoff>(1, 10, NoJitter);
         case boServerBusy:
             return std::make_shared<Backoff>(2000, 10000, EqualJitter);
+        case boTxnNotFound:
+            return std::make_shared<Backoff>(2, 500, NoJitter);
     }
     return nullptr;
 }
@@ -44,6 +46,8 @@ Exception Type2Exception(BackoffType tp)
             return Exception("Region Unavaliable", RegionUnavailable);
         case boServerBusy:
             return Exception("TiKV Server Busy", TimeoutError);
+        case boTxnNotFound:
+            return Exception("Transaction not found", TxnNotFound);
     }
     return Exception("Unknown Exception, tp is :" + std::to_string(tp));
 }

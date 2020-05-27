@@ -24,7 +24,8 @@ enum ErrorCodes : int
     LeaderNotMatch = 13,
     RegionEpochNotMatch = 14,
     CoprocessorError = 15,
-    UnknownError = 16
+    TxnNotFound = 16,
+    UnknownError = 17
 };
 
 class Exception : public Poco::Exception

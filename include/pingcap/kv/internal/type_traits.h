@@ -53,7 +53,10 @@ PINGCAP_DEFINE_TRAITS(kvrpcpb, Get, KvGet)
 PINGCAP_DEFINE_TRAITS(kvrpcpb, ReadIndex, ReadIndex)
 PINGCAP_DEFINE_TRAITS(kvrpcpb, CheckTxnStatus, KvCheckTxnStatus)
 PINGCAP_DEFINE_TRAITS(kvrpcpb, ResolveLock, KvResolveLock)
+PINGCAP_DEFINE_TRAITS(kvrpcpb, PessimisticRollback, KVPessimisticRollback)
+PINGCAP_DEFINE_TRAITS(kvrpcpb, TxnHeartBeat, KvTxnHeartBeat)
 PINGCAP_DEFINE_TRAITS(coprocessor, , Coprocessor)
+
 
 } // namespace kv
 } // namespace pingcap

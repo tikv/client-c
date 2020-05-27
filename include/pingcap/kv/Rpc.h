@@ -49,11 +49,10 @@ public:
 
     void setCtx(RPCContextPtr rpc_ctx)
     {
-        kvrpcpb::Context * ctx = new kvrpcpb::Context();
-        ctx->set_region_id(rpc_ctx->region.id);
-        ctx->set_allocated_region_epoch(new metapb::RegionEpoch(rpc_ctx->meta.region_epoch()));
-        ctx->set_allocated_peer(new metapb::Peer(rpc_ctx->peer));
-        req->set_allocated_context(ctx);
+        ::kvrpcpb::Context * context = req->mutable_context();
+        context->set_region_id(rpc_ctx->region.id);
+        context->set_allocated_region_epoch(new metapb::RegionEpoch(rpc_ctx->meta.region_epoch()));
+        context->set_allocated_peer(new metapb::Peer(rpc_ctx->peer));
     }
 
     std::shared_ptr<S> getResp() { return resp; }

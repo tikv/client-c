@@ -24,6 +24,8 @@ struct Cluster
 
     LockResolverPtr lock_resolver;
 
+
+
     Cluster() : pd_client(std::make_shared<pd::MockPDClient>()) {}
 
     Cluster(const std::vector<std::string> & pd_addrs, const std::string & learner_key, const std::string & learner_value)
@@ -40,6 +42,31 @@ struct Cluster
 
     // Only used by Test and this is not safe !
     void splitRegion(const std::string & split_key);
+};
+
+struct MinCommitTSPushed
+{
+    std::unordered_set<uint64_t> container;
+
+    std::mutex mutex;
+
+    MinCommitTSPushed() {};
+
+    MinCommitTSPushed(MinCommitTSPushed & min_commit_ts_pushed) {};
+
+    inline void add_timestamps(std::vector<uint64_t> & tss)
+    {
+        std::lock_guard guard{mutex};
+        container.insert(tss.begin(), tss.end());
+    }
+
+    inline std::vector<uint64_t> get_timestamps()
+    {
+        std::lock_guard guard{mutex};
+        std::vector<uint64_t> result;
+        std::copy(container.begin(), container.end(), std::back_inserter(result));
+        return result;
+    }
 };
 
 using ClusterPtr = std::unique_ptr<Cluster>;
