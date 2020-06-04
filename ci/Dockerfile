@@ -27,7 +27,7 @@ go version
 ENV GOPATH /go
 ENV PATH $GOPATH/bin:/usr/local/go/bin:$PATH
 
-RUN git clone https://github.com/grpc/grpc.git && cd grpc && git checkout v1.24.0 && git submodule update --init \
+RUN git clone https://github.com/grpc/grpc.git && cd grpc && git checkout v1.24.3 && git submodule update --init \
  && cd /grpc && mkdir .build && cd .build && cmake .. -DgRPC_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release && make install -j $(nproc || grep -c ^processor /proc/cpuinfo) \
  && rm -rf /grpc/.build \
  && cd /grpc && mkdir .build && cd .build && cmake .. -DgRPC_INSTALL=ON -DgRPC_BUILD_TESTS=OFF -DgRPC_PROTOBUF_PROVIDER=package -DgRPC_ZLIB_PROVIDER=package -DgRPC_CARES_PROVIDER=package -DgRPC_SSL_PROVIDER=package -DCMAKE_BUILD_TYPE=Release && make install -j $(nproc || grep -c ^processor /proc/cpuinfo)
@@ -39,4 +39,4 @@ RUN git clone https://github.com/pocoproject/poco.git && cd poco && git checkout
 
 RUN cd /
 
-RUN git clone https://github.com/tikv/mock-tikv.git && cd mock-tikv && git checkout 4286274568cadff6dbc7a11d494c66b274aab5e0 && make failpoint-enable && make
+RUN git clone https://github.com/tikv/mock-tikv.git && cd mock-tikv && git checkout 388e21d3bab5d3c4d3ce26e643ab7453188b0288 && make failpoint-enable && make

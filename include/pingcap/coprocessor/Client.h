@@ -153,6 +153,7 @@ private:
 
     kv::Cluster * cluster;
     int concurrency;
+    kv::MinCommitTSPushed min_commit_ts_pushed;
 
     std::mutex results_mutex;
     std::mutex fetch_task_mutex;

@@ -29,7 +29,8 @@ enum BackoffType
     boPDRPC,
     boRegionMiss,
     boUpdateLeader,
-    boServerBusy
+    boServerBusy,
+    boTxnNotFound
 };
 
 inline int expo(int base, int cap, int n) { return std::min(double(cap), double(base) * std::pow(2.0, double(n))); }
@@ -88,6 +89,7 @@ constexpr int splitRegionBackoff = 20000;
 constexpr int cleanupMaxBackoff = 20000;
 constexpr int copBuildTaskMaxBackoff = 5000;
 constexpr int copNextMaxBackoff = 20000;
+constexpr int pessimisticLockMaxBackoff = 20000;
 
 using BackoffPtr = std::shared_ptr<Backoff>;
 

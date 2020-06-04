@@ -295,14 +295,18 @@ std::pair<std::unordered_map<RegionVerID, std::vector<std::string>>, RegionVerID
     std::unordered_map<RegionVerID, std::vector<std::string>> result_map;
     KeyLocation loc;
     RegionVerID first;
+    bool first_found = false;
     for (size_t i = 0; i < keys.size(); i++)
     {
         const std::string & key = keys[i];
-        if (i == 0 || !loc.contains(key))
+        if (!first_found || !loc.contains(key))
         {
             loc = locateKey(bo, key);
-            if (i == 0)
+            if (!first_found)
+            {
+                first_found = true;
                 first = loc.region;
+            }
         }
         result_map[loc.region].push_back(key);
     }
