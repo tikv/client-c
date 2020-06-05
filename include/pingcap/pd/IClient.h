@@ -13,6 +13,14 @@ namespace pingcap
 namespace pd
 {
 
+struct Region
+{
+    metapb::Region meta;
+    metapb::Peer   leader;
+    std::vector<metapb::Peer> down_peers;
+    std::vector<metapb::Peer> pending_peers;
+};
+
 class IClient
 {
 public:
@@ -23,12 +31,12 @@ public:
     virtual uint64_t getTS() = 0;
 
     // return region meta and leader peer.
-    virtual std::pair<metapb::Region, metapb::Peer> getRegionByKey(const std::string & key) = 0;
+    virtual Region getRegionByKey(const std::string & key) = 0;
 
     //    virtual std::pair<metapb::Region, metapb::Peer> getPrevRegion(std::string key) = 0;
 
     // return region meta and leader peer.
-    virtual std::pair<metapb::Region, metapb::Peer> getRegionByID(uint64_t region_id) = 0;
+    virtual Region getRegionByID(uint64_t region_id) = 0;
 
     virtual metapb::Store getStore(uint64_t store_id) = 0;
 

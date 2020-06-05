@@ -100,31 +100,61 @@ std::vector<metapb::Peer> RegionCache::selectLearner(Backoffer & bo, const metap
     return learners;
 }
 
+void filterUnavailablePeers(pd::Region & region) {
+    std::vector<metapb::Peer> peers;
+    bool need_change = false;
+    for (int i = 0; i < region.meta.peers_size(); i++)
+    {
+        bool unavailable = false;
+        for (const auto & down_peer : region.down_peers)
+        {
+            if (down_peer.store_id() == region.meta.peers(i).store_id())
+            {
+                unavailable = true;
+                need_change = true;
+                break;
+            }
+        }
+        if (!unavailable)
+        {
+            peers.push_back(region.meta.peers(i));
+        }
+    }
+    if (!need_change)
+        return;
+    region.meta.clear_peers();
+    for(auto & peer : peers) {
+        *(region.meta.add_peers()) = peer;
+    }
+}
+
 RegionPtr RegionCache::loadRegionByID(Backoffer & bo, uint64_t region_id)
 {
     for (;;)
     {
         try
         {
-            auto [meta, leader] = pd_client->getRegionByID(region_id);
+            auto pd_region = pd_client->getRegionByID(region_id);
 
             // If the region is not found in cache, it must be out of date and already be cleaned up. We can
             // skip the RPC by returning RegionError directly.
-            if (!meta.IsInitialized())
+            if (!pd_region.meta.IsInitialized())
             {
                 throw Exception("region not found for regionID " + std::to_string(region_id), RegionUnavailable);
             }
-            if (meta.peers_size() == 0)
+            filterUnavailablePeers(pd_region);
+
+            if (pd_region.meta.peers_size() == 0)
             {
-                throw Exception("Receive Region with no peer", RegionUnavailable);
+                throw Exception("Receive Region " + std::to_string(region_id) + " with no peer", RegionUnavailable);
             }
 
-            RegionPtr region = std::make_shared<Region>(meta, meta.peers(0), selectLearner(bo, meta));
-            if (leader.IsInitialized())
+            RegionPtr region = std::make_shared<Region>(pd_region.meta, pd_region.meta.peers(0), selectLearner(bo, pd_region.meta));
+            if (pd_region.leader.IsInitialized())
             {
-                region->switchPeer(leader.store_id());
+                region->switchPeer(pd_region.leader.store_id());
             }
-            log->debug("load region id: " + std::to_string(region->meta.id()) + " leader store id " + std::to_string(leader.store_id()));
+            log->debug("load region id: " + std::to_string(region->meta.id()) + " leader store id " + std::to_string(pd_region.leader.store_id()));
             return region;
         }
         catch (const Exception & e)
@@ -140,19 +170,21 @@ RegionPtr RegionCache::loadRegionByKey(Backoffer & bo, const std::string & key)
     {
         try
         {
-            auto [meta, leader] = pd_client->getRegionByKey(key);
-            if (!meta.IsInitialized())
+            auto pd_region = pd_client->getRegionByKey(key);
+            if (!pd_region.meta.IsInitialized())
             {
                 throw Exception("region not found for region key " + key, RegionUnavailable);
             }
-            if (meta.peers_size() == 0)
+            filterUnavailablePeers(pd_region);
+
+            if (pd_region.meta.peers_size() == 0)
             {
                 throw Exception("Receive Region with no peer", RegionUnavailable);
             }
-            RegionPtr region = std::make_shared<Region>(meta, meta.peers(0), selectLearner(bo, meta));
-            if (leader.IsInitialized())
+            RegionPtr region = std::make_shared<Region>(pd_region.meta, pd_region.meta.peers(0), selectLearner(bo, pd_region.meta));
+            if (pd_region.leader.IsInitialized())
             {
-                region->switchPeer(leader.store_id());
+                region->switchPeer(pd_region.leader.store_id());
             }
             return region;
         }

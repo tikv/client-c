@@ -258,7 +258,24 @@ uint64_t Client::getGCSafePoint()
     return response.safe_point();
 }
 
-std::pair<metapb::Region, metapb::Peer> Client::getRegionByKey(const std::string & key)
+Region parseRegionResponse(pdpb::GetRegionResponse & res) {
+    if (!res.has_region())
+        return {};
+    Region region;
+    region.meta = res.region();
+    region.leader = res.leader();
+    for (int i = 0; i < res.down_peers_size(); i++)
+    {
+        region.down_peers.push_back(res.down_peers(i).peer());
+    }
+    for (int i = 0; i < res.pending_peers_size(); i++)
+    {
+        region.pending_peers.push_back(res.pending_peers(i));
+    }
+    return region;
+}
+
+Region Client::getRegionByKey(const std::string & key)
 {
     pdpb::GetRegionRequest request{};
     pdpb::GetRegionResponse response{};
@@ -279,12 +296,10 @@ std::pair<metapb::Region, metapb::Peer> Client::getRegionByKey(const std::string
         throw Exception(err_msg, GRPCErrorCode);
     }
 
-    if (!response.has_region())
-        return {};
-    return std::make_pair(response.region(), response.leader());
+    return parseRegionResponse(response);
 }
 
-std::pair<metapb::Region, metapb::Peer> Client::getRegionByID(uint64_t region_id)
+Region Client::getRegionByID(uint64_t region_id)
 {
     pdpb::GetRegionByIDRequest request{};
     pdpb::GetRegionResponse response{};
@@ -305,10 +320,7 @@ std::pair<metapb::Region, metapb::Peer> Client::getRegionByID(uint64_t region_id
         throw Exception(err_msg, GRPCErrorCode);
     }
 
-    if (!response.has_region())
-        return {};
-
-    return std::make_pair(response.region(), response.leader());
+    return parseRegionResponse(response);
 }
 
 metapb::Store Client::getStore(uint64_t store_id)
