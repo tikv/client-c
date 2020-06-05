@@ -14,6 +14,37 @@ constexpr uint64_t bytesPerMiB = 1024 * 1024;
 
 constexpr uint64_t ttlManagerRunThreshold = 32 * 1024 * 1024;
 
+template <Action action>
+void BatchExecutor<action>::thread()
+{
+    while (true)
+    {
+        if (cancelled)
+        {
+            return;
+        }
+        std::unique_lock<std::mutex> lk(fetch_task_mutex);
+        if (batch_index == batches.size())
+        {
+            lk.unlock();
+            return;
+        }
+        auto & batch = batches[batch_index];
+        batch_index += 1;
+        lk.unlock();
+        if constexpr (action == Action::ActionPrewrite)
+        {
+            Backoffer bo(prewriteMaxBackoff);
+            committer->prewriteSingleBatch(bo, batch);
+        }
+        else if constexpr(action == Action::ActionCommit)
+        {
+            Backoffer bo(commitMaxBackoff);
+            committer->commitSingleBatch(bo, batch);
+        }
+
+    }
+}
 
 uint64_t txnLockTTL(std::chrono::milliseconds start, uint64_t txn_size)
 {

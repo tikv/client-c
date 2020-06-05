@@ -25,6 +25,61 @@ uint64_t sendTxnHeartBeat(Backoffer & bo, Cluster * cluster, std::string & prima
 
 uint64_t txnLockTTL(std::chrono::milliseconds start, uint64_t txn_size);
 
+enum Action
+{
+    ActionPrewrite = 0,
+    ActionCommit,
+    ActionCleanUp
+};
+
+struct BatchKeys
+{
+    RegionVerID region;
+    std::vector<std::string> keys;
+    BatchKeys(const RegionVerID & region_, const std::vector<std::string> & keys_) : region(region_), keys(keys_) {}
+};
+
+template <Action action>
+class BatchExecutor
+{
+private:
+    TwoPhaseCommitter * committer;
+
+    const std::vector<BatchKeys> & batches;
+
+    size_t batch_index;
+
+    size_t concurrency;
+
+    std::vector<std::thread> worker_threads;
+
+    std::mutex fetch_task_mutex;
+
+    std::atomic_bool cancelled;
+
+public:
+    BatchExecutor(TwoPhaseCommitter * committer_, const std::vector<BatchKeys> & batches_, size_t concurrency_ = 10)
+        : committer{committer_}, batches{batches_}, batch_index{0}, concurrency{concurrency_}
+    {}
+
+    void execute()
+    {
+        for (int i = 0; i < concurrency; i++)
+        {
+            std::thread worker(&BatchExecutor::thread, this);
+            worker_threads.push_back(std::move(worker));
+        }
+
+        for (int i = 0; i < concurrency; i++)
+        {
+            worker_threads[i].join();
+        }
+    }
+
+private:
+    void thread();
+};
+
 struct TTLManager
 {
 private:
@@ -51,7 +106,6 @@ public:
         {
             return;
         }
-
         worker_running = true;
         worker = new std::thread{&TTLManager::keepAlive, this, committer};
     }
@@ -98,26 +152,15 @@ private:
 
     friend class TestTwoPhaseCommitter;
 
+    template <Action action>
+    friend class BatchExecutor;
+
 public:
     TwoPhaseCommitter(Txn * txn);
 
     void execute();
 
 private:
-    enum Action
-    {
-        ActionPrewrite = 0,
-        ActionCommit,
-        ActionCleanUp
-    };
-
-    struct BatchKeys
-    {
-        RegionVerID region;
-        std::vector<std::string> keys;
-        BatchKeys(const RegionVerID & region_, const std::vector<std::string> & keys_) : region(region_), keys(keys_) {}
-    };
-
     void prewriteKeys(Backoffer & bo, const std::vector<std::string> & keys) { doActionOnKeys<ActionPrewrite>(bo, keys); }
 
     void commitKeys(Backoffer & bo, const std::vector<std::string> & keys) { doActionOnKeys<ActionCommit>(bo, keys); }
@@ -177,8 +220,10 @@ private:
     {
         if (batches.empty())
             return;
-        for (const auto & batch : batches)
+
+        if (batches.size() == 1)
         {
+            auto & batch = batches[0];
             if constexpr (action == ActionPrewrite)
             {
                 region_txn_size[batch.region.id] = batch.keys.size();
@@ -188,13 +233,17 @@ private:
             {
                 commitSingleBatch(bo, batch);
             }
+            return;
         }
+        BatchExecutor<action> batch_executor(this, batches);
+        batch_executor.execute();
     }
 
     void prewriteSingleBatch(Backoffer & bo, const BatchKeys & batch);
 
     void commitSingleBatch(Backoffer & bo, const BatchKeys & batch);
 };
+
 
 } // namespace kv
 } // namespace pingcap

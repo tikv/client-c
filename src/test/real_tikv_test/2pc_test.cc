@@ -178,7 +178,7 @@ TEST_F(TestWith2PCRealTiKV, testLargeTxn) {
         std::unordered_set<std::string> inserted_keys;
         for (size_t i = 0 ; i < 33 * 1024 * 1024; i++)
         {
-            if (i % 10000 == 0)
+            if (i % 1000000 == 0)
             {
                 std::cout << "process to " << std::to_string(i) << std::endl;
             }
@@ -193,6 +193,7 @@ TEST_F(TestWith2PCRealTiKV, testLargeTxn) {
             }
         }
 
+        std::cout << "Begin to prewrite\n";
         TestTwoPhaseCommitter committer{&txn1};
         Backoffer prewrite_bo(prewriteMaxBackoff);
         try
@@ -201,7 +202,7 @@ TEST_F(TestWith2PCRealTiKV, testLargeTxn) {
         }
         catch(Exception & e)
         {
-            std::cout << "Prewrite Failed: " << e.message() << std::endl;
+            std::cout << "Prewrite meet exception: " << e.message() << std::endl;
         }
 
 
@@ -212,6 +213,7 @@ TEST_F(TestWith2PCRealTiKV, testLargeTxn) {
 
         std::this_thread::sleep_for(std::chrono::milliseconds(10000));
 
+        std::cout << "Begin to commit\n";
         try
         {
             committer.setCommitTS(test_cluster->pd_client->getTS());
@@ -220,7 +222,7 @@ TEST_F(TestWith2PCRealTiKV, testLargeTxn) {
         }
         catch (Exception & e)
         {
-            std::cout << "Commit Failed: " << e.message() << std::endl;
+            std::cout << "Commit meet exception: " << e.message() << std::endl;
         }
 
         Snapshot snap2(test_cluster.get());
@@ -230,4 +232,100 @@ TEST_F(TestWith2PCRealTiKV, testLargeTxn) {
     }
 }
 
+TEST_F(TestWith2PCRealTiKV, testScanWithLargeTxn) {
+    std::vector<std::string> keys;
+    std::string prefix = "test_scan_";
+    char start = 'a';
+    char end = 'z';
+    for (char k = start; k <= end; k++)
+    {
+        keys.push_back(prefix + std::to_string(k));
+    }
+    // Commit.
+    {
+        Txn txn(test_cluster.get());
+        for (auto & key : keys)
+        {
+            txn.set(key, key);
+        }
+        txn.commit();
+
+        Snapshot snap(test_cluster.get());
+        for (auto & key : keys)
+        {
+            ASSERT_EQ(snap.Get(key), key);
+        }
+    }
+
+    // Prewrite.
+    {
+        Txn txn1(test_cluster.get());
+        for (auto & key : keys)
+        {
+            txn1.set(key, key + "1");
+        }
+        std::unordered_set<std::string> inserted_keys;
+        for (size_t i = 0 ; i < 33 * 1024 * 1024; i++)
+        {
+            if (i % 1000000 == 0)
+            {
+                std::cout << "process to " << std::to_string(i) << std::endl;
+            }
+            for (;;)
+            {
+                std::string rand_str = TestUtil::get_random_string(rand() % 30 + 10);
+                if (inserted_keys.find(rand_str) == inserted_keys.end())
+                {
+                    txn1.set(rand_str, rand_str);
+                    break;
+                }
+            }
+        }
+
+        std::cout << "Begin to prewrite\n";
+        TestTwoPhaseCommitter committer{&txn1};
+        Backoffer prewrite_bo(prewriteMaxBackoff);
+        try
+        {
+            committer.prewriteKeys(prewrite_bo, committer.keys());
+        }
+        catch(Exception & e)
+        {
+            std::cout << "Prewrite meet exception: " << e.message() << std::endl;
+        }
+
+        Snapshot snap1(test_cluster.get());
+        auto scanner = snap1.Scan(keys[0], keys.back());
+        while (scanner.valid)
+        {
+            auto key = scanner.key();
+            if (std::find(keys.begin(), keys.end(), key) == keys.end())
+            {
+                scanner.next();
+                continue;
+            }
+            ASSERT_EQ(key, scanner.value());
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(10000));
+
+        std::cout << "Begin to commit\n";
+        try
+        {
+            committer.setCommitTS(test_cluster->pd_client->getTS());
+            Backoffer commit_bo(commitMaxBackoff);
+            committer.commitKeys(commit_bo, committer.keys());
+        }
+        catch (Exception & e)
+        {
+            std::cout << "Commit meet exception: " << e.message() << std::endl;
+        }
+
+        Snapshot snap(test_cluster.get());
+        for (auto & key : keys)
+        {
+            ASSERT_EQ(snap.Get(key), key + "1");
+        }
+    }
+}
 }
