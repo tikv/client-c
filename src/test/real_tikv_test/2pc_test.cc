@@ -235,11 +235,10 @@ TEST_F(TestWith2PCRealTiKV, testLargeTxn) {
 TEST_F(TestWith2PCRealTiKV, testScanWithLargeTxn) {
     std::vector<std::string> keys;
     std::string prefix = "test_scan_";
-    char start = 'a';
-    char end = 'z';
-    for (char k = start; k <= end; k++)
+    std::string candidates = "abcdefghijklmnopqrstuvwxyz";
+    for (size_t i = 0; i <= candidates.size(); i++)
     {
-        keys.push_back(prefix + std::to_string(k));
+        keys.push_back(prefix + candidates[i]);
     }
     // Commit.
     {
@@ -295,7 +294,8 @@ TEST_F(TestWith2PCRealTiKV, testScanWithLargeTxn) {
         }
 
         Snapshot snap1(test_cluster.get());
-        auto scanner = snap1.Scan(keys[0], keys.back());
+        auto scanner = snap1.Scan(prefix, prefixNext(prefix));
+        size_t count = 0;
         while (scanner.valid)
         {
             auto key = scanner.key();
@@ -305,7 +305,10 @@ TEST_F(TestWith2PCRealTiKV, testScanWithLargeTxn) {
                 continue;
             }
             ASSERT_EQ(key, scanner.value());
+            scanner.next();
+            count += 1;
         }
+        ASSERT_EQ(count, keys.size());
 
         std::this_thread::sleep_for(std::chrono::milliseconds(10000));
 
