@@ -7,9 +7,9 @@
 #include <pingcap/kv/LockResolver.h>
 
 #include <cmath>
+#include <thread>
 #include <unordered_map>
 #include <vector>
-#include <thread>
 
 namespace pingcap
 {
@@ -41,7 +41,7 @@ private:
     std::thread * worker;
 
 public:
-    TTLManager(): state{StateUninitialized}, worker_running{false} {}
+    TTLManager() : state{StateUninitialized}, worker_running{false} {}
 
     void run(TwoPhaseCommitter * committer)
     {

@@ -52,7 +52,12 @@ TEST_F(TestCoprocessor, testBuildTask1)
     std::vector<pingcap::coprocessor::KeyRange> ranges;
     ranges.emplace_back("a", "z");
 
-    auto tasks = pingcap::coprocessor::buildCopTasks(bo, test_cluster.get(), ranges, nullptr, kv::StoreType::TiKV);
+    std::shared_ptr<pingcap::coprocessor::Request> req = std::make_shared<pingcap::coprocessor::Request>();
+    req->tp = pingcap::coprocessor::DAG;
+    req->start_ts = test_cluster->pd_client->getTS();
+
+    auto tasks = pingcap::coprocessor::buildCopTasks(
+        bo, test_cluster.get(), ranges, req, kv::StoreType::TiKV, &Logger::get("pingcap/coprocessor"));
 
     ASSERT_EQ(tasks.size(), 2);
 
@@ -64,13 +69,8 @@ TEST_F(TestCoprocessor, testBuildTask1)
     control_cluster->splitRegion("d");
     control_cluster->splitRegion("e");
 
-    pingcap::coprocessor::Request req;
-    req.tp = pingcap::coprocessor::DAG;
-    req.start_ts = test_cluster->pd_client->getTS();
-    req.ranges.emplace_back("a", "z");
-
     fiu_enable("sleep_before_push_result", 1, NULL, 0);
-    pingcap::coprocessor::ResponseIter iter = pingcap::coprocessor::Client::send(test_cluster.get(), &req, 8);
+    pingcap::coprocessor::ResponseIter iter(std::move(tasks), test_cluster.get(), 8, &Logger::get("pingcap/coprocessor"));
     iter.open();
 
     for (int i = 0; i < 4; i++)

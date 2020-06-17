@@ -13,7 +13,8 @@ int64_t LockResolver::ResolveLocks(Backoffer & bo, uint64_t caller_start_ts, std
     return resolveLocks(bo, caller_start_ts, locks, pushed, false);
 }
 
-int64_t LockResolver::resolveLocks(Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks, std::vector<uint64_t> & pushed, bool for_write)
+int64_t LockResolver::resolveLocks(
+    Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks, std::vector<uint64_t> & pushed, bool for_write)
 {
     TxnExpireTime before_txn_expired;
     if (locks.empty())
@@ -96,13 +97,14 @@ int64_t LockResolver::resolveLocks(Backoffer & bo, uint64_t caller_start_ts, std
     return before_txn_expired.value();
 }
 
-int64_t LockResolver::resolveLocksForWrite(Backoffer &bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks) {
+int64_t LockResolver::resolveLocksForWrite(Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks)
+{
     std::vector<uint64_t> ignored;
     return resolveLocks(bo, caller_start_ts, locks, ignored, true);
 }
 
-TxnStatus LockResolver::getTxnStatus(
-    Backoffer & bo, uint64_t txn_id, const std::string & primary, uint64_t caller_start_ts, uint64_t current_ts, bool rollback_if_not_exists)
+TxnStatus LockResolver::getTxnStatus(Backoffer & bo, uint64_t txn_id, const std::string & primary, uint64_t caller_start_ts,
+    uint64_t current_ts, bool rollback_if_not_exists)
 {
     TxnStatus * cached_status = getResolved(txn_id);
     if (cached_status != nullptr)
@@ -204,7 +206,8 @@ void LockResolver::resolveLock(Backoffer & bo, LockPtr lock, TxnStatus & status,
     }
 }
 
-void LockResolver::resolvePessimisticLock(Backoffer & bo, LockPtr lock, std::unordered_set<RegionVerID> &set) {
+void LockResolver::resolvePessimisticLock(Backoffer & bo, LockPtr lock, std::unordered_set<RegionVerID> & set)
+{
     for (;;)
     {
         auto loc = cluster->region_cache->locateKey(bo, lock->key);

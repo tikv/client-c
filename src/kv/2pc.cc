@@ -19,7 +19,7 @@ uint64_t txnLockTTL(std::chrono::milliseconds start, uint64_t txn_size)
 {
     uint64_t lock_ttl = defaultLockTTL;
 
-    if (txn_size >=  txnCommitBatchSize)
+    if (txn_size >= txnCommitBatchSize)
     {
         uint64_t txn_size_mb = txn_size / bytesPerMiB;
         lock_ttl = (uint64_t)(ttlFactor * sqrt(txn_size_mb));
@@ -38,8 +38,7 @@ uint64_t txnLockTTL(std::chrono::milliseconds start, uint64_t txn_size)
     return lock_ttl + elapsed.count();
 }
 
-TwoPhaseCommitter::TwoPhaseCommitter(Txn * txn)
-    : log(&Logger::get("pingcap.tikv"))
+TwoPhaseCommitter::TwoPhaseCommitter(Txn * txn) : log(&Logger::get("pingcap.tikv"))
 {
     commited = false;
     txn->walkBuffer([&](const std::string & key, const std::string & value) {
@@ -238,7 +237,7 @@ void TTLManager::keepAlive(TwoPhaseCommitter * committer)
         {
             std::ignore = sendTxnHeartBeat(bo, committer->cluster, committer->primary_lock, committer->start_ts, new_ttl);
         }
-        catch(...)
+        catch (...)
         {
             return;
         }

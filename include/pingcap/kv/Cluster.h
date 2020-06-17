@@ -25,7 +25,6 @@ struct Cluster
     LockResolverPtr lock_resolver;
 
 
-
     Cluster() : pd_client(std::make_shared<pd::MockPDClient>()) {}
 
     Cluster(const std::vector<std::string> & pd_addrs, const std::string & learner_key, const std::string & learner_value)
@@ -50,9 +49,9 @@ struct MinCommitTSPushed
 
     std::mutex mutex;
 
-    MinCommitTSPushed() {};
+    MinCommitTSPushed(){};
 
-    MinCommitTSPushed(MinCommitTSPushed & min_commit_ts_pushed) {};
+    MinCommitTSPushed(MinCommitTSPushed & ){};
 
     inline void add_timestamps(std::vector<uint64_t> & tss)
     {

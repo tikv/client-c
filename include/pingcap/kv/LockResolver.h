@@ -45,7 +45,13 @@ struct Lock
     uint64_t lock_for_update_ts;
 
     Lock(const ::kvrpcpb::LockInfo & l)
-        : key(l.key()), primary(l.primary_lock()), txn_id(l.lock_version()), ttl(l.lock_ttl()), txn_size(l.txn_size()), lock_type(l.lock_type()), lock_for_update_ts(l.lock_for_update_ts())
+        : key(l.key()),
+          primary(l.primary_lock()),
+          txn_id(l.lock_version()),
+          ttl(l.lock_ttl()),
+          txn_size(l.txn_size()),
+          lock_type(l.lock_type()),
+          lock_for_update_ts(l.lock_for_update_ts())
     {}
 };
 
@@ -53,9 +59,8 @@ using LockPtr = std::shared_ptr<Lock>;
 
 inline std::string getLockInfo(LockPtr & lock)
 {
-    return "key: " + lock->key + " primary: " + lock->primary + " txn_start_ts: " + std::to_string(lock->txn_id) +
-        " lock_for_update_ts: " + std::to_string(lock->lock_for_update_ts) + " ttl: " + std::to_string(lock->ttl) +
-        " type: " + std::to_string(lock->lock_type);
+    return "key: " + lock->key + " primary: " + lock->primary + " txn_start_ts: " + std::to_string(lock->txn_id) + " lock_for_update_ts: "
+        + std::to_string(lock->lock_for_update_ts) + " ttl: " + std::to_string(lock->ttl) + " type: " + std::to_string(lock->lock_type);
 }
 
 inline LockPtr extractLockFromKeyErr(const ::kvrpcpb::KeyError & key_err)
@@ -108,7 +113,8 @@ public:
 
     int64_t ResolveLocks(Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks, std::vector<uint64_t> & pushed);
 
-    int64_t resolveLocks(Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks, std::vector<uint64_t> & pushed, bool for_write);
+    int64_t resolveLocks(
+        Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks, std::vector<uint64_t> & pushed, bool for_write);
 
     int64_t resolveLocksForWrite(Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks);
 
@@ -147,7 +153,8 @@ private:
     TxnStatus getTxnStatusFromLock(Backoffer & bo, LockPtr lock, uint64_t caller_start_ts);
 
 
-    TxnStatus getTxnStatus(Backoffer & bo, uint64_t txn_id, const std::string & primary, uint64_t caller_start_ts, uint64_t current_ts, bool rollback_if_not_exists);
+    TxnStatus getTxnStatus(Backoffer & bo, uint64_t txn_id, const std::string & primary, uint64_t caller_start_ts, uint64_t current_ts,
+        bool rollback_if_not_exists);
 
     Cluster * cluster;
     std::shared_mutex mu;
