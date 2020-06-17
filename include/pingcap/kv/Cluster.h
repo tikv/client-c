@@ -51,7 +51,7 @@ struct MinCommitTSPushed
 
     MinCommitTSPushed(){};
 
-    MinCommitTSPushed(MinCommitTSPushed & min_commit_ts_pushed){};
+    MinCommitTSPushed(MinCommitTSPushed & ){};
 
     inline void add_timestamps(std::vector<uint64_t> & tss)
     {
