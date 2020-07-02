@@ -187,6 +187,9 @@ private:
 
     std::unordered_map<RegionVerID, RegionPtr> regions;
 
+    /// stores the last work_flash_index when a region is dropped, this value is
+    /// used to initialize the work_flash_index when a region with the same id
+    /// is added next time.
     std::unordered_map<uint64_t, uint32_t> region_last_work_flash_index;
 
     std::map<uint64_t, Store> stores;
