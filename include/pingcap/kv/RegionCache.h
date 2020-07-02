@@ -71,10 +71,13 @@ struct Region
     metapb::Region meta;
     metapb::Peer peer;
     std::vector<metapb::Peer> learners;
+    std::atomic_uint work_flash_idx;
 
     Region(const metapb::Region & meta_, const metapb::Peer & peer_, const std::vector<metapb::Peer> & learners_)
         : meta(meta_), peer(peer_), learners(learners_)
-    {}
+    {
+        work_flash_idx = 0;
+    }
 
     const std::string & startKey() { return meta.start_key(); }
 

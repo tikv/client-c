@@ -16,13 +16,20 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
             return nullptr;
         const auto & meta = region->meta;
         std::vector<metapb::Peer> peers;
+        size_t start_index = 0;
         if (store_type == TiKV)
             peers.push_back(region->peer);
         else
-            peers = selectLearner(bo, meta);
-
-        for (auto peer : peers)
         {
+            peers = selectLearner(bo, meta);
+            start_index = region->work_flash_idx.fetch_add(1) + 1;
+        }
+
+        size_t peer_size = peers.size();
+        for (size_t i = 0; i < peer_size; i++)
+        {
+            size_t peer_index = (i + start_index) % peer_size;
+            auto peer = peers[peer_index];
             std::string addr = getStore(bo, peer.store_id()).addr;
             if (addr.empty())
             {
@@ -32,6 +39,8 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
                         StoreNotReady));
                 continue;
             }
+            if (store_type == TiFlash)
+                region->work_flash_idx.store(peer_index);
             return std::make_shared<RPCContext>(id, meta, peer, addr);
         }
         dropRegion(id);
