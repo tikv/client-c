@@ -71,10 +71,13 @@ struct Region
     metapb::Region meta;
     metapb::Peer peer;
     std::vector<metapb::Peer> learners;
+    std::atomic_uint work_flash_idx;
 
     Region(const metapb::Region & meta_, const metapb::Peer & peer_, const std::vector<metapb::Peer> & learners_)
         : meta(meta_), peer(peer_), learners(learners_)
-    {}
+    {
+        work_flash_idx = 0;
+    }
 
     const std::string & startKey() { return meta.start_key(); }
 
@@ -183,6 +186,11 @@ private:
     std::map<std::string, RegionPtr> regions_map;
 
     std::unordered_map<RegionVerID, RegionPtr> regions;
+
+    /// stores the last work_flash_index when a region is dropped, this value is
+    /// used to initialize the work_flash_index when a region with the same id
+    /// is added next time.
+    std::unordered_map<uint64_t, uint32_t> region_last_work_flash_index;
 
     std::map<uint64_t, Store> stores;
 
