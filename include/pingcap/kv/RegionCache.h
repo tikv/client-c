@@ -187,6 +187,8 @@ private:
 
     std::unordered_map<RegionVerID, RegionPtr> regions;
 
+    std::unordered_map<uint64_t, uint32_t> region_last_work_flash_index;
+
     std::map<uint64_t, Store> stores;
 
     pd::ClientPtr pd_client;
