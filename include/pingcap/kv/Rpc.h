@@ -25,7 +25,7 @@ struct ConnArray
 
     ConnArray() = default;
 
-    ConnArray(size_t max_size, std::string addr);
+    ConnArray(size_t max_size, const std::string & addr, const grpc::SslCredentialsOptions & cred_options);
 
     std::shared_ptr<KvConnClient> get();
 };
@@ -76,11 +76,17 @@ using RpcCallPtr = std::unique_ptr<RpcCall<T>>;
 
 struct RpcClient
 {
+    grpc::SslCredentialsOptions cred_options;
+
     std::mutex mutex;
 
     std::map<std::string, ConnArrayPtr> conns;
 
     RpcClient() {}
+
+    RpcClient(const grpc::SslCredentialsOptions & cred_options_) : cred_options(cred_options_) {}
+
+    RpcClient(grpc::SslCredentialsOptions && cred_options_) : cred_options(std::move(cred_options_)) {}
 
     ConnArrayPtr getConnArray(const std::string & addr);
 

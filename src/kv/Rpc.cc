@@ -5,12 +5,12 @@ namespace pingcap
 namespace kv
 {
 
-ConnArray::ConnArray(size_t max_size, std::string addr) : address(addr), index(0)
+ConnArray::ConnArray(size_t max_size, const std::string & addr, const grpc::SslCredentialsOptions & cred_options) : address(addr), index(0)
 {
     vec.resize(max_size);
     for (size_t i = 0; i < max_size; i++)
     {
-        vec[i] = std::make_shared<KvConnClient>(addr);
+        vec[i] = std::make_shared<KvConnClient>(addr, cred_options);
     }
 }
 
@@ -34,7 +34,7 @@ ConnArrayPtr RpcClient::getConnArray(const std::string & addr)
 
 ConnArrayPtr RpcClient::createConnArray(const std::string & addr)
 {
-    auto conn_array = std::make_shared<ConnArray>(5, addr);
+    auto conn_array = std::make_shared<ConnArray>(5, addr, cred_options);
     conns[addr] = conn_array;
     return conn_array;
 }

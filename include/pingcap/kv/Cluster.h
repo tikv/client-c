@@ -24,13 +24,13 @@ struct Cluster
 
     LockResolverPtr lock_resolver;
 
-
     Cluster() : pd_client(std::make_shared<pd::MockPDClient>()) {}
 
-    Cluster(const std::vector<std::string> & pd_addrs, const std::string & learner_key, const std::string & learner_value)
-        : pd_client(std::make_shared<pd::CodecClient>(pd_addrs)),
+    Cluster(const std::vector<std::string> & pd_addrs, const std::string & learner_key, const std::string & learner_value,
+        grpc::SslCredentialsOptions cred_options = {})
+        : pd_client(std::make_shared<pd::CodecClient>(pd_addrs, cred_options)),
           region_cache(std::make_unique<RegionCache>(pd_client, learner_key, learner_value)),
-          rpc_client(std::make_unique<RpcClient>()),
+          rpc_client(std::make_unique<RpcClient>(cred_options)),
           oracle(std::make_unique<pd::Oracle>(pd_client, std::chrono::milliseconds(oracle_update_interval))),
           lock_resolver(std::make_unique<LockResolver>(this))
     {}
@@ -51,7 +51,7 @@ struct MinCommitTSPushed
 
     MinCommitTSPushed(){};
 
-    MinCommitTSPushed(MinCommitTSPushed & ){};
+    MinCommitTSPushed(MinCommitTSPushed &){};
 
     inline void add_timestamps(std::vector<uint64_t> & tss)
     {

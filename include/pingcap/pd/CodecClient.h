@@ -11,7 +11,7 @@ namespace pd
 {
 struct CodecClient : public Client
 {
-    CodecClient(const std::vector<std::string> & addrs) : Client(addrs) {}
+    CodecClient(const std::vector<std::string> & addrs, grpc::SslCredentialsOptions cred_options = {}) : Client(addrs, cred_options) {}
 
     std::pair<metapb::Region, metapb::Peer> getRegionByKey(const std::string & key) override
     {

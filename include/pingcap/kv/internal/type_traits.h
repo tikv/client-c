@@ -16,12 +16,21 @@ struct KvConnClient
     std::shared_ptr<grpc::Channel> channel;
     std::unique_ptr<tikvpb::Tikv::Stub> stub;
 
-    KvConnClient(std::string addr)
+    KvConnClient(std::string addr, const grpc::SslCredentialsOptions & cred_options)
     {
         // set max size that grpc client can recieve to max value.
         grpc::ChannelArguments ch_args;
         ch_args.SetMaxReceiveMessageSize(-1);
-        channel = grpc::CreateCustomChannel(addr, grpc::InsecureChannelCredentials(), ch_args);
+        std::shared_ptr<grpc::ChannelCredentials> cred;
+        if (cred_options.pem_root_certs.empty())
+        {
+            cred = grpc::InsecureChannelCredentials();
+        }
+        else
+        {
+            cred = grpc::SslCredentials(cred_options);
+        }
+        channel = grpc::CreateCustomChannel(addr, cred, ch_args);
         stub = tikvpb::Tikv::NewStub(channel);
     }
 };

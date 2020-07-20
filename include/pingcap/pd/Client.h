@@ -36,7 +36,7 @@ class Client : public IClient
     const std::chrono::seconds update_leader_interval;
 
 public:
-    Client(const std::vector<std::string> & addrs);
+    Client(const std::vector<std::string> & addrs, grpc::SslCredentialsOptions cred_options = {});
 
     ~Client() override;
 
@@ -74,9 +74,16 @@ private:
     {
         std::shared_ptr<grpc::Channel> channel;
         std::unique_ptr<pdpb::PD::Stub> stub;
-        PDConnClient(std::string addr)
+        PDConnClient(std::string addr, const grpc::SslCredentialsOptions & cred_options)
         {
-            channel = grpc::CreateChannel(addr, grpc::InsecureChannelCredentials());
+            if (cred_options.pem_root_certs.empty())
+            {
+                channel = grpc::CreateChannel(addr, grpc::InsecureChannelCredentials());
+            }
+            else
+            {
+                channel = grpc::CreateChannel(addr, grpc::SslCredentials(cred_options));
+            }
             stub = pdpb::PD::NewStub(channel);
         }
     };
@@ -110,6 +117,8 @@ private:
     std::condition_variable update_leader_cv;
 
     std::atomic<bool> check_leader;
+
+    grpc::SslCredentialsOptions cred_options;
 
     Logger * log;
 };
