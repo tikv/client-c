@@ -7,8 +7,7 @@ list(APPEND test_libs
     Poco::Net
     Poco::JSON
     gtest_main
-    fiu
-    gRPC::grpc++_unsecure)
+    fiu)
 
 add_executable(kv_client_ut io_or_region_error_get_test.cc region_split_test.cc lock_resolve_test.cc coprocessor_test.cc)
 target_include_directories(kv_client_ut PUBLIC ${test_includes})
