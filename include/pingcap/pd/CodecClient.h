@@ -1,5 +1,6 @@
 #pragma once
 
+#include <pingcap/Config.h>
 #include <pingcap/Exception.h>
 #include <pingcap/pd/Client.h>
 
@@ -11,7 +12,7 @@ namespace pd
 {
 struct CodecClient : public Client
 {
-    CodecClient(const std::vector<std::string> & addrs, grpc::SslCredentialsOptions cred_options = {}) : Client(addrs, cred_options) {}
+    CodecClient(const std::vector<std::string> & addrs, const ClusterConfig & config) : Client(addrs, config) {}
 
     std::pair<metapb::Region, metapb::Peer> getRegionByKey(const std::string & key) override
     {

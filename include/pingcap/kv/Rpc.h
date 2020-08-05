@@ -1,7 +1,6 @@
 #pragma once
 
 #include <grpcpp/create_channel.h>
-#include <grpcpp/security/credentials.h>
 #include <pingcap/Log.h>
 #include <pingcap/kv/RegionCache.h>
 #include <pingcap/kv/internal/type_traits.h>
@@ -25,7 +24,7 @@ struct ConnArray
 
     ConnArray() = default;
 
-    ConnArray(size_t max_size, const std::string & addr, const grpc::SslCredentialsOptions & cred_options);
+    ConnArray(size_t max_size, const std::string & addr, const ClusterConfig & config_);
 
     std::shared_ptr<KvConnClient> get();
 };
@@ -76,7 +75,7 @@ using RpcCallPtr = std::unique_ptr<RpcCall<T>>;
 
 struct RpcClient
 {
-    grpc::SslCredentialsOptions cred_options;
+    ClusterConfig config;
 
     std::mutex mutex;
 
@@ -84,9 +83,7 @@ struct RpcClient
 
     RpcClient() {}
 
-    RpcClient(const grpc::SslCredentialsOptions & cred_options_) : cred_options(cred_options_) {}
-
-    RpcClient(grpc::SslCredentialsOptions && cred_options_) : cred_options(std::move(cred_options_)) {}
+    RpcClient(const ClusterConfig & config_) : config(config_) {}
 
     ConnArrayPtr getConnArray(const std::string & addr);
 

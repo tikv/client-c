@@ -6,6 +6,7 @@
 #include <pingcap/pd/CodecClient.h>
 #include <pingcap/pd/MockPDClient.h>
 #include <pingcap/pd/Oracle.h>
+#include <pingcap/Config.h>
 
 namespace pingcap
 {
@@ -14,6 +15,7 @@ namespace kv
 
 constexpr int oracle_update_interval = 2000;
 // Cluster represents a tikv+pd cluster.
+
 struct Cluster
 {
     pd::ClientPtr pd_client;
@@ -26,11 +28,10 @@ struct Cluster
 
     Cluster() : pd_client(std::make_shared<pd::MockPDClient>()) {}
 
-    Cluster(const std::vector<std::string> & pd_addrs, const std::string & learner_key, const std::string & learner_value,
-        grpc::SslCredentialsOptions cred_options = {})
-        : pd_client(std::make_shared<pd::CodecClient>(pd_addrs, cred_options)),
-          region_cache(std::make_unique<RegionCache>(pd_client, learner_key, learner_value)),
-          rpc_client(std::make_unique<RpcClient>(cred_options)),
+    Cluster(const std::vector<std::string> & pd_addrs, const ClusterConfig & config)
+        : pd_client(std::make_shared<pd::CodecClient>(pd_addrs, config)),
+          region_cache(std::make_unique<RegionCache>(pd_client, config)),
+          rpc_client(std::make_unique<RpcClient>(config)),
           oracle(std::make_unique<pd::Oracle>(pd_client, std::chrono::milliseconds(oracle_update_interval))),
           lock_resolver(std::make_unique<LockResolver>(this))
     {}
