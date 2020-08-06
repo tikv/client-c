@@ -4,6 +4,7 @@
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
 #include <kvproto/pdpb.grpc.pb.h>
+#include <pingcap/Config.h>
 #include <pingcap/Log.h>
 #include <pingcap/pd/IClient.h>
 
@@ -18,13 +19,6 @@ namespace pingcap
 namespace pd
 {
 
-struct SecurityOption
-{
-    std::string CAPath;
-    std::string CertPath;
-    std::string KeyPath;
-};
-
 class Client : public IClient
 {
     const int max_init_cluster_retries;
@@ -36,7 +30,7 @@ class Client : public IClient
     const std::chrono::seconds update_leader_interval;
 
 public:
-    Client(const std::vector<std::string> & addrs, grpc::SslCredentialsOptions cred_options = {});
+    Client(const std::vector<std::string> & addrs, const ClusterConfig & config);
 
     ~Client() override;
 
@@ -74,15 +68,15 @@ private:
     {
         std::shared_ptr<grpc::Channel> channel;
         std::unique_ptr<pdpb::PD::Stub> stub;
-        PDConnClient(std::string addr, const grpc::SslCredentialsOptions & cred_options)
+        PDConnClient(std::string addr, const ClusterConfig & config)
         {
-            if (cred_options.pem_root_certs.empty())
+            if (config.hasTlsConfig())
             {
-                channel = grpc::CreateChannel(addr, grpc::InsecureChannelCredentials());
+                channel = grpc::CreateChannel(addr, grpc::SslCredentials(config.getGrpcCredentials()));
             }
             else
             {
-                channel = grpc::CreateChannel(addr, grpc::SslCredentials(cred_options));
+                channel = grpc::CreateChannel(addr, grpc::InsecureChannelCredentials());
             }
             stub = pdpb::PD::NewStub(channel);
         }
@@ -118,7 +112,7 @@ private:
 
     std::atomic<bool> check_leader;
 
-    grpc::SslCredentialsOptions cred_options;
+    ClusterConfig config;
 
     Logger * log;
 };

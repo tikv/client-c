@@ -7,14 +7,14 @@ namespace pingcap
 namespace pd
 {
 
-inline std::vector<std::string> addrsToUrls(const std::vector<std::string> & addrs, grpc::SslCredentialsOptions cred_options)
+inline std::vector<std::string> addrsToUrls(const std::vector<std::string> & addrs, const ClusterConfig & config)
 {
     std::vector<std::string> urls;
     for (const std::string & addr : addrs)
     {
         if (addr.find("://") == std::string::npos)
         {
-            if (cred_options.pem_root_certs.empty())
+            if (config.ca_path.empty())
             {
                 urls.push_back("http://" + addr);
             }
@@ -31,13 +31,13 @@ inline std::vector<std::string> addrsToUrls(const std::vector<std::string> & add
     return urls;
 }
 
-Client::Client(const std::vector<std::string> & addrs, grpc::SslCredentialsOptions cred_options_)
+Client::Client(const std::vector<std::string> & addrs, const ClusterConfig & config_)
     : max_init_cluster_retries(100),
       pd_timeout(3),
       loop_interval(100),
       update_leader_interval(60),
-      urls(addrsToUrls(addrs, cred_options_)),
-      cred_options(cred_options_),
+      urls(addrsToUrls(addrs, config_)),
+      config(config_),
       log(&Logger::get("pingcap.pd"))
 {
     initClusterID();
@@ -71,7 +71,7 @@ std::shared_ptr<Client::PDConnClient> Client::getOrCreateGRPCConn(const std::str
     }
     // TODO Check Auth
     Poco::URI uri(addr);
-    auto client_ptr = std::make_shared<PDConnClient>(uri.getHost() + ":" + std::to_string(uri.getPort()), cred_options);
+    auto client_ptr = std::make_shared<PDConnClient>(uri.getHost() + ":" + std::to_string(uri.getPort()), config);
     channel_map[addr] = client_ptr;
 
     return client_ptr;
