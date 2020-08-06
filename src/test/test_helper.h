@@ -10,7 +10,8 @@ namespace
 using namespace pingcap;
 using namespace pingcap::kv;
 
-inline ClusterPtr createCluster(const std::vector<std::string> & pd_addrs) {
+inline ClusterPtr createCluster(const std::vector<std::string> & pd_addrs)
+{
     ClusterConfig config;
     config.learner_key = "engine";
     config.learner_value = "zone";

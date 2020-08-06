@@ -1,7 +1,9 @@
 #include <pingcap/Config.h>
 
-namespace pingcap {
-namespace kv {
+namespace pingcap
+{
+namespace kv
+{
 
 // create and destroy stub but not destroy channel may case memory leak, so we
 // bound channel and stub in same struct.
@@ -29,5 +31,5 @@ struct KvConnClient
     }
 };
 
-}
-}
+} // namespace kv
+} // namespace pingcap

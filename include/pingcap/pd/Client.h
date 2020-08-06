@@ -4,7 +4,6 @@
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
 #include <kvproto/pdpb.grpc.pb.h>
-
 #include <pingcap/Config.h>
 #include <pingcap/Log.h>
 #include <pingcap/pd/IClient.h>

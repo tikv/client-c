@@ -1,12 +1,12 @@
 #pragma once
 
+#include <pingcap/Config.h>
 #include <pingcap/kv/LockResolver.h>
 #include <pingcap/kv/Rpc.h>
 #include <pingcap/pd/Client.h>
 #include <pingcap/pd/CodecClient.h>
 #include <pingcap/pd/MockPDClient.h>
 #include <pingcap/pd/Oracle.h>
-#include <pingcap/Config.h>
 
 namespace pingcap
 {

@@ -3,7 +3,6 @@
 #include <kvproto/coprocessor.pb.h>
 #include <kvproto/metapb.pb.h>
 #include <kvproto/tikvpb.grpc.pb.h>
-
 #include <pingcap/kv/internal/conn.h>
 
 namespace pingcap
