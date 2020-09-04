@@ -95,8 +95,8 @@ std::vector<metapb::Peer> RegionCache::selectLearner(Backoffer & bo, const metap
     std::vector<metapb::Peer> learners;
     for (int i = 0; i < meta.peers_size(); i++)
     {
-        auto peer = meta.peers(i);
-        if (peer.is_learner())
+        auto & peer = meta.peers(i);
+        if (peer.role() == metapb::PeerRole::Learner)
         {
             auto store_id = peer.store_id();
             auto labels = getStore(bo, store_id).labels;
@@ -194,7 +194,7 @@ Store RegionCache::reloadStore(Backoffer & bo, uint64_t id)
 {
     auto store = loadStore(bo, id);
     std::map<std::string, std::string> labels;
-    for (size_t i = 0; i < store.labels_size(); i++)
+    for (int i = 0; i < store.labels_size(); i++)
     {
         labels[store.labels(i).key()] = store.labels(i).value();
     }
