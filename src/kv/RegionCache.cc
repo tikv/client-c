@@ -21,7 +21,7 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
             peers.push_back(region->peer);
         else
         {
-            peers = selectLearner(bo, meta);
+            peers = selectTiFlashPeer(bo, meta);
             start_index = region->work_flash_idx.fetch_add(1) + 1;
         }
 
@@ -30,7 +30,7 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
         {
             size_t peer_index = (i + start_index) % peer_size;
             auto peer = peers[peer_index];
-            std::string addr = getStore(bo, peer.store_id()).addr;
+            std::string addr = getStore(bo, peer.store_id()).getAddr(store_type);
             if (addr.empty())
             {
                 dropStore(peer.store_id());
@@ -89,21 +89,18 @@ KeyLocation RegionCache::locateKey(Backoffer & bo, const std::string & key)
     return KeyLocation(region->verID(), region->startKey(), region->endKey());
 }
 
-// selectLearner select all learner peers.
-std::vector<metapb::Peer> RegionCache::selectLearner(Backoffer & bo, const metapb::Region & meta)
+// select all tiflash peers.
+std::vector<metapb::Peer> RegionCache::selectTiFlashPeer(Backoffer & bo, const metapb::Region & meta)
 {
     std::vector<metapb::Peer> learners;
     for (int i = 0; i < meta.peers_size(); i++)
     {
         auto & peer = meta.peers(i);
-        if (peer.role() == metapb::PeerRole::Learner)
+        auto store_id = peer.store_id();
+        auto labels = getStore(bo, store_id).labels;
+        if (labels[learner_key] == learner_value)
         {
-            auto store_id = peer.store_id();
-            auto labels = getStore(bo, store_id).labels;
-            if (labels[learner_key] == learner_value)
-            {
-                learners.push_back(peer);
-            }
+            learners.push_back(peer);
         }
     }
     return learners;
@@ -117,8 +114,8 @@ RegionPtr RegionCache::loadRegionByID(Backoffer & bo, uint64_t region_id)
         {
             auto [meta, leader] = pd_client->getRegionByID(region_id);
 
-            // If the region is not found in cache, it must be out of date and already be cleaned up. We can
-            // skip the RPC by returning RegionError directly.
+            // If the region is not found in cache, it must be out of date and already
+            // be cleaned up. We can skip the RPC by returning RegionError directly.
             if (!meta.IsInitialized())
             {
                 throw Exception("region not found for regionID " + std::to_string(region_id), RegionUnavailable);
@@ -128,7 +125,7 @@ RegionPtr RegionCache::loadRegionByID(Backoffer & bo, uint64_t region_id)
                 throw Exception("Receive Region with no peer", RegionUnavailable);
             }
 
-            RegionPtr region = std::make_shared<Region>(meta, meta.peers(0), selectLearner(bo, meta));
+            RegionPtr region = std::make_shared<Region>(meta, meta.peers(0));
             if (leader.IsInitialized())
             {
                 region->switchPeer(leader.store_id());
@@ -158,7 +155,7 @@ RegionPtr RegionCache::loadRegionByKey(Backoffer & bo, const std::string & key)
             {
                 throw Exception("Receive Region with no peer", RegionUnavailable);
             }
-            RegionPtr region = std::make_shared<Region>(meta, meta.peers(0), selectLearner(bo, meta));
+            RegionPtr region = std::make_shared<Region>(meta, meta.peers(0));
             if (leader.IsInitialized())
             {
                 region->switchPeer(leader.store_id());
@@ -237,7 +234,8 @@ void RegionCache::insertRegionToCache(RegionPtr region)
     auto it = region_last_work_flash_index.find(region->meta.id());
     if (it != region_last_work_flash_index.end())
     {
-        /// Set the work_flash_idx to the last_work_flash_index, otherwise it might always goto a invalid store
+        /// Set the work_flash_idx to the last_work_flash_index, otherwise it might
+        /// always goto a invalid store
         region->work_flash_idx.store(it->second);
         region_last_work_flash_index.erase(it);
     }
@@ -301,7 +299,7 @@ void RegionCache::onRegionStale(Backoffer & bo, RPCContextPtr ctx, const errorpb
         {
             pd->processRegionResult(meta);
         }
-        RegionPtr region = std::make_shared<Region>(meta, meta.peers(0), selectLearner(bo, meta));
+        RegionPtr region = std::make_shared<Region>(meta, meta.peers(0));
         region->switchPeer(ctx->peer.store_id());
         insertRegionToCache(region);
     }

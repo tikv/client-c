@@ -23,13 +23,22 @@ enum StoreType
 struct Store
 {
     uint64_t id;
-    std::string addr;
-    std::string peer_addr;
     std::map<std::string, std::string> labels;
 
     Store(uint64_t id_, const std::string & addr_, const std::string & peer_addr_, const std::map<std::string, std::string> & labels_)
-        : id(id_), addr(addr_), peer_addr(peer_addr_), labels(labels_)
+        : id(id_), labels(labels_), addr(addr_), peer_addr(peer_addr_)
     {}
+
+    std::string getAddr(const StoreType store_type)
+    {
+        if (store_type == TiFlash || peer_addr.empty())
+            return addr;
+        return peer_addr;
+    }
+
+private:
+    std::string addr;
+    std::string peer_addr;
 };
 
 struct RegionVerID
@@ -70,14 +79,9 @@ struct Region
 {
     metapb::Region meta;
     metapb::Peer peer;
-    std::vector<metapb::Peer> learners;
     std::atomic_uint work_flash_idx;
 
-    Region(const metapb::Region & meta_, const metapb::Peer & peer_, const std::vector<metapb::Peer> & learners_)
-        : meta(meta_), peer(peer_), learners(learners_)
-    {
-        work_flash_idx = 0;
-    }
+    Region(const metapb::Region & meta_, const metapb::Peer & peer_) : meta(meta_), peer(peer_) { work_flash_idx = 0; }
 
     const std::string & startKey() { return meta.start_key(); }
 
@@ -179,7 +183,7 @@ private:
 
     RegionPtr searchCachedRegion(const std::string & key);
 
-    std::vector<metapb::Peer> selectLearner(Backoffer & bo, const metapb::Region & meta);
+    std::vector<metapb::Peer> selectTiFlashPeer(Backoffer & bo, const metapb::Region & meta);
 
     void insertRegionToCache(RegionPtr region);
 
