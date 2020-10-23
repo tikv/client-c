@@ -34,7 +34,7 @@ struct RegionClient
 
     // This method send a request to region, but is NOT Thread-Safe !!
     template <typename T>
-    auto sendReqToRegion(Backoffer & bo, std::shared_ptr<T> req, int timeout = dailTimeout, StoreType store_type = TiKV)
+    auto sendReqToRegion(Backoffer & bo, std::shared_ptr<T> req, int timeout = dailTimeout, StoreType store_type = StoreType::TiKV)
     {
         RpcCall<T> rpc(req);
         for (;;)
