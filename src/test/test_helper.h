@@ -13,8 +13,8 @@ using namespace pingcap::kv;
 inline ClusterPtr createCluster(const std::vector<std::string> & pd_addrs)
 {
     ClusterConfig config;
-    config.engine_key = "engine";
-    config.engine_value = "zone";
+    config.tiflash_engine_key = "engine";
+    config.tiflash_engine_value = "tiflash";
     return std::make_unique<Cluster>(pd_addrs, config);
 }
 
