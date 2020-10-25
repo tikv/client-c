@@ -14,21 +14,23 @@ namespace pingcap
 namespace kv
 {
 
-enum StoreType
+enum class StoreType
 {
     TiKV,
-    TiFlash
+    TiFlash,
 };
 
 struct Store
 {
-    uint64_t id;
-    std::string addr;
-    std::string peer_addr;
-    std::map<std::string, std::string> labels;
+    const uint64_t id;
+    const std::string addr;
+    const std::string peer_addr;
+    const std::map<std::string, std::string> labels;
+    const StoreType store_type;
 
-    Store(uint64_t id_, const std::string & addr_, const std::string & peer_addr_, const std::map<std::string, std::string> & labels_)
-        : id(id_), addr(addr_), peer_addr(peer_addr_), labels(labels_)
+    Store(uint64_t id_, const std::string & addr_, const std::string & peer_addr_, const std::map<std::string, std::string> & labels_,
+        StoreType store_type_)
+        : id(id_), addr(addr_), peer_addr(peer_addr_), labels(labels_), store_type(store_type_)
     {}
 };
 
@@ -69,15 +71,10 @@ namespace kv
 struct Region
 {
     metapb::Region meta;
-    metapb::Peer peer;
-    std::vector<metapb::Peer> learners;
-    std::atomic_uint work_flash_idx;
+    metapb::Peer leader_peer;
+    std::atomic_uint work_tiflash_peer_idx;
 
-    Region(const metapb::Region & meta_, const metapb::Peer & peer_, const std::vector<metapb::Peer> & learners_)
-        : meta(meta_), peer(peer_), learners(learners_)
-    {
-        work_flash_idx = 0;
-    }
+    Region(const metapb::Region & meta_, const metapb::Peer & peer_) : meta(meta_), leader_peer(peer_), work_tiflash_peer_idx(0) {}
 
     const std::string & startKey() { return meta.start_key(); }
 
@@ -96,11 +93,11 @@ struct Region
 
     bool switchPeer(uint64_t store_id)
     {
-        for (int i = 0; i < meta.peers_size(); i++)
+        for (auto & peer : meta.peers())
         {
-            if (store_id == meta.peers(i).store_id())
+            if (peer.store_id() == store_id)
             {
-                peer = meta.peers(i);
+                leader_peer = peer;
                 return true;
             }
         }
@@ -142,10 +139,13 @@ class RegionCache
 {
 public:
     RegionCache(pd::ClientPtr pdClient_, const ClusterConfig & config)
-        : pd_client(pdClient_), learner_key(config.learner_key), learner_value(config.learner_value), log(&Logger::get("pingcap.tikv"))
+        : pd_client(pdClient_),
+          tiflash_engine_key(config.tiflash_engine_key),
+          tiflash_engine_value(config.tiflash_engine_value),
+          log(&Logger::get("pingcap.tikv"))
     {}
 
-    RPCContextPtr getRPCContext(Backoffer & bo, const RegionVerID & id, const StoreType store_type = TiKV);
+    RPCContextPtr getRPCContext(Backoffer & bo, const RegionVerID & id, const StoreType store_type = StoreType::TiKV);
 
     void updateLeader(Backoffer & bo, const RegionVerID & region_id, uint64_t leader_store_id);
 
@@ -179,7 +179,7 @@ private:
 
     RegionPtr searchCachedRegion(const std::string & key);
 
-    std::vector<metapb::Peer> selectLearner(Backoffer & bo, const metapb::Region & meta);
+    std::vector<metapb::Peer> selectTiFlashPeers(Backoffer & bo, const metapb::Region & meta);
 
     void insertRegionToCache(RegionPtr region);
 
@@ -200,9 +200,9 @@ private:
 
     std::mutex store_mutex;
 
-    const std::string learner_key;
+    const std::string tiflash_engine_key;
 
-    const std::string learner_value;
+    const std::string tiflash_engine_value;
 
     Logger * log;
 };
