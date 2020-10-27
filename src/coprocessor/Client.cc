@@ -77,6 +77,7 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
     if (resp->has_locked())
     {
         kv::LockPtr lock = std::make_shared<kv::Lock>(resp->locked());
+        log->debug("encounter lock problem: " + resp->locked().DebugString());
         std::vector<uint64_t> pushed;
         std::vector<kv::LockPtr> locks{lock};
         auto before_expired = cluster->lock_resolver->ResolveLocks(bo, task.req->start_ts, locks, pushed);
@@ -86,6 +87,7 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
         }
         if (before_expired > 0)
         {
+            log->information("get lock and sleep for a while, sleep time is " + std::to_string(before_expired) + "ms.");
             bo.backoffWithMaxSleep(kv::boTxnLockFast, before_expired, Exception(resp->locked().DebugString(), ErrorCodes::LockError));
         }
         return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, log);

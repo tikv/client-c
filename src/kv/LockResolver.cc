@@ -247,6 +247,7 @@ void LockResolver::resolvePessimisticLock(Backoffer & bo, LockPtr lock, std::uno
 
 TxnStatus LockResolver::getTxnStatusFromLock(Backoffer & bo, LockPtr lock, uint64_t caller_start_ts)
 {
+    log->debug("try to get txn status");
     uint64_t current_ts;
     if (lock->ttl == 0)
     {
@@ -265,6 +266,7 @@ TxnStatus LockResolver::getTxnStatusFromLock(Backoffer & bo, LockPtr lock, uint6
         }
         catch (Exception & e)
         {
+            log->information("get txn status failed: " + e.displayText());
             if (e.code() == ErrorCodes::TxnNotFound)
             {
                 bo.backoff(boTxnNotFound, e);
