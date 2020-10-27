@@ -266,7 +266,7 @@ TxnStatus LockResolver::getTxnStatusFromLock(Backoffer & bo, LockPtr lock, uint6
         }
         catch (Exception & e)
         {
-	    log->information("get txn status failed: " + e.displayText());
+            log->information("get txn status failed: " + e.displayText());
             if (e.code() == ErrorCodes::TxnNotFound)
             {
                 bo.backoff(boTxnNotFound, e);
