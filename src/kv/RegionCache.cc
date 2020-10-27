@@ -17,21 +17,26 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
         const auto & meta = region->meta;
         std::vector<metapb::Peer> peers;
         size_t start_index = 0;
-        if (store_type == TiKV)
-            peers.push_back(region->peer);
+        if (store_type == StoreType::TiKV)
+            peers.push_back(region->leader_peer);
         else
         {
-            peers = selectLearner(bo, meta);
-            start_index = region->work_flash_idx.fetch_add(1) + 1;
+            peers = selectTiFlashPeers(bo, meta);
+            start_index = ++region->work_tiflash_peer_idx;
         }
 
         size_t peer_size = peers.size();
         for (size_t i = 0; i < peer_size; i++)
         {
             size_t peer_index = (i + start_index) % peer_size;
-            auto peer = peers[peer_index];
-            std::string addr = getStore(bo, peer.store_id()).addr;
-            if (addr.empty())
+            auto & peer = peers[peer_index];
+            auto store = getStore(bo, peer.store_id());
+            if (store.store_type != store_type)
+            {
+                // store type not match, drop cache and raise region error.
+                continue;
+            }
+            if (store.addr.empty())
             {
                 dropStore(peer.store_id());
                 bo.backoff(boRegionMiss,
@@ -39,9 +44,9 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
                         StoreNotReady));
                 continue;
             }
-            if (store_type == TiFlash)
-                region->work_flash_idx.store(peer_index);
-            return std::make_shared<RPCContext>(id, meta, peer, addr);
+            if (store_type == StoreType::TiFlash)
+                region->work_tiflash_peer_idx.store(peer_index);
+            return std::make_shared<RPCContext>(id, meta, peer, store.addr);
         }
         dropRegion(id);
         bo.backoff(boRegionMiss, Exception("region miss, region id is: " + std::to_string(id.id), RegionUnavailable));
@@ -89,24 +94,18 @@ KeyLocation RegionCache::locateKey(Backoffer & bo, const std::string & key)
     return KeyLocation(region->verID(), region->startKey(), region->endKey());
 }
 
-// selectLearner select all learner peers.
-std::vector<metapb::Peer> RegionCache::selectLearner(Backoffer & bo, const metapb::Region & meta)
+// select all tiflash peers
+std::vector<metapb::Peer> RegionCache::selectTiFlashPeers(Backoffer & bo, const metapb::Region & meta)
 {
-    std::vector<metapb::Peer> learners;
-    for (int i = 0; i < meta.peers_size(); i++)
+    std::vector<metapb::Peer> tiflash_peers;
+    for (auto & peer : meta.peers())
     {
-        auto peer = meta.peers(i);
-        if (peer.is_learner())
+        if (getStore(bo, peer.store_id()).store_type == StoreType::TiFlash)
         {
-            auto store_id = peer.store_id();
-            auto labels = getStore(bo, store_id).labels;
-            if (labels[learner_key] == learner_value)
-            {
-                learners.push_back(peer);
-            }
+            tiflash_peers.push_back(peer);
         }
     }
-    return learners;
+    return tiflash_peers;
 }
 
 RegionPtr RegionCache::loadRegionByID(Backoffer & bo, uint64_t region_id)
@@ -128,7 +127,7 @@ RegionPtr RegionCache::loadRegionByID(Backoffer & bo, uint64_t region_id)
                 throw Exception("Receive Region with no peer", RegionUnavailable);
             }
 
-            RegionPtr region = std::make_shared<Region>(meta, meta.peers(0), selectLearner(bo, meta));
+            RegionPtr region = std::make_shared<Region>(meta, meta.peers(0));
             if (leader.IsInitialized())
             {
                 region->switchPeer(leader.store_id());
@@ -158,7 +157,7 @@ RegionPtr RegionCache::loadRegionByKey(Backoffer & bo, const std::string & key)
             {
                 throw Exception("Receive Region with no peer", RegionUnavailable);
             }
-            RegionPtr region = std::make_shared<Region>(meta, meta.peers(0), selectLearner(bo, meta));
+            RegionPtr region = std::make_shared<Region>(meta, meta.peers(0));
             if (leader.IsInitialized())
             {
                 region->switchPeer(leader.store_id());
@@ -194,11 +193,18 @@ Store RegionCache::reloadStore(Backoffer & bo, uint64_t id)
 {
     auto store = loadStore(bo, id);
     std::map<std::string, std::string> labels;
-    for (size_t i = 0; i < store.labels_size(); i++)
+    for (int i = 0; i < store.labels_size(); i++)
     {
         labels[store.labels(i).key()] = store.labels(i).value();
     }
-    auto it = stores.emplace(id, Store(id, store.address(), store.peer_address(), labels));
+    StoreType store_type = StoreType::TiKV;
+    {
+        if (auto it = labels.find(tiflash_engine_key); it != labels.end() && it->second == tiflash_engine_value)
+        {
+            store_type = StoreType::TiFlash;
+        }
+    }
+    auto it = stores.emplace(id, Store(id, store.address(), store.peer_address(), labels, store_type));
     return it.first->second;
 }
 
@@ -238,7 +244,7 @@ void RegionCache::insertRegionToCache(RegionPtr region)
     if (it != region_last_work_flash_index.end())
     {
         /// Set the work_flash_idx to the last_work_flash_index, otherwise it might always goto a invalid store
-        region->work_flash_idx.store(it->second);
+        region->work_tiflash_peer_idx.store(it->second);
         region_last_work_flash_index.erase(it);
     }
 }
@@ -256,7 +262,7 @@ void RegionCache::dropRegion(const RegionVerID & region_id)
             regions_map.erase(iter_by_key);
         }
         /// record the work flash index when drop region
-        region_last_work_flash_index[region_id.id] = iter_by_id->second->work_flash_idx.load();
+        region_last_work_flash_index[region_id.id] = iter_by_id->second->work_tiflash_peer_idx.load();
         regions.erase(iter_by_id);
         log->information("drop region " + std::to_string(region_id.id) + " because of send failure");
     }
@@ -301,7 +307,7 @@ void RegionCache::onRegionStale(Backoffer & bo, RPCContextPtr ctx, const errorpb
         {
             pd->processRegionResult(meta);
         }
-        RegionPtr region = std::make_shared<Region>(meta, meta.peers(0), selectLearner(bo, meta));
+        RegionPtr region = std::make_shared<Region>(meta, meta.peers(0));
         region->switchPeer(ctx->peer.store_id());
         insertRegionToCache(region);
     }
