@@ -27,7 +27,7 @@ struct RpcTypeTraits
         {                                                                                                                   \
             return client->stub->METHOD(context, req, res);                                                                 \
         }                                                                                                                   \
-    };
+     };
 
 PINGCAP_DEFINE_TRAITS(kvrpcpb, SplitRegion, SplitRegion)
 PINGCAP_DEFINE_TRAITS(kvrpcpb, Commit, KvCommit)

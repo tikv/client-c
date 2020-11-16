@@ -70,6 +70,8 @@ public:
     }
 
     auto callStream(grpc::ClientContext * context, std::shared_ptr<KvConnClient> client) { return Trait::doRPCCall(context, client, *req); }
+
+    auto callStreamAsync(grpc::ClientContext * context, std::shared_ptr<KvConnClient> client, grpc::CompletionQueue& cq, void* call) { return Trait::doAsyncRPCCall(context, client, *req, cq, call); }
 };
 
 template <typename T>
@@ -105,6 +107,14 @@ struct RpcClient
         ConnArrayPtr connArray = getConnArray(addr);
         auto connClient = connArray->get();
         return rpc.callStream(context, connClient);
+    }
+
+    template <class T>
+    auto sendStreamRequestAsync(std::string addr, grpc::ClientContext * context, RpcCall<T> & rpc, grpc::CompletionQueue& cq, void* call)
+    {
+        ConnArrayPtr connArray = getConnArray(addr);
+        auto connClient = connArray->get();
+        return rpc.callStreamAsync(context, connClient, cq, call);
     }
 };
 
