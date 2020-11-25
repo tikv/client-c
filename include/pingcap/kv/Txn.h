@@ -40,11 +40,15 @@ struct Txn
 
     void set(const std::string & key, const std::string & value) { buffer.emplace(key, value); }
 
+    void del(const std::string & key) { buffer.emplace(key, ""); }
+
     std::pair<std::string, bool> get(const std::string & key)
     {
         auto it = buffer.find(key);
         if (it != buffer.end())
         {
+            if (it->second == "")
+                return std::make_pair("", false);
             return std::make_pair(it->second, true);
         }
         Snapshot snapshot(cluster, start_ts);
