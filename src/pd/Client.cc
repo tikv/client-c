@@ -169,7 +169,7 @@ void Client::updateURLs(const ::google::protobuf::RepeatedPtrField<::pdpb::Membe
 
 void Client::leaderLoop()
 {
-    pingcap::SetThreadName("LeaderLoopCltC");
+    pingcap::SetThreadName("PDLeaderLoop");
 
     auto next_update_time = std::chrono::system_clock::now();
 

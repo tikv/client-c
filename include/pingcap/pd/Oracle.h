@@ -54,7 +54,7 @@ public:
 private:
     void updateTS(std::chrono::milliseconds update_interval)
     {
-        pingcap::SetThreadName("UpdateTSCltC");
+        pingcap::SetThreadName("PDUpdateTS");
 
         for (;;)
         {
