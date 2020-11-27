@@ -1,5 +1,5 @@
 #include <Poco/URI.h>
-#include <pingcap/Exception.h>
+#include <pingcap/SetThreadName.h>
 #include <pingcap/pd/Client.h>
 
 namespace pingcap
@@ -169,6 +169,8 @@ void Client::updateURLs(const ::google::protobuf::RepeatedPtrField<::pdpb::Membe
 
 void Client::leaderLoop()
 {
+    pingcap::SetThreadName("LeaderLoopCltC");
+
     auto next_update_time = std::chrono::system_clock::now();
 
     for (;;)

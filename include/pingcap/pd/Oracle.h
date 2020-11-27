@@ -1,7 +1,7 @@
 #pragma once
 
-#include <pingcap/Exception.h>
 #include <pingcap/Log.h>
+#include <pingcap/SetThreadName.h>
 #include <pingcap/pd/IClient.h>
 
 #include <chrono>
@@ -54,6 +54,8 @@ public:
 private:
     void updateTS(std::chrono::milliseconds update_interval)
     {
+        pingcap::SetThreadName("UpdateTSCltC");
+
         for (;;)
         {
             if (quit)
