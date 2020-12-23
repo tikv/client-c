@@ -25,7 +25,7 @@ uint64_t sendTxnHeartBeat(Backoffer & bo, Cluster * cluster, std::string & prima
 
 uint64_t txnLockTTL(std::chrono::milliseconds start, uint64_t txn_size);
 
-struct TTLManager
+class TTLManager
 {
 private:
     enum TTLManagerState

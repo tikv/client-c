@@ -53,15 +53,11 @@ struct Lock
           lock_type(l.lock_type()),
           lock_for_update_ts(l.lock_for_update_ts())
     {}
+
+    std::string toDebugString() const;
 };
 
 using LockPtr = std::shared_ptr<Lock>;
-
-inline std::string getLockInfo(LockPtr & lock)
-{
-    return "key: " + lock->key + " primary: " + lock->primary + " txn_start_ts: " + std::to_string(lock->txn_id) + " lock_for_update_ts: "
-        + std::to_string(lock->lock_for_update_ts) + " ttl: " + std::to_string(lock->ttl) + " type: " + std::to_string(lock->lock_type);
-}
 
 inline LockPtr extractLockFromKeyErr(const ::kvrpcpb::KeyError & key_err)
 {
@@ -69,7 +65,7 @@ inline LockPtr extractLockFromKeyErr(const ::kvrpcpb::KeyError & key_err)
     {
         return std::make_shared<Lock>(key_err.locked());
     }
-    throw Exception("unknown error : " + key_err.ShortDebugString());
+    throw Exception("unknown error : " + key_err.ShortDebugString(), ErrorCodes::UnknownError);
 }
 
 struct TxnExpireTime
