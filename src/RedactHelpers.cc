@@ -1,5 +1,6 @@
 #include <pingcap/RedactHelpers.h>
 
+#include <string.h>
 #include <iomanip>
 #include <memory>
 
