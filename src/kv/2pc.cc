@@ -1,3 +1,4 @@
+#include <pingcap/RedactHelpers.h>
 #include <pingcap/kv/2pc.h>
 #include <pingcap/kv/RegionClient.h>
 #include <pingcap/kv/Txn.h>
@@ -126,16 +127,16 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
                 const auto & err = response->errors(i);
                 if (err.has_already_exist())
                 {
-                    throw Exception("key : " + err.already_exist().key() + " has existed.", LogicalError);
+                    throw Exception("key : " + Redact::keyToDebugString(err.already_exist().key()) + " has existed.", LogicalError);
                 }
                 auto lock = extractLockFromKeyErr(err);
                 locks.push_back(lock);
             }
-            auto ms_before_exired = cluster->lock_resolver->resolveLocksForWrite(bo, start_ts, locks);
-            if (ms_before_exired > 0)
+            auto ms_before_expired = cluster->lock_resolver->resolveLocksForWrite(bo, start_ts, locks);
+            if (ms_before_expired > 0)
             {
                 bo.backoffWithMaxSleep(
-                    boTxnLock, ms_before_exired, Exception("2PC prewrite locked: " + std::to_string(locks.size()), LockError));
+                    boTxnLock, ms_before_expired, Exception("2PC prewrite locked: " + std::to_string(locks.size()), LockError));
             }
             continue;
         }

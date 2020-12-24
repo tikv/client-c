@@ -11,6 +11,7 @@ list(APPEND kvClient_sources kv/Snapshot.cc)
 list(APPEND kvClient_sources kv/Scanner.cc)
 list(APPEND kvClient_sources pd/Client.cc)
 list(APPEND kvClient_sources coprocessor/Client.cc)
+list(APPEND kvClient_sources RedactHelpers.cc)
 
 set(kvClient_INCLUDE_DIR ${kvClient_SOURCE_DIR}/include)
 

@@ -1,3 +1,4 @@
+#include <pingcap/RedactHelpers.h>
 #include <pingcap/kv/LockResolver.h>
 #include <pingcap/kv/RegionClient.h>
 
@@ -7,6 +8,13 @@ namespace pingcap
 {
 namespace kv
 {
+
+std::string Lock::toDebugString() const
+{
+    return "key: " + Redact::keyToDebugString(key) + " primary: " + Redact::keyToDebugString(primary)
+        + " txn_start_ts: " + std::to_string(txn_id) + " lock_for_update_ts: " + std::to_string(lock_for_update_ts)
+        + " ttl: " + std::to_string(ttl) + " type: " + std::to_string(lock_type);
+}
 
 int64_t LockResolver::ResolveLocks(Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks, std::vector<uint64_t> & pushed)
 {
@@ -75,7 +83,7 @@ int64_t LockResolver::resolveLocks(
                 {
                     log->warning("write conflict detected");
                     pushed.clear();
-                    // TODO: throw write confict exception
+                    // TODO: throw write conflict exception
                     throw Exception("write conflict", ErrorCodes::UnknownError);
                 }
             }
@@ -180,7 +188,7 @@ void LockResolver::resolveLock(Backoffer & bo, LockPtr lock, TxnStatus & status,
             req->add_keys(lock->key);
             if (!status.isCommited())
             {
-                log->information("resolveLock rollback lock " + getLockInfo(lock));
+                log->information("resolveLock rollback lock " + lock->toDebugString());
             }
         }
         RegionClient client(cluster, loc.region);
@@ -277,7 +285,7 @@ TxnStatus LockResolver::getTxnStatusFromLock(Backoffer & bo, LockPtr lock, uint6
         auto before_txn_expired_time = cluster->oracle->untilExpired(lock->txn_id, lock->ttl);
         if (before_txn_expired_time <= 0)
         {
-            log->warning("lock txn not found, lock has expired. " + getLockInfo(lock));
+            log->warning("lock txn not found, lock has expired. " + lock->toDebugString());
             if (lock->lock_type == ::kvrpcpb::PessimisticLock)
             {
                 return TxnStatus{};
