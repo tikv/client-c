@@ -1,6 +1,7 @@
 #include <pingcap/Exception.h>
 #include <pingcap/kv/RegionCache.h>
 #include <pingcap/pd/CodecClient.h>
+#include <pingcap/RedactHelpers.h>
 
 namespace pingcap
 {
@@ -151,7 +152,7 @@ RegionPtr RegionCache::loadRegionByKey(Backoffer & bo, const std::string & key)
             auto [meta, leader] = pd_client->getRegionByKey(key);
             if (!meta.IsInitialized())
             {
-                throw Exception("region not found for region key " + key, RegionUnavailable);
+                throw Exception("region not found for region key " + Redact::keyToDebugString(key), RegionUnavailable);
             }
             if (meta.peers_size() == 0)
             {

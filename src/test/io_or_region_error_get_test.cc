@@ -52,8 +52,9 @@ TEST_P(TestWithMockKV, testGetInjectError)
     ASSERT_EQ(result, "edf");
 }
 
-INSTANTIATE_TEST_SUITE_P(RunGetWithInjectedErr, TestWithMockKV,
-    testing::Values(
-        std::make_tuple<char *, char *>("server-is-busy", "2*return()"), std::make_tuple<char *, char *>("io-timeout", "8*return()")));
+INSTANTIATE_TEST_SUITE_P(RunGetWithInjectedErr,
+                         TestWithMockKV,
+                         testing::Values(std::make_tuple<char *, char *>("server-is-busy", "2*return()"),
+                                         std::make_tuple<char *, char *>("io-timeout", "8*return()")));
 
 } // namespace
