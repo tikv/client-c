@@ -39,6 +39,7 @@ PINGCAP_DEFINE_TRAITS(kvrpcpb, CheckTxnStatus, KvCheckTxnStatus)
 PINGCAP_DEFINE_TRAITS(kvrpcpb, ResolveLock, KvResolveLock)
 PINGCAP_DEFINE_TRAITS(kvrpcpb, PessimisticRollback, KVPessimisticRollback)
 PINGCAP_DEFINE_TRAITS(kvrpcpb, TxnHeartBeat, KvTxnHeartBeat)
+PINGCAP_DEFINE_TRAITS(kvrpcpb, CheckSecondaryLocks, KvCheckSecondaryLocks)
 PINGCAP_DEFINE_TRAITS(coprocessor, , Coprocessor)
 
 

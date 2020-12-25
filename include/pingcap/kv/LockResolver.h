@@ -5,6 +5,7 @@
 #include <pingcap/Log.h>
 #include <pingcap/kv/RegionCache.h>
 
+#include <optional>
 #include <queue>
 #include <string>
 
@@ -18,9 +19,10 @@ struct Cluster;
 // TxnStatus represents a txn's final status. It should be Lock or Commit or Rollback.
 struct TxnStatus
 {
-    uint64_t ttl;
-    uint64_t commit_ts;
+    uint64_t ttl = 0;
+    uint64_t commit_ts = 0;
     ::kvrpcpb::Action action;
+    std::optional<::kvrpcpb::LockInfo> primary_lock;
     bool isCommited() { return ttl == 0 && commit_ts > 0; }
 };
 
@@ -42,7 +44,9 @@ struct Lock
     uint64_t ttl;
     uint64_t txn_size;
     ::kvrpcpb::Op lock_type;
+    bool use_async_commit;
     uint64_t lock_for_update_ts;
+    uint64_t min_commit_ts;
 
     Lock(const ::kvrpcpb::LockInfo & l)
         : key(l.key()),
@@ -51,7 +55,9 @@ struct Lock
           ttl(l.lock_ttl()),
           txn_size(l.txn_size()),
           lock_type(l.lock_type()),
-          lock_for_update_ts(l.lock_for_update_ts())
+          use_async_commit(l.use_async_commit()),
+          lock_for_update_ts(l.lock_for_update_ts()),
+          min_commit_ts(l.min_commit_ts())
     {}
 
     std::string toDebugString() const;
@@ -90,6 +96,79 @@ struct TxnExpireTime
 
     int64_t value() { return initialized ? txn_expire : 0; }
 };
+
+// AsyncResolveData is data contributed by multiple threads when resolving locks using the async commit protocol. All
+// data should be protected by the mu field.
+struct AsyncResolveData
+{
+    std::mutex mu;
+    uint64_t commit_ts = 0;
+    std::vector<std::string> keys;
+    bool missing_lock = false;
+
+    explicit AsyncResolveData(uint64_t _commit_ts, bool _missing_lock = false) : commit_ts(_commit_ts), missing_lock(_missing_lock) {}
+
+    // addKeys adds the keys from locks to data, keeping other fields up to date. start_ts and _commit_ts are for the
+    // transaction being resolved.
+    //
+    // In the async commit protocol when checking locks, we send a list of keys to check and get back a list of locks. There
+    // will be a lock for every key which is locked. If there are fewer locks than keys, then a lock is missing because it
+    // has been committed, rolled back, or was never locked.
+    //
+    // In this function, resp->locks is the list of locks, and expected is the number of keys. AsyncResolveData.missing_lock will be
+    // set to true if the lengths don't match. If the lengths do match, then the locks are added to asyncResolveData.locks
+    // and will need to be resolved by the caller.
+    void addKeys(std::shared_ptr<::kvrpcpb::CheckSecondaryLocksResponse> resp, int expected, uint64_t start_ts)
+    {
+        std::lock_guard l(mu);
+
+        // Check locks to see if any has been commited or rolled back.
+        if (resp->locks_size() < expected)
+        {
+            // A lock is missing - the transaction must either have been rolled back or committed.
+            if (!missing_lock)
+            {
+                if (resp->commit_ts() != 0 && resp->commit_ts() < commit_ts)
+                {
+                    // commitTS == 0 => lock has been rolled back.
+                    throw Exception("commit TS must be greater than or equal to min commit TS: commit ts: "
+                            + std::to_string(resp->commit_ts()) + ", min commit ts: " + std::to_string(commit_ts),
+                        ErrorCodes::UnknownError);
+                }
+                commit_ts = resp->commit_ts();
+            }
+            missing_lock = true;
+            if (commit_ts != resp->commit_ts())
+            {
+                throw Exception("commit TS mismatch in async commit recovery: " + std::to_string(commit_ts) + " and "
+                        + std::to_string(resp->commit_ts()),
+                    ErrorCodes::UnknownError);
+            }
+
+            // We do not need to resolve the remaining locks because TiKV will have resolved them as appropriate.
+            return;
+        }
+
+        for (int i = 0; i < resp->locks_size(); i++)
+        {
+            auto & lock = resp->locks(i);
+            if (lock.lock_version() != start_ts)
+            {
+                throw Exception(
+                    "unexpected timestamp, expected: " + std::to_string(start_ts) + ", found: " + std::to_string(lock.lock_version()),
+                    ErrorCodes::UnknownError);
+            }
+
+            if (!missing_lock && lock.min_commit_ts() > commit_ts)
+            {
+                commit_ts = lock.min_commit_ts();
+            }
+            keys.push_back(lock.key());
+        }
+    }
+};
+
+using AsyncResolveDataPtr = std::shared_ptr<AsyncResolveData>;
 
 // LockResolver resolves locks and also caches resolved txn status.
 class LockResolver
@@ -144,6 +223,20 @@ private:
 
 
     void resolvePessimisticLock(Backoffer & bo, LockPtr lock, std::unordered_set<RegionVerID> & set);
+
+
+    void resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & status);
+
+
+    // Resolve locks in a region with pre-grouped keys. Only used by resolveLockAsync.
+    void resolveRegionLocks(Backoffer & bo, LockPtr lock, RegionVerID region_id, std::vector<std::string> & keys, TxnStatus & status);
+
+
+    AsyncResolveDataPtr checkAllSecondaries(Backoffer & bo, LockPtr lock, TxnStatus & status);
+
+
+    void checkSecondaries(
+        Backoffer & bo, uint64_t txn_id, std::vector<std::string> & cur_keys, RegionVerID cur_region_id, AsyncResolveDataPtr shared_data);
 
 
     TxnStatus getTxnStatusFromLock(Backoffer & bo, LockPtr lock, uint64_t caller_start_ts);

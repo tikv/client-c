@@ -34,8 +34,11 @@ struct Txn
 
     void commit()
     {
-        TwoPhaseCommitter committer(this);
-        committer.execute();
+        // Only enable async commit for test
+        bool use_async_commit = false;
+        fiu_do_on("use_async_commit", { use_async_commit = true; });
+        auto committer = std::make_shared<TwoPhaseCommitter>(this, use_async_commit);
+        committer->execute();
     }
 
     void set(const std::string & key, const std::string & value) { buffer.emplace(key, value); }

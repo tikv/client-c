@@ -35,7 +35,16 @@ struct BankCase
 
     void enable_check()
     {
-        check_thread = std::thread([&]() { verify(); });
+        check_thread = std::thread([&]() {
+            try
+            {
+                verify();
+            }
+            catch (Exception & e)
+            {
+                std::cerr << e.displayText() << std::endl;
+            }
+        });
     }
 
     void initialize()
@@ -44,7 +53,16 @@ struct BankCase
         std::vector<std::thread> threads;
         for (int i = 0; i < concurrency; i++)
         {
-            threads.push_back(std::thread([&]() { initAccount(); }));
+            threads.push_back(std::thread([&]() {
+                try
+                {
+                    initAccount();
+                }
+                catch (Exception & e)
+                {
+                    std::cerr << e.displayText() << std::endl;
+                }
+            }));
         }
         for (int i = 0; i < concurrency; i++)
         {
@@ -77,13 +95,21 @@ struct BankCase
                 key_count[key_index]++;
 
                 auto value = scanner.value();
-                total += std::stoi(value);
+                try
+                {
+                    total += std::stoi(value);
+                }
+                catch (std::exception & e)
+                {
+                    std::cerr << "Invalid value: " << value << " , key: " << key << ", version: " << snapshot.version << std::endl;
+                }
                 scanner.next();
                 cnt++;
             }
 
             if (account_cnt != cnt)
             {
+                std::cerr << "read ts: " << snapshot.version << std::endl;
                 for (int i = 0; i < account_cnt; i++)
                     if (key_count[i] != 1)
                     {
@@ -91,7 +117,7 @@ struct BankCase
                     }
             }
 
-            std::cerr << "total: " << total << " account " << account_cnt << " cnt " << cnt << std::endl;
+            std::cerr << "total: " << total << " account " << account_cnt << " cnt " << cnt << " version " << snapshot.version << std::endl;
             assert(total == account_cnt * 1000);
             std::this_thread::sleep_for(std::chrono::seconds(2));
         }
@@ -103,7 +129,16 @@ struct BankCase
         std::vector<std::thread> threads;
         for (int i = 0; i < concurrency; i++)
         {
-            threads.push_back(std::thread([&]() { moveMoney(); }));
+            threads.push_back(std::thread([&]() {
+                try
+                {
+                    moveMoney();
+                }
+                catch (Exception & e)
+                {
+                    std::cerr << e.displayText() << std::endl;
+                }
+            }));
         }
         for (int i = 0; i < concurrency; i++)
         {
@@ -111,6 +146,7 @@ struct BankCase
         }
         std::cerr << "bank case end execute\n";
     }
+
     void moveMoneyOnce(std::mt19937 & generator)
     {
         int from, to;
@@ -163,7 +199,13 @@ struct BankCase
     }
 
     int get_bank_key_index(std::string key) { return std::stoi(key.substr(key.find("_") + 1)); }
-    std::string bank_key(int idx) { return "bankkey_" + std::to_string(idx); }
+    std::string bank_key(int idx)
+    {
+        char buff[12] = "";
+        assert(idx < 10000 && idx >= 0);
+        std::sprintf(buff, "%04d", idx);
+        return "bankkey_" + std::string(buff);
+    }
     std::string bank_value(int money) { return std::to_string(money); }
 
     void initAccount()

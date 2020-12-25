@@ -1,6 +1,8 @@
 #include "../mock_tikv.h"
 #include "../test_helper.h"
 #include "bank_test.h"
+#include "fiu-control.h"
+#include "fiu.h"
 
 namespace
 {
@@ -18,6 +20,9 @@ protected:
 
         test_cluster = createCluster(pd_addrs);
         control_cluster = createCluster(pd_addrs);
+
+        fiu_init(0);
+        fiu_enable("use_async_commit", 1, NULL, 0);
     }
 
     mockkv::ClusterPtr mock_kv_cluster;
@@ -27,6 +32,7 @@ protected:
 };
 
 TEST_F(TestBankLoop, testBankForever)
+try
 {
     BankCase bank(test_cluster.get(), 3000, 6);
 
@@ -34,16 +40,38 @@ TEST_F(TestBankLoop, testBankForever)
 
     for (int i = 100; i < 3000; i += 100)
     {
-        control_cluster->splitRegion(bank.bank_key(i));
+        try
+        {
+            control_cluster->splitRegion(bank.bank_key(i));
+        }
+        catch (Exception & e)
+        {
+            std::cerr << e.displayText() << std::endl;
+        }
     }
 
     auto close_thread = std::thread([&]() {
-        std::this_thread::sleep_for(std::chrono::seconds(90));
-        bank.close();
+        try
+        {
+            std::this_thread::sleep_for(std::chrono::seconds(100));
+            bank.close();
+        }
+        catch (Exception & e)
+        {
+            std::cerr << e.displayText() << std::endl;
+        }
     });
 
     bank.execute();
     close_thread.join();
+}
+catch (Exception & e)
+{
+    std::cerr << e.displayText() << std::endl;
+}
+catch (std::exception & e)
+{
+    std::cerr << e.what() << std::endl;
 }
 
 } // namespace

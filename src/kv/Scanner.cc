@@ -87,6 +87,21 @@ void Scanner::getData(Backoffer & bo)
 
         // TODO Check safe point.
 
+        // TiKV will only return locked keys if there is response level error
+        if (response->has_error())
+        {
+            auto lock = extractLockFromKeyErr(response->error());
+            std::vector<LockPtr> locks{lock};
+            std::vector<uint64_t> pushed{};
+            auto ms_before_expired = snap.cluster->lock_resolver->ResolveLocks(bo, snap.version, locks, pushed);
+            if (ms_before_expired > 0)
+            {
+                bo.backoffWithMaxSleep(
+                    BackoffType::boTxnLockFast, ms_before_expired, Exception("key is locked during scanning", ErrorCodes::LockError));
+            }
+            continue;
+        }
+
         int pairs_size = response->pairs_size();
         idx = 0;
         cache.clear();

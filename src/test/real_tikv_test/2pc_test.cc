@@ -16,24 +16,25 @@ namespace kv
 struct TestTwoPhaseCommitter
 {
 private:
-    TwoPhaseCommitter committer;
+    TwoPhaseCommitterPtr committer;
 
 public:
-    TestTwoPhaseCommitter(Txn *txn) : committer{txn} {}
+    TestTwoPhaseCommitter(Txn * txn) : committer(std::make_shared<TwoPhaseCommitter>(txn)) {}
 
-    void prewriteKeys(Backoffer &bo, const std::vector<std::string> &keys) { committer.prewriteKeys(bo, keys); }
+    void prewriteKeys(Backoffer & bo, const std::vector<std::string> & keys) { committer->prewriteKeys(bo, keys); }
 
-    void commitKeys(Backoffer &bo, const std::vector<std::string> &keys) { committer.commitKeys(bo, keys); }
+    void commitKeys(Backoffer & bo, const std::vector<std::string> & keys) { committer->commitKeys(bo, keys); }
 
-    std::vector<std::string> keys() { return committer.keys; }
+    std::vector<std::string> keys() { return committer->keys; }
 
-    void setCommitTS(int64_t commit_ts) { committer.commit_ts = commit_ts; }
+    void setCommitTS(int64_t commit_ts) { committer->commit_ts = commit_ts; }
 };
 
-}
-}
+} // namespace kv
+} // namespace pingcap
 
-namespace {
+namespace
+{
 
 using namespace pingcap;
 using namespace pingcap::kv;
@@ -42,14 +43,12 @@ struct TestUtil
 {
     static std::string get_random_string(size_t length)
     {
-        auto randchar = []() -> char
-        {
-            const char charset[] =
-            "0123456789"
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-            "abcdefghijklmnopqrstuvwxyz";
+        auto randchar = []() -> char {
+            const char charset[] = "0123456789"
+                                   "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                                   "abcdefghijklmnopqrstuvwxyz";
             const size_t max_index = (sizeof(charset) - 1);
-            return charset[ rand() % max_index ];
+            return charset[rand() % max_index];
         };
         std::string str(length, 0);
         std::generate_n(str.begin(), length, randchar);
@@ -57,9 +56,11 @@ struct TestUtil
     }
 };
 
-class TestWith2PCRealTiKV : public testing::Test {
+class TestWith2PCRealTiKV : public testing::Test
+{
 protected:
-    void SetUp() override {
+    void SetUp() override
+    {
         std::vector<std::string> pd_addrs{"127.0.0.1:2379"};
 
         test_cluster = createCluster(pd_addrs);
@@ -68,7 +69,8 @@ protected:
     ClusterPtr test_cluster;
 };
 
-TEST_F(TestWith2PCRealTiKV, testCommitRollback) {
+TEST_F(TestWith2PCRealTiKV, testCommitRollback)
+{
 
     // Commit.
     {
@@ -104,7 +106,8 @@ TEST_F(TestWith2PCRealTiKV, testCommitRollback) {
     }
 }
 
-TEST_F(TestWith2PCRealTiKV, commitAfterReadByOtherTxn) {
+TEST_F(TestWith2PCRealTiKV, commitAfterReadByOtherTxn)
+{
 
     // Commit.
     {
@@ -154,7 +157,8 @@ TEST_F(TestWith2PCRealTiKV, commitAfterReadByOtherTxn) {
     }
 }
 
-TEST_F(TestWith2PCRealTiKV, testLargeTxn) {
+TEST_F(TestWith2PCRealTiKV, testLargeTxn)
+{
     // Commit.
     {
         Txn txn(test_cluster.get());
@@ -176,7 +180,7 @@ TEST_F(TestWith2PCRealTiKV, testLargeTxn) {
         txn1.set("b", "b1");
         txn1.set("c", "c1");
         std::unordered_set<std::string> inserted_keys;
-        for (size_t i = 0 ; i < 33 * 1024 * 1024; i++)
+        for (size_t i = 0; i < 33 * 1024 * 1024; i++)
         {
             if (i % 1000000 == 0)
             {
@@ -199,7 +203,7 @@ TEST_F(TestWith2PCRealTiKV, testLargeTxn) {
         {
             committer.prewriteKeys(prewrite_bo, committer.keys());
         }
-        catch(Exception & e)
+        catch (Exception & e)
         {
             std::cout << "Prewrite meet exception: " << e.message() << std::endl;
         }
@@ -230,7 +234,8 @@ TEST_F(TestWith2PCRealTiKV, testLargeTxn) {
     }
 }
 
-TEST_F(TestWith2PCRealTiKV, testScanWithLargeTxn) {
+TEST_F(TestWith2PCRealTiKV, testScanWithLargeTxn)
+{
     std::vector<std::string> keys;
     std::string prefix = "test_scan_";
     std::string candidates = "abcdefghijklmnopqrstuvwxyz";
@@ -262,7 +267,7 @@ TEST_F(TestWith2PCRealTiKV, testScanWithLargeTxn) {
             txn1.set(key, key + "1");
         }
         std::unordered_set<std::string> inserted_keys;
-        for (size_t i = 0 ; i < 33 * 1024 * 1024; i++)
+        for (size_t i = 0; i < 33 * 1024 * 1024; i++)
         {
             if (i % 1000000 == 0)
             {
@@ -286,7 +291,7 @@ TEST_F(TestWith2PCRealTiKV, testScanWithLargeTxn) {
         {
             committer.prewriteKeys(prewrite_bo, committer.keys());
         }
-        catch(Exception & e)
+        catch (Exception & e)
         {
             std::cout << "Prewrite meet exception: " << e.message() << std::endl;
         }
@@ -332,4 +337,4 @@ TEST_F(TestWith2PCRealTiKV, testScanWithLargeTxn) {
     }
 }
 
-}
+} // namespace
