@@ -51,6 +51,8 @@ public:
 
     uint64_t getLowResolutionTimestamp() { return last_ts; }
 
+    bool isExpired(uint64_t lock_ts, uint64_t ttl) { return untilExpired(lock_ts, ttl) <= 0; }
+
 private:
     void updateTS(std::chrono::milliseconds update_interval)
     {

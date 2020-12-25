@@ -42,4 +42,4 @@ cmake-build*
 *.swo
 tags
 .clang-format
-
+.vscode

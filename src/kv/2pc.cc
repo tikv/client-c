@@ -39,7 +39,8 @@ uint64_t txnLockTTL(std::chrono::milliseconds start, uint64_t txn_size)
     return lock_ttl + elapsed.count();
 }
 
-TwoPhaseCommitter::TwoPhaseCommitter(Txn * txn) : log(&Logger::get("pingcap.tikv"))
+TwoPhaseCommitter::TwoPhaseCommitter(Txn * txn, bool _use_async_commit)
+    : log(&Logger::get("pingcap.tikv")), use_async_commit(_use_async_commit), start_time(txn->start_time)
 {
     commited = false;
     txn->walkBuffer([&](const std::string & key, const std::string & value) {
@@ -64,8 +65,39 @@ void TwoPhaseCommitter::execute()
 {
     try
     {
+        if (use_async_commit)
+        {
+            // If we want to use async commit or 1PC and also want external consistency across
+            // all nodes, we have to make sure the commit TS of this transaction is greater
+            // than the snapshot TS of all existent readers. So we get a new timestamp
+            // from PD as our MinCommitTS.
+            min_commit_ts = cluster->pd_client->getTS();
+            calculateMaxCommitTS();
+        }
         Backoffer prewrite_bo(prewriteMaxBackoff);
         prewriteKeys(prewrite_bo, keys);
+        if (use_async_commit)
+        {
+            commit_ts = min_commit_ts;
+            // The transaction is considered success here with async commit
+            auto self = shared_from_this();
+            std::thread([self]() {
+                try
+                {
+                    Backoffer commit_bo(commitMaxBackoff);
+                    self->commitKeys(commit_bo, self->keys);
+                }
+                catch (Exception & e)
+                {
+                    // TODO: Handle exception
+                    self->log->warning("AsyncCommit Failed: " + e.displayText());
+                }
+                self->ttl_manager.close();
+            }).detach();
+
+            return;
+        }
+
         commit_ts = cluster->pd_client->getTS();
         // TODO: check expired
         Backoffer commit_bo(commitMaxBackoff);
@@ -81,7 +113,18 @@ void TwoPhaseCommitter::execute()
             // TODO: Rollback keys.
         }
         log->warning("write commit exception: " + e.displayText());
+        throw;
     }
+}
+
+void TwoPhaseCommitter::calculateMaxCommitTS()
+{
+    uint64_t current_ts
+        = (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch() - start_time).count()
+              << pd::physicalShiftBits)
+        + start_ts;
+    uint64_t safe_window = std::chrono::milliseconds(std::chrono::seconds(2)).count() << pd::physicalShiftBits;
+    max_commit_ts = current_ts + safe_window;
 }
 
 void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & batch)
@@ -101,8 +144,28 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
         req->set_start_version(start_ts);
         req->set_lock_ttl(lock_ttl);
         req->set_txn_size(batch_txn_size);
-        // TODO: set right min_commit_ts for pessimistic lock
-        req->set_min_commit_ts(start_ts + 1);
+        req->set_max_commit_ts(max_commit_ts);
+        if (use_async_commit)
+        {
+            if (batch.is_primary)
+            {
+                for (auto & [k, v] : mutations)
+                {
+                    if (k == primary_lock)
+                        continue;
+                    auto * secondary = req->add_secondaries();
+                    *secondary = k;
+                }
+            }
+            // The async commit can not be used for large transactions, and the commit ts can't be pushed.
+            req->set_min_commit_ts(0);
+            req->set_use_async_commit(true);
+        }
+        else
+        {
+            // TODO: set right min_commit_ts for pessimistic lock
+            req->set_min_commit_ts(start_ts + 1);
+        }
 
         std::shared_ptr<kvrpcpb::PrewriteResponse> response;
         RegionClient region_client(cluster, batch.region);
@@ -148,7 +211,25 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
                 // start the ttlManager. The ttlManager will be closed in tikvTxn.Commit().
                 if (txn_size > ttlManagerRunThreshold)
                 {
-                    ttl_manager.run(this);
+                    ttl_manager.run(shared_from_this());
+                }
+            }
+
+            if (use_async_commit)
+            {
+                if (response->min_commit_ts() == 0)
+                {
+                    log->warning("async commit cannot proceed since the returned minCommitTS is zero, fallback to normal path");
+                    use_async_commit = false;
+                }
+                else
+                {
+                    commit_ts_mu.lock();
+                    if (response->min_commit_ts() > min_commit_ts)
+                    {
+                        min_commit_ts = response->min_commit_ts();
+                    }
+                    commit_ts_mu.unlock();
                 }
             }
         }
@@ -176,6 +257,7 @@ void TwoPhaseCommitter::commitSingleBatch(Backoffer & bo, const BatchKeys & batc
     catch (Exception & e)
     {
         bo.backoff(boRegionMiss, e);
+        commit_ts = cluster->pd_client->getTS();
         commitKeys(bo, batch.keys);
         return;
     }
@@ -219,7 +301,7 @@ uint64_t sendTxnHeartBeat(Backoffer & bo, Cluster * cluster, std::string & prima
     }
 }
 
-void TTLManager::keepAlive(TwoPhaseCommitter * committer)
+void TTLManager::keepAlive(TwoPhaseCommitterPtr committer)
 {
     for (;;)
     {

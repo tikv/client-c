@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 2.8)
 project(kvClient)
 set (CMAKE_CXX_STANDARD 17)
 set (CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wno-narrowing")
+set (CMAKE_EXPORT_COMPILE_COMMANDS ON)
 enable_testing()
 
 if (NOT gRPC_FOUND)

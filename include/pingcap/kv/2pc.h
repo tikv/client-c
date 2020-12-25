@@ -7,8 +7,10 @@
 #include <pingcap/kv/LockResolver.h>
 
 #include <cmath>
+#include <memory>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace pingcap
@@ -20,6 +22,8 @@ constexpr uint32_t txnCommitBatchSize = 16 * 1024;
 struct Txn;
 
 struct TwoPhaseCommitter;
+
+using TwoPhaseCommitterPtr = std::shared_ptr<TwoPhaseCommitter>;
 
 uint64_t sendTxnHeartBeat(Backoffer & bo, Cluster * cluster, std::string & primary_key, uint64_t start_ts, uint64_t ttl);
 
@@ -41,9 +45,9 @@ private:
     std::thread * worker;
 
 public:
-    TTLManager() : state{StateUninitialized}, worker_running{false} {}
+    TTLManager() : state{StateUninitialized}, worker_running{false}, worker{nullptr} {}
 
-    void run(TwoPhaseCommitter * committer)
+    void run(TwoPhaseCommitterPtr committer)
     {
         // Run only once and start a background thread to refresh lock ttl
         uint32_t expected = StateUninitialized;
@@ -64,31 +68,42 @@ public:
         {
             worker->join();
             worker_running = false;
+            delete worker;
         }
     }
 
-    void keepAlive(TwoPhaseCommitter * committer);
+    void keepAlive(TwoPhaseCommitterPtr committer);
 };
 
-struct TwoPhaseCommitter
+struct TwoPhaseCommitter : public std::enable_shared_from_this<TwoPhaseCommitter>
 {
 private:
     std::unordered_map<std::string, std::string> mutations;
 
     std::vector<std::string> keys;
-    int64_t start_ts;
-    int64_t commit_ts;
+    uint64_t start_ts = 0;
+
+    std::shared_mutex commit_ts_mu;
+    uint64_t commit_ts = 0;
+    uint64_t min_commit_ts = 0;
+    uint64_t max_commit_ts = 0;
+
+    // Used to calculate max_commit_ts
+    std::chrono::milliseconds start_time;
 
     Cluster * cluster;
 
     std::unordered_map<uint64_t, int> region_txn_size;
-    uint64_t txn_size;
+    uint64_t txn_size = 0;
 
-    int lock_ttl;
+    int lock_ttl = 0;
 
     std::string primary_lock;
     // commited means primary key has been written to kv stores.
     bool commited;
+
+    // Only for test now
+    bool use_async_commit;
 
     TTLManager ttl_manager;
 
@@ -99,7 +114,7 @@ private:
     friend class TestTwoPhaseCommitter;
 
 public:
-    TwoPhaseCommitter(Txn * txn);
+    TwoPhaseCommitter(Txn * txn, bool _use_async_commit = false);
 
     void execute();
 
@@ -115,8 +130,13 @@ private:
     {
         RegionVerID region;
         std::vector<std::string> keys;
-        BatchKeys(const RegionVerID & region_, const std::vector<std::string> & keys_) : region(region_), keys(keys_) {}
+        bool is_primary;
+        BatchKeys(const RegionVerID & region_, std::vector<std::string> keys_, bool is_primary_ = false)
+            : region(region_), keys(std::move(keys_)), is_primary(is_primary_)
+        {}
     };
+
+    void calculateMaxCommitTS();
 
     void prewriteKeys(Backoffer & bo, const std::vector<std::string> & keys) { doActionOnKeys<ActionPrewrite>(bo, keys); }
 
@@ -155,6 +175,7 @@ private:
         if (primary_idx != std::numeric_limits<uint64_t>::max() && primary_idx != 0)
         {
             std::swap(batches[0], batches[primary_idx]);
+            batches[0].is_primary = true;
         }
 
         if constexpr (action == ActionCommit || action == ActionCleanUp)
@@ -175,8 +196,6 @@ private:
     template <Action action>
     void doActionOnBatches(Backoffer & bo, const std::vector<BatchKeys> & batches)
     {
-        if (batches.empty())
-            return;
         for (const auto & batch : batches)
         {
             if constexpr (action == ActionPrewrite)

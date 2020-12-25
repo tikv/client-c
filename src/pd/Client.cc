@@ -47,6 +47,8 @@ Client::Client(const std::vector<std::string> & addrs, const ClusterConfig & con
     work_threads_stop = false;
 
     work_thread = std::thread([&]() { leaderLoop(); });
+
+    check_leader.store(false);
 }
 
 Client::~Client()
