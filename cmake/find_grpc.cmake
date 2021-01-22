@@ -19,10 +19,4 @@ message(STATUS "Using ZLIB: ${ZLIB_INCLUDE_DIRS}, ${ZLIB_LIBRARIES}")
 find_package(gRPC CONFIG REQUIRED)
 message(STATUS "Using gRPC: ${gRPC_VERSION}")
 
-set(_PROTOBUF_LIBPROTOBUF protobuf::libprotobuf)
-set(_PROTOBUF_PROTOC $<TARGET_FILE:protobuf::protoc>)
-set(_GRPC_GRPCPP_UNSECURE gRPC::grpc++_unsecure)
 set(_GRPC_GRPCPP gRPC::grpc++)
-set(_GRPC_CPP_PLUGIN_EXECUTABLE $<TARGET_FILE:gRPC::grpc_cpp_plugin>)
-
-set(gRPC_FOUND TRUE)
