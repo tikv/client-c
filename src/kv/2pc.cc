@@ -157,8 +157,7 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
                     *secondary = k;
                 }
             }
-            // The async commit can not be used for large transactions, and the commit ts can't be pushed.
-            req->set_min_commit_ts(0);
+            req->set_min_commit_ts(min_commit_ts);
             req->set_use_async_commit(true);
         }
         else
@@ -166,6 +165,8 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
             // TODO: set right min_commit_ts for pessimistic lock
             req->set_min_commit_ts(start_ts + 1);
         }
+
+        fiu_do_on("invalid_max_commit_ts", { req->set_max_commit_ts(min_commit_ts - 1); });
 
         std::shared_ptr<kvrpcpb::PrewriteResponse> response;
         RegionClient region_client(cluster, batch.region);
