@@ -36,77 +36,99 @@ int64_t LockResolver::resolveLocks(
     }
     for (auto & lock : locks)
     {
-        TxnStatus status;
-        try
+        bool force_sync_commit = false;
+        // This loop is used to fallback to resolveLock when resolveLockAsync meets non-async-commit locks.
+        for (;;)
         {
-            status = getTxnStatusFromLock(bo, lock, caller_start_ts);
-        }
-        catch (Exception & e)
-        {
-            log->warning("get txn status failed: " + e.displayText());
-            before_txn_expired.update(0);
-            pushed.clear();
-            return before_txn_expired.value();
-        }
-        if (status.ttl == 0)
-        {
-            bool exists = true;
-            if (clean_txns.find(lock->txn_id) == clean_txns.end())
-            {
-                exists = false;
-                clean_txns.try_emplace(lock->txn_id);
-            }
-            auto & set = clean_txns[lock->txn_id];
+            TxnStatus status;
             try
             {
-                if (status.primary_lock.has_value() && status.primary_lock->use_async_commit() && !exists)
-                {
-                    resolveLockAsync(bo, lock, status);
-                }
-                else if (lock->lock_type == ::kvrpcpb::PessimisticLock)
-                {
-                    resolvePessimisticLock(bo, lock, set);
-                }
-                else
-                {
-                    resolveLock(bo, lock, status, set);
-                }
+                status = getTxnStatusFromLock(bo, lock, caller_start_ts, force_sync_commit);
             }
             catch (Exception & e)
             {
-                log->warning("resolve txn failed: " + e.displayText());
+                log->warning("get txn status failed: " + e.displayText());
                 before_txn_expired.update(0);
                 pushed.clear();
                 return before_txn_expired.value();
             }
-        }
-        else
-        {
-            auto before_txn_expired_time = cluster->oracle->untilExpired(lock->txn_id, status.ttl);
-            before_txn_expired.update(before_txn_expired_time);
-            if (for_write)
+
+            if (status.ttl == 0)
             {
-                // Write conflict detected!
-                // If it's a optimistic conflict and current txn is earlier than the lock owner,
-                // abort current transaction.
-                // This could avoids the deadlock scene of two large transaction.
-                if (lock->lock_type != ::kvrpcpb::PessimisticLock && lock->txn_id > caller_start_ts)
+                bool exists = true;
+                if (clean_txns.find(lock->txn_id) == clean_txns.end())
                 {
-                    log->warning("write conflict detected");
+                    exists = false;
+                    clean_txns.try_emplace(lock->txn_id);
+                }
+                auto & set = clean_txns[lock->txn_id];
+                try
+                {
+                    if (status.primary_lock.has_value() && !force_sync_commit && status.primary_lock->use_async_commit() && !exists)
+                    {
+                        try
+                        {
+                            resolveLockAsync(bo, lock, status);
+                        }
+                        catch (Exception & e)
+                        {
+                            if (e.code() == NonAsyncCommit)
+                            {
+                                force_sync_commit = true;
+                                continue;
+                            }
+                            else
+                            {
+                                throw;
+                            }
+                        }
+                    }
+                    else if (lock->lock_type == ::kvrpcpb::PessimisticLock)
+                    {
+                        resolvePessimisticLock(bo, lock, set);
+                    }
+                    else
+                    {
+                        resolveLock(bo, lock, status, set);
+                    }
+                }
+                catch (Exception & e)
+                {
+                    log->warning("resolve txn failed: " + e.displayText());
+                    before_txn_expired.update(0);
                     pushed.clear();
-                    // TODO: throw write conflict exception
-                    throw Exception("write conflict", ErrorCodes::UnknownError);
+                    return before_txn_expired.value();
                 }
             }
             else
             {
-                if (status.action != ::kvrpcpb::MinCommitTSPushed)
+                auto before_txn_expired_time = cluster->oracle->untilExpired(lock->txn_id, status.ttl);
+                before_txn_expired.update(before_txn_expired_time);
+                if (for_write)
                 {
-                    push_fail = true;
-                    continue;
+                    // Write conflict detected!
+                    // If it's a optimistic conflict and current txn is earlier than the lock owner,
+                    // abort current transaction.
+                    // This could avoids the deadlock scene of two large transaction.
+                    if (lock->lock_type != ::kvrpcpb::PessimisticLock && lock->txn_id > caller_start_ts)
+                    {
+                        log->warning("write conflict detected");
+                        pushed.clear();
+                        // TODO: throw write conflict exception
+                        throw Exception("write conflict", ErrorCodes::UnknownError);
+                    }
                 }
-                pushed.push_back(lock->txn_id);
+                else
+                {
+                    if (status.action != ::kvrpcpb::MinCommitTSPushed)
+                    {
+                        push_fail = true;
+                        break;
+                    }
+                    pushed.push_back(lock->txn_id);
+                }
             }
+            break;
         }
     }
     if (push_fail)
@@ -123,7 +145,7 @@ int64_t LockResolver::resolveLocksForWrite(Backoffer & bo, uint64_t caller_start
 }
 
 TxnStatus LockResolver::getTxnStatus(Backoffer & bo, uint64_t txn_id, const std::string & primary, uint64_t caller_start_ts,
-    uint64_t current_ts, bool rollback_if_not_exists)
+    uint64_t current_ts, bool rollback_if_not_exists, bool force_sync_commit)
 {
     TxnStatus * cached_status = getResolved(txn_id);
     if (cached_status != nullptr)
@@ -138,6 +160,7 @@ TxnStatus LockResolver::getTxnStatus(Backoffer & bo, uint64_t txn_id, const std:
     req->set_caller_start_ts(caller_start_ts);
     req->set_current_ts(current_ts);
     req->set_rollback_if_not_exist(rollback_if_not_exists);
+    req->set_force_sync_commit(force_sync_commit);
     for (;;)
     {
         auto loc = cluster->region_cache->locateKey(bo, primary);
@@ -298,7 +321,7 @@ void LockResolver::resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & st
             catch (Exception & e)
             {
                 errors.fetch_add(1);
-                log->error("resolveRegionLocks error: " + e.displayText());
+                log->warning("ResolveRegionLocks error: " + e.displayText());
             }
         });
     }
@@ -358,6 +381,8 @@ void LockResolver::resolveRegionLocks(
 AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lock, TxnStatus & status)
 {
     std::vector<std::string> secondaries;
+    std::atomic_bool need_fallback{false};
+
     secondaries.reserve(status.primary_lock->secondaries_size());
     for (size_t i = 0; i < status.primary_lock->secondaries_size(); i++)
     {
@@ -380,8 +405,12 @@ AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lo
             }
             catch (Exception & e)
             {
+                if (e.code() == ErrorCodes::NonAsyncCommit)
+                {
+                    need_fallback.store(true);
+                }
                 errors.fetch_add(1);
-                log->error("checkSecondaries error: " + e.displayText());
+                log->warning("CheckSecondaryLocks error: " + e.displayText());
             }
         });
     }
@@ -391,6 +420,10 @@ AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lo
         t.join();
     }
 
+    if (need_fallback.load())
+    {
+        throw Exception("CheckSecondaryLocks receives a non-async-commit lock", ErrorCodes::NonAsyncCommit);
+    }
     if (errors.load() > 0)
     {
         throw Exception("resolveAsyncLock failed", ErrorCodes::UnknownError);
@@ -436,11 +469,11 @@ void LockResolver::checkSecondaries(
     shared_data->addKeys(response, cur_keys.size(), txn_id);
 }
 
-TxnStatus LockResolver::getTxnStatusFromLock(Backoffer & bo, LockPtr lock, uint64_t caller_start_ts)
+TxnStatus LockResolver::getTxnStatusFromLock(Backoffer & bo, LockPtr lock, uint64_t caller_start_ts, bool force_sync_commit)
 {
     log->debug("try to get txn status");
     uint64_t current_ts;
-    if (lock->use_async_commit)
+    if (lock->use_async_commit && !force_sync_commit)
     {
         current_ts = 0;
         caller_start_ts = 0;
@@ -458,7 +491,7 @@ TxnStatus LockResolver::getTxnStatusFromLock(Backoffer & bo, LockPtr lock, uint6
     {
         try
         {
-            return getTxnStatus(bo, lock->txn_id, lock->primary, caller_start_ts, current_ts, rollback_if_not_exists);
+            return getTxnStatus(bo, lock->txn_id, lock->primary, caller_start_ts, current_ts, rollback_if_not_exists, force_sync_commit);
         }
         catch (Exception & e)
         {
