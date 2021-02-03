@@ -15,8 +15,7 @@ fi
 
 build_dir="$SRCPATH/build"
 mkdir -p $build_dir && cd $build_dir
-cmake "$SRCPATH" \
-    -DENABLE_TESTS=on
+cmake "$SRCPATH" -DENABLE_TESTS=on
 make -j $NPROC
 
 nohup /mock-tikv/bin/mock-tikv &

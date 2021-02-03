@@ -4,8 +4,8 @@ list(APPEND test_libs
     kvproto
     kv_client
     ${Protobuf_LIBRARY}
-    Poco::Net
-    Poco::JSON
+    PocoNet
+    PocoJSON
     gtest_main
     fiu)
 

@@ -7,3 +7,6 @@
 [submodule "third_party/libfiu"]
 	path = third_party/libfiu
 	url = https://github.com/albertito/libfiu.git
+[submodule "third_party/poco"]
+	path = third_party/poco
+	url = https://github.com/pocoproject/poco.git

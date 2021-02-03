@@ -9,9 +9,7 @@ if (NOT gRPC_FOUND)
     include (cmake/find_grpc.cmake)
 endif ()
 
-if (NOT Poco_Foundation_LIBRARY)
-    include (cmake/find_poco.cmake)
-endif()
+include (cmake/find_poco.cmake)
 
 if (NOT KVPROTO_FOUND)
     include (cmake/find_kvproto.cmake)
