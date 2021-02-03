@@ -8,10 +8,18 @@ if (USE_INTERNAL_GTEST_LIBRARY AND ENABLE_TESTS)
 endif ()
 
 if ( USE_INTERNAL_POCO_LIBRARY )
-    set ( __save_ENABLE_TESTS ${ENABLE_TESTS} )
-    set ( ENABLE_TESTS 0 )
+    set ( SAVED_ENABLE_TESTS )
+    if ( ENABLE_TESTS )
+        set ( ENABLE_TESTS OFF CACHE BOOL "" FORCE )
+        set ( SAVED_ENABLE_TESTS 1 )
+    endif ()
+
     add_subdirectory ( poco )
-    set ( ENABLE_TESTS ${__save_ENABLE_TESTS} )
+
+    if ( SAVED_ENABLE_TESTS )
+        set ( ENABLE_TESTS ON CACHE BOOL "" FORCE )
+        unset ( SAVED_ENABLE_TESTS )
+    endif ()
 endif ()
 
 set(fiu_include_dirs libfiu/libfiu)
