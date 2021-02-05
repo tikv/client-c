@@ -26,7 +26,7 @@ struct Cluster
 
     LockResolverPtr lock_resolver;
 
-    Cluster() : pd_client(std::make_shared<pd::MockPDClient>()) {}
+    Cluster() : pd_client(std::make_shared<pd::MockPDClient>()), rpc_client(std::make_unique<RpcClient>()) {}
 
     Cluster(const std::vector<std::string> & pd_addrs, const ClusterConfig & config)
         : pd_client(std::make_shared<pd::CodecClient>(pd_addrs, config)),
