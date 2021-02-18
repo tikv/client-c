@@ -159,6 +159,11 @@ struct AsyncResolveData
                     ErrorCodes::UnknownError);
             }
 
+            if (!lock.use_async_commit())
+            {
+                throw Exception("CheckSecondaryLocks receives a non-async-commit lock", ErrorCodes::NonAsyncCommit);
+            }
+
             if (!missing_lock && lock.min_commit_ts() > commit_ts)
             {
                 commit_ts = lock.min_commit_ts();
@@ -239,11 +244,11 @@ private:
         Backoffer & bo, uint64_t txn_id, std::vector<std::string> & cur_keys, RegionVerID cur_region_id, AsyncResolveDataPtr shared_data);
 
 
-    TxnStatus getTxnStatusFromLock(Backoffer & bo, LockPtr lock, uint64_t caller_start_ts);
+    TxnStatus getTxnStatusFromLock(Backoffer & bo, LockPtr lock, uint64_t caller_start_ts, bool force_sync_commit);
 
 
     TxnStatus getTxnStatus(Backoffer & bo, uint64_t txn_id, const std::string & primary, uint64_t caller_start_ts, uint64_t current_ts,
-        bool rollback_if_not_exists);
+        bool rollback_if_not_exists, bool force_sync_commit);
 
     Cluster * cluster;
     std::shared_mutex mu;

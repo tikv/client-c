@@ -26,7 +26,8 @@ enum ErrorCodes : int
     RegionEpochNotMatch = 14,
     CoprocessorError = 15,
     TxnNotFound = 16,
-    UnknownError = 17
+    NonAsyncCommit = 17,
+    UnknownError = 18
 };
 
 class Exception : public Poco::Exception
