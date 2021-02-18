@@ -35,7 +35,7 @@ void RegionClient::onRegionError(Backoffer & bo, RPCContextPtr rpc_ctx, const er
     {
         cluster->region_cache->onRegionStale(bo, rpc_ctx, err.epoch_not_match());
         // Epoch not match should not retry, throw exception directly !!
-        throw Exception("Region epoch not match!", RegionEpochNotMatch);
+        throw Exception("Region epoch not match for region " + rpc_ctx->region.toString() + ".", RegionEpochNotMatch);
     }
 
     if (err.has_server_is_busy())
