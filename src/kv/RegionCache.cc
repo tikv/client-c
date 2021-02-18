@@ -297,7 +297,7 @@ void RegionCache::updateLeader(Backoffer & bo, const RegionVerID & region_id, ui
 
 void RegionCache::onRegionStale(Backoffer & bo, RPCContextPtr ctx, const errorpb::EpochNotMatch & stale_epoch)
 {
-    log->information("region stale for region %d", (int)ctx->region.id);
+    log->information("region stale for region " + ctx->region.toString() + ".");
 
     dropRegion(ctx->region);
 
