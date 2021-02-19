@@ -109,14 +109,16 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
 
 void ResponseIter::handle_task(const copTask & task)
 {
-    kv::Backoffer bo(kv::copNextMaxBackoff);
+    std::unordered_map<uint64_t, kv::Backoffer> bo_maps;
     std::vector<copTask> remain_tasks({task});
     size_t idx = 0;
     while (idx < remain_tasks.size())
     {
         try
         {
-            auto new_tasks = handle_task_impl(bo, remain_tasks[idx]);
+            auto & current_task = remain_tasks[idx];
+            auto new_tasks
+                = handle_task_impl(bo_maps.try_emplace(current_task.region_id.id, kv::copNextMaxBackoff).first->second, current_task);
             if (new_tasks.size() > 0)
             {
                 remain_tasks.insert(remain_tasks.end(), new_tasks.begin(), new_tasks.end());
