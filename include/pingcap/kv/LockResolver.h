@@ -23,7 +23,24 @@ struct TxnStatus
     uint64_t commit_ts = 0;
     ::kvrpcpb::Action action;
     std::optional<::kvrpcpb::LockInfo> primary_lock;
-    bool isCommited() { return ttl == 0 && commit_ts > 0; }
+    bool isCommitted() { return ttl == 0 && commit_ts > 0; }
+
+    bool isCacheable()
+    {
+        if (isCommitted())
+        {
+            return true;
+        }
+        if (ttl == 0)
+        {
+            if (action == kvrpcpb::Action::NoAction || action == kvrpcpb::Action::LockNotExistRollback
+                || action == kvrpcpb::Action::TTLExpireRollback)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 };
 
 constexpr size_t resolvedCacheSize = 2048;
