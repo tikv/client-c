@@ -193,7 +193,7 @@ TxnStatus LockResolver::getTxnStatus(Backoffer & bo, uint64_t txn_id, const std:
         status.primary_lock = response->lock_info();
         if (status.primary_lock.has_value() && status.primary_lock->use_async_commit())
         {
-            if (client.cluster->oracle->isExpired(txn_id, response->lock_ttl()))
+            if (!client.cluster->oracle->isExpired(txn_id, response->lock_ttl()))
             {
                 status.ttl = response->lock_ttl();
             }
@@ -206,7 +206,10 @@ TxnStatus LockResolver::getTxnStatus(Backoffer & bo, uint64_t txn_id, const std:
         {
             status.ttl = 0;
             status.commit_ts = response->commit_version();
-            saveResolved(txn_id, status);
+            if (status.isCacheable())
+            {
+                saveResolved(txn_id, status);
+            }
         }
         return status;
     }
@@ -223,12 +226,12 @@ void LockResolver::resolveLock(Backoffer & bo, LockPtr lock, TxnStatus & status,
         }
         auto req = std::make_shared<::kvrpcpb::ResolveLockRequest>();
         req->set_start_version(lock->txn_id);
-        if (status.isCommited())
+        if (status.isCommitted())
             req->set_commit_version(status.commit_ts);
         if (lock->txn_size < bigTxnThreshold)
         {
             req->add_keys(lock->key);
-            if (!status.isCommited())
+            if (!status.isCommitted())
             {
                 log->information("resolveLock rollback lock " + lock->toDebugString());
             }
@@ -343,7 +346,7 @@ void LockResolver::resolveRegionLocks(
     auto req = std::make_shared<::kvrpcpb::ResolveLockRequest>();
     req->set_start_version(lock->txn_id);
 
-    if (status.isCommited())
+    if (status.isCommitted())
     {
         req->set_commit_version(status.commit_ts);
     }
