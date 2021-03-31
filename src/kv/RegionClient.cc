@@ -28,6 +28,7 @@ void RegionClient::onRegionError(Backoffer & bo, RPCContextPtr rpc_ctx, const er
     if (err.has_store_not_match())
     {
         cluster->region_cache->dropStore(rpc_ctx->peer.store_id());
+        cluster->region_cache->dropRegion(rpc_ctx->region);
         return;
     }
 
