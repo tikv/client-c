@@ -31,23 +31,31 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
         {
             size_t peer_index = (i + start_index) % peer_size;
             auto & peer = peers[peer_index];
-            auto store = getStore(bo, peer.store_id());
-            if (store.store_type != store_type || store.state == metapb::StoreState::Tombstone)
+            if (auto store = getStore(bo, peer.store_id()))
             {
-                // store type not match or store is deleted in pd, drop cache and raise region error.
+                if (store->store_type != store_type)
+                {
+                    // store type not match, drop cache and raise region error.
+                    continue;
+                }
+                if (store->addr.empty())
+                {
+                    dropStore(peer.store_id());
+                    bo.backoff(boRegionMiss,
+                        Exception("miss store, region id is: " + std::to_string(id.id) + " store id is: " + std::to_string(peer.store_id()),
+                            StoreNotReady));
+                    continue;
+                }
+                if (store_type == StoreType::TiFlash)
+                    region->work_tiflash_peer_idx.store(peer_index);
+                return std::make_shared<RPCContext>(id, meta, peer, store->addr);
+            }
+            else
+            {
+                // Empty store means that store is deleted in pd(i.e. store.state == Tombstone)
+                // We should drop cache
                 continue;
             }
-            if (store.addr.empty())
-            {
-                dropStore(peer.store_id());
-                bo.backoff(boRegionMiss,
-                    Exception("miss store, region id is: " + std::to_string(id.id) + " store id is: " + std::to_string(peer.store_id()),
-                        StoreNotReady));
-                continue;
-            }
-            if (store_type == StoreType::TiFlash)
-                region->work_tiflash_peer_idx.store(peer_index);
-            return std::make_shared<RPCContext>(id, meta, peer, store.addr);
         }
         dropRegion(id);
         bo.backoff(boRegionMiss, Exception("region miss, region id is: " + std::to_string(id.id), RegionUnavailable));
@@ -101,9 +109,12 @@ std::vector<metapb::Peer> RegionCache::selectTiFlashPeers(Backoffer & bo, const 
     std::vector<metapb::Peer> tiflash_peers;
     for (auto & peer : meta.peers())
     {
-        if (getStore(bo, peer.store_id()).store_type == StoreType::TiFlash)
+        if (auto store = getStore(bo, peer.store_id()))
         {
-            tiflash_peers.push_back(peer);
+            if (store->store_type == StoreType::TiFlash)
+            {
+                tiflash_peers.push_back(peer);
+            }
         }
     }
     return tiflash_peers;
@@ -172,16 +183,22 @@ RegionPtr RegionCache::loadRegionByKey(Backoffer & bo, const std::string & key)
     }
 }
 
-metapb::Store RegionCache::loadStore(Backoffer & bo, uint64_t id)
+std::optional<metapb::Store> RegionCache::loadStore(Backoffer & bo, uint64_t id)
 {
     for (;;)
     {
         try
         {
             // TODO:: The store may be not ready, it's better to check store's state.
-            const auto & store = pd_client->getStore(id);
-            log->information("load store id " + std::to_string(id) + " address %s", store.address());
-            return store;
+            if (const auto & store = pd_client->getStore(id))
+            {
+                log->information("load store id " + std::to_string(id) + " address %s", store->address());
+                return store;
+            }
+            else
+            {
+                return {};
+            }
         }
         catch (Exception & e)
         {
@@ -190,26 +207,29 @@ metapb::Store RegionCache::loadStore(Backoffer & bo, uint64_t id)
     }
 }
 
-Store RegionCache::reloadStore(Backoffer & bo, uint64_t id)
+std::optional<Store> RegionCache::reloadStore(Backoffer & bo, uint64_t id)
 {
-    auto store = loadStore(bo, id);
-    std::map<std::string, std::string> labels;
-    for (int i = 0; i < store.labels_size(); i++)
+    if (auto store = loadStore(bo, id))
     {
-        labels[store.labels(i).key()] = store.labels(i).value();
-    }
-    StoreType store_type = StoreType::TiKV;
-    {
-        if (auto it = labels.find(tiflash_engine_key); it != labels.end() && it->second == tiflash_engine_value)
+        std::map<std::string, std::string> labels;
+        for (int i = 0; i < store->labels_size(); i++)
         {
-            store_type = StoreType::TiFlash;
+            labels[store->labels(i).key()] = store->labels(i).value();
         }
+        StoreType store_type = StoreType::TiKV;
+        {
+            if (auto it = labels.find(tiflash_engine_key); it != labels.end() && it->second == tiflash_engine_value)
+            {
+                store_type = StoreType::TiFlash;
+            }
+        }
+        auto it = stores.emplace(id, Store(id, store->address(), store->peer_address(), store->state(), labels, store_type));
+        return it.first->second;
     }
-    auto it = stores.emplace(id, Store(id, store.address(), store.peer_address(), store.state(), labels, store_type));
-    return it.first->second;
+    return {};
 }
 
-Store RegionCache::getStore(Backoffer & bo, uint64_t id)
+std::optional<Store> RegionCache::getStore(Backoffer & bo, uint64_t id)
 {
     std::lock_guard<std::mutex> lock(store_mutex);
     auto it = stores.find(id);

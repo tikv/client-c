@@ -30,7 +30,7 @@ public:
     // return region meta and leader peer.
     virtual std::pair<metapb::Region, metapb::Peer> getRegionByID(uint64_t region_id) = 0;
 
-    virtual metapb::Store getStore(uint64_t store_id) = 0;
+    virtual std::optional<metapb::Store> getStore(uint64_t store_id) = 0;
 
     //    virtual std::vector<metapb::Store> getAllStores() = 0;
 

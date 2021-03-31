@@ -26,7 +26,7 @@ public:
 
     std::pair<metapb::Region, metapb::Peer> getRegionByID(uint64_t) override { throw "not implemented"; }
 
-    metapb::Store getStore(uint64_t) override { throw "not implemented"; }
+    std::optional<metapb::Store> getStore(uint64_t) override { throw "not implemented"; }
 
     bool isMock() override { return true; }
 };

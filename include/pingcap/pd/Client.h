@@ -45,7 +45,8 @@ public:
 
     std::pair<metapb::Region, metapb::Peer> getRegionByID(uint64_t region_id) override;
 
-    metapb::Store getStore(uint64_t store_id) override;
+    // get store information from pd, return null if store.state == Tombstone
+    std::optional<metapb::Store> getStore(uint64_t store_id) override;
 
     //std::vector<metapb::Store> getAllStores() override;
 

@@ -323,7 +323,7 @@ std::pair<metapb::Region, metapb::Peer> Client::getRegionByID(uint64_t region_id
     return std::make_pair(response.region(), response.leader());
 }
 
-metapb::Store Client::getStore(uint64_t store_id)
+std::optional<metapb::Store> Client::getStore(uint64_t store_id)
 {
     pdpb::GetStoreRequest request{};
     pdpb::GetStoreResponse response{};
@@ -342,6 +342,10 @@ metapb::Store Client::getStore(uint64_t store_id)
         log->error(err_msg);
         check_leader.store(true);
         throw Exception(err_msg, GRPCErrorCode);
+    }
+    if (!response.has_store())
+    {
+
     }
     return response.store();
 }
