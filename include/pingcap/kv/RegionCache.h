@@ -25,12 +25,13 @@ struct Store
     const uint64_t id;
     const std::string addr;
     const std::string peer_addr;
+    const uint64_t state;
     const std::map<std::string, std::string> labels;
     const StoreType store_type;
 
-    Store(uint64_t id_, const std::string & addr_, const std::string & peer_addr_, const std::map<std::string, std::string> & labels_,
-        StoreType store_type_)
-        : id(id_), addr(addr_), peer_addr(peer_addr_), labels(labels_), store_type(store_type_)
+    Store(uint64_t id_, const std::string & addr_, const std::string & peer_addr_, uint64_t state_,
+        const std::map<std::string, std::string> & labels_, StoreType store_type_)
+        : id(id_), addr(addr_), peer_addr(peer_addr_), state(state_), labels(labels_), store_type(store_type_)
     {}
 };
 

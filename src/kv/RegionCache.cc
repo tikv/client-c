@@ -1,7 +1,7 @@
 #include <pingcap/Exception.h>
+#include <pingcap/RedactHelpers.h>
 #include <pingcap/kv/RegionCache.h>
 #include <pingcap/pd/CodecClient.h>
-#include <pingcap/RedactHelpers.h>
 
 namespace pingcap
 {
@@ -32,9 +32,9 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
             size_t peer_index = (i + start_index) % peer_size;
             auto & peer = peers[peer_index];
             auto store = getStore(bo, peer.store_id());
-            if (store.store_type != store_type)
+            if (store.store_type != store_type || store.state == metapb::StoreState::Tombstone)
             {
-                // store type not match, drop cache and raise region error.
+                // store type not match or store is deleted in pd, drop cache and raise region error.
                 continue;
             }
             if (store.addr.empty())
@@ -205,7 +205,7 @@ Store RegionCache::reloadStore(Backoffer & bo, uint64_t id)
             store_type = StoreType::TiFlash;
         }
     }
-    auto it = stores.emplace(id, Store(id, store.address(), store.peer_address(), labels, store_type));
+    auto it = stores.emplace(id, Store(id, store.address(), store.peer_address(), store.state(), labels, store_type));
     return it.first->second;
 }
 
