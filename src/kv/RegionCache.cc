@@ -38,12 +38,9 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
                     // store type not match, drop cache and raise region error.
                     continue;
                 }
-                if (store->addr.empty())
+                if (store->state == metapb::StoreState::Tombstone)
                 {
                     dropStore(peer.store_id());
-                    bo.backoff(boRegionMiss,
-                        Exception("miss store, region id is: " + std::to_string(id.id) + " store id is: " + std::to_string(peer.store_id()),
-                            StoreNotReady));
                     continue;
                 }
                 if (store_type == StoreType::TiFlash)
@@ -55,8 +52,6 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
                 // Empty store means that store is deleted in pd(i.e. store.state == Tombstone)
                 // We should drop store.
                 dropStore(peer.store_id());
-                bo.backoff(boRegionMiss,
-                    Exception("invalidate regions in removed store, store id: " + std::to_string(peer.store_id()), StoreNotReady));
             }
         }
         dropRegion(id);
