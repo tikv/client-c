@@ -343,10 +343,6 @@ std::optional<metapb::Store> Client::getStore(uint64_t store_id)
         check_leader.store(true);
         throw Exception(err_msg, GRPCErrorCode);
     }
-    if (!response.has_store())
-    {
-
-    }
     return response.store();
 }
 
