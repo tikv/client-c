@@ -53,8 +53,10 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
             else
             {
                 // Empty store means that store is deleted in pd(i.e. store.state == Tombstone)
-                // We should drop cache
-                continue;
+                // We should drop store.
+                dropStore(peer.store_id());
+                bo.backoff(boRegionMiss,
+                    Exception("invalidate regions in removed store, store id: " + std::to_string(peer.store_id()), StoreNotReady));
             }
         }
         dropRegion(id);
