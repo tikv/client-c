@@ -476,12 +476,7 @@ TxnStatus LockResolver::getTxnStatusFromLock(Backoffer & bo, LockPtr lock, uint6
 {
     log->debug("try to get txn status");
     uint64_t current_ts;
-    if (lock->use_async_commit && !force_sync_commit)
-    {
-        current_ts = 0;
-        caller_start_ts = 0;
-    }
-    else if (lock->ttl == 0)
+    if (lock->ttl == 0)
     {
         current_ts = std::numeric_limits<uint64_t>::max();
     }
