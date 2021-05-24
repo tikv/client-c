@@ -114,7 +114,7 @@ void Client::initClusterID()
             auto resp = getMembers(url);
             if (!resp.has_header())
             {
-                log->error("failed to get cluster id by :" + url + " retrying");
+                log->warning("failed to get cluster id by :" + url + " retrying");
                 continue;
             }
             cluster_id = resp.header().cluster_id();
@@ -133,7 +133,7 @@ void Client::updateLeader()
         auto resp = getMembers(url);
         if (!resp.has_header() || resp.leader().client_urls_size() == 0)
         {
-            log->error("failed to get cluster id by :" + url);
+            log->warning("failed to get cluster id by :" + url);
             continue;
         }
         updateURLs(resp.members());
