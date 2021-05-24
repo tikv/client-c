@@ -232,14 +232,14 @@ uint64_t Client::getTS()
     auto stream = leaderClient()->stub->Tso(&context);
     if (!stream->Write(request))
     {
-        std::string err_msg = ("write tso failed\n ");
+        std::string err_msg = ("Send TsoRequest failed");
         log->error(err_msg);
         check_leader.store(true);
         throw Exception(err_msg, GRPCErrorCode);
     }
     if (!stream->Read(&response))
     {
-        std::string err_msg = ("write tso failed\n ");
+        std::string err_msg = ("Receive TsoResponse failed");
         log->error(err_msg);
         check_leader.store(true);
         throw Exception(err_msg, GRPCErrorCode);
