@@ -40,7 +40,7 @@ uint64_t txnLockTTL(std::chrono::milliseconds start, uint64_t txn_size)
 }
 
 TwoPhaseCommitter::TwoPhaseCommitter(Txn * txn, bool _use_async_commit)
-    : log(&Logger::get("pingcap.tikv")), use_async_commit(_use_async_commit), start_time(txn->start_time)
+  : start_time(txn->start_time), use_async_commit(_use_async_commit), log(&Logger::get("pingcap.tikv"))
 {
     commited = false;
     txn->walkBuffer([&](const std::string & key, const std::string & value) {
