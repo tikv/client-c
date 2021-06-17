@@ -387,7 +387,7 @@ AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lo
     std::atomic_bool need_fallback{false};
 
     secondaries.reserve(status.primary_lock->secondaries_size());
-    for (size_t i = 0; i < status.primary_lock->secondaries_size(); i++)
+    for (int i = 0; i < status.primary_lock->secondaries_size(); i++)
     {
         secondaries.push_back(status.primary_lock->secondaries(i));
     }
