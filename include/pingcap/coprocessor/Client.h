@@ -97,6 +97,12 @@ public:
         log->debug("coprocessor has " + std::to_string(tasks.size()) + " tasks.");
     }
 
+    void cancel()
+    {
+        cancelled = true;
+        cond_var.notify_all();
+    }
+
     std::pair<Result, bool> next()
     {
         std::unique_lock<std::mutex> lk(results_mutex);

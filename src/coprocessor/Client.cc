@@ -114,6 +114,8 @@ void ResponseIter::handle_task(const copTask & task)
     size_t idx = 0;
     while (idx < remain_tasks.size())
     {
+        if (cancelled)
+            return;
         try
         {
             auto & current_task = remain_tasks[idx];
