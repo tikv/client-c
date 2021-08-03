@@ -97,6 +97,12 @@ public:
         log->debug("coprocessor has " + std::to_string(tasks.size()) + " tasks.");
     }
 
+    void cancel()
+    {
+        cancelled = true;
+        cond_var.notify_all();
+    }
+
     std::pair<Result, bool> next()
     {
         std::unique_lock<std::mutex> lk(results_mutex);
@@ -130,7 +136,7 @@ private:
                 cond_var.notify_one();
                 return;
             }
-            std::unique_lock<std::mutex> lk(fetch_task_mutex);
+            std::unique_lock<std::mutex> lk(results_mutex);
             if (tasks.size() == task_index)
             {
                 unfinished_thread--;
@@ -157,7 +163,6 @@ private:
     kv::MinCommitTSPushed min_commit_ts_pushed;
 
     std::mutex results_mutex;
-    std::mutex fetch_task_mutex;
 
     std::queue<Result> results;
     Exception cop_error;
