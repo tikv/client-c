@@ -114,7 +114,7 @@ void Client::initClusterID()
             auto resp = getMembers(url);
             if (!resp.has_header())
             {
-                log->error("failed to get cluster id by :" + url + " retrying");
+                log->warning("failed to get cluster id by :" + url + " retrying");
                 continue;
             }
             cluster_id = resp.header().cluster_id();
@@ -133,7 +133,7 @@ void Client::updateLeader()
         auto resp = getMembers(url);
         if (!resp.has_header() || resp.leader().client_urls_size() == 0)
         {
-            log->error("failed to get cluster id by :" + url);
+            log->warning("failed to get cluster id by :" + url);
             continue;
         }
         updateURLs(resp.members());
@@ -232,14 +232,14 @@ uint64_t Client::getTS()
     auto stream = leaderClient()->stub->Tso(&context);
     if (!stream->Write(request))
     {
-        std::string err_msg = ("write tso failed\n ");
+        std::string err_msg = ("Send TsoRequest failed");
         log->error(err_msg);
         check_leader.store(true);
         throw Exception(err_msg, GRPCErrorCode);
     }
     if (!stream->Read(&response))
     {
-        std::string err_msg = ("write tso failed\n ");
+        std::string err_msg = ("Receive TsoResponse failed");
         log->error(err_msg);
         check_leader.store(true);
         throw Exception(err_msg, GRPCErrorCode);
