@@ -234,6 +234,8 @@ private:
 
     TxnStatus * getResolved(uint64_t txn_id)
     {
+        std::shared_lock<std::shared_mutex> lk(mu);
+
         auto it = resolved.find(txn_id);
         if (it == resolved.end())
             return nullptr;
