@@ -6,7 +6,7 @@ find_package (OpenSSL)
 message (STATUS "Using ssl=${OPENSSL_FOUND}: ${OPENSSL_INCLUDE_DIR} : ${OPENSSL_LIBRARIES}")
 
 find_package(Protobuf REQUIRED)
-message(STATUS "Using protobuf: ${Protobuf_VERSION} : ${Protobuf_INCLUDE_DIRS}, ${Protobuf_LIBRARIES}")
+message(STATUS "Using protobuf: ${Protobuf_VERSION} : ${Protobuf_INCLUDE_DIR}, ${Protobuf_LIBRARY}")
 
 include_directories(${PROTOBUF_INCLUDE_DIRS})
 
