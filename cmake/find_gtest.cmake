@@ -1,4 +1,3 @@
-
 if (NOT EXISTS "${kvClient_SOURCE_DIR}/third_party/googletest/CMakeLists.txt")
     set(USE_INTERNAL_GTEST_LIBRARY 0)
     find_package(PkgConfig)
