@@ -17,7 +17,7 @@ tar -C /usr/local -xzf go.tgz; \
 rm go.tgz; \
 export PATH="/usr/local/go/bin:$PATH"; \
 go version
- 
+
 ENV GOPATH /go
 ENV PATH $GOPATH/bin:/usr/local/go/bin:$PATH
 
