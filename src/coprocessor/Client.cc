@@ -51,6 +51,7 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
     auto req = std::make_shared<::coprocessor::Request>();
     req->set_tp(task.req->tp);
     req->set_start_ts(task.req->start_ts);
+    req->set_schema_ver(task.req->schema_version);
     req->set_data(task.req->data);
     req->set_is_cache_enabled(false);
     for (auto ts : min_commit_ts_pushed.get_timestamps())
