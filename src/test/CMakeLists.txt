@@ -18,3 +18,4 @@ add_test(kv_client_test kv_client_ut)
 
 add_subdirectory(bank_test)
 add_subdirectory(real_tikv_test)
+add_subdirectory(raw_client_test)

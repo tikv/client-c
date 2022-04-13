@@ -15,15 +15,15 @@ fi
 
 build_dir="$SRCPATH/build"
 mkdir -p $build_dir && cd $build_dir
-cmake "$SRCPATH" \
+cmake3 "$SRCPATH" \
     -DENABLE_TESTS=on
 make -j $NPROC
 
-nohup /mock-tikv/bin/mock-tikv &
-mock_kv_pid=$!
+# nohup /mock-tikv/bin/mock-tikv &
+# mock_kv_pid=$!
 
-cd "$build_dir" && make test
+# cd "$build_dir" && make test
 
-kill -9 $mock_kv_pid
+# kill -9 $mock_kv_pid
 
 

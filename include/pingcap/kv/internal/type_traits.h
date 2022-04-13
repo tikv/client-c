@@ -42,6 +42,17 @@ PINGCAP_DEFINE_TRAITS(kvrpcpb, TxnHeartBeat, KvTxnHeartBeat)
 PINGCAP_DEFINE_TRAITS(kvrpcpb, CheckSecondaryLocks, KvCheckSecondaryLocks)
 PINGCAP_DEFINE_TRAITS(coprocessor, , Coprocessor)
 PINGCAP_DEFINE_TRAITS(mpp, DispatchTask, DispatchMPPTask)
+// add raw methods
+PINGCAP_DEFINE_TRAITS(kvrpcpb, RawGet, RawGet)
+PINGCAP_DEFINE_TRAITS(kvrpcpb, RawBatchGet, RawBatchGet)
+PINGCAP_DEFINE_TRAITS(kvrpcpb, RawPut, RawPut)
+PINGCAP_DEFINE_TRAITS(kvrpcpb, RawBatchPut, RawBatchPut)
+PINGCAP_DEFINE_TRAITS(kvrpcpb, RawDelete, RawDelete)
+PINGCAP_DEFINE_TRAITS(kvrpcpb, RawBatchDelete, RawBatchDelete)
+PINGCAP_DEFINE_TRAITS(kvrpcpb, RawScan, RawScan)
+PINGCAP_DEFINE_TRAITS(kvrpcpb, RawDeleteRange, RawDeleteRange)
+PINGCAP_DEFINE_TRAITS(kvrpcpb, RawGetKeyTTL, RawGetKeyTTL)
+PINGCAP_DEFINE_TRAITS(kvrpcpb, RawCAS, RawCompareAndSwap)
 
 
 } // namespace kv

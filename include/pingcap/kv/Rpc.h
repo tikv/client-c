@@ -56,10 +56,11 @@ public:
 
     std::shared_ptr<S> getResp() { return resp; }
 
-    void call(std::shared_ptr<KvConnClient> client, int timeout)
+    void call(std::shared_ptr<KvConnClient> client, int64_t timeout)
     {
         grpc::ClientContext context;
-        context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(timeout));
+        // context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(timeout));
+        context.set_deadline(std::chrono::system_clock::now() + std::chrono::milliseconds(timeout));
         auto status = Trait::doRPCCall(&context, client, *req, resp.get());
         if (!status.ok())
         {
