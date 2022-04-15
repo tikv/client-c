@@ -45,7 +45,11 @@ private:
     std::thread * worker;
 
 public:
-    TTLManager() : state{StateUninitialized}, worker_running{false}, worker{nullptr} {}
+    TTLManager()
+        : state{StateUninitialized}
+        , worker_running{false}
+        , worker{nullptr}
+    {}
 
     void run(TwoPhaseCommitterPtr committer)
     {
@@ -132,7 +136,9 @@ private:
         std::vector<std::string> keys;
         bool is_primary;
         BatchKeys(const RegionVerID & region_, std::vector<std::string> keys_, bool is_primary_ = false)
-            : region(region_), keys(std::move(keys_)), is_primary(is_primary_)
+            : region(region_)
+            , keys(std::move(keys_))
+            , is_primary(is_primary_)
         {}
     };
 

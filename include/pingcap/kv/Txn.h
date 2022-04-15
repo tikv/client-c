@@ -27,7 +27,9 @@ struct Txn
 
     std::chrono::milliseconds start_time;
 
-    Txn(Cluster * cluster_) : cluster(cluster_), start_ts(cluster_->pd_client->getTS())
+    Txn(Cluster * cluster_)
+        : cluster(cluster_)
+        , start_ts(cluster_->pd_client->getTS())
     {
         start_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
     }

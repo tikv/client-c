@@ -37,7 +37,6 @@ protected:
 
 TEST_F(TestWithLockResolve, testResolveLockGet)
 {
-
     // Write First Time and Split int two regions.
     {
         Txn txn(test_cluster.get());

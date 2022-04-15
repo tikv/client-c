@@ -60,7 +60,9 @@ std::string Snapshot::Get(Backoffer & bo, const std::string & key)
             if (before_expired > 0)
             {
                 bo.backoffWithMaxSleep(
-                    boTxnLockFast, before_expired, Exception("key error : " + response->error().ShortDebugString(), LockError));
+                    boTxnLockFast,
+                    before_expired,
+                    Exception("key error : " + response->error().ShortDebugString(), LockError));
             }
             continue;
         }
@@ -68,7 +70,10 @@ std::string Snapshot::Get(Backoffer & bo, const std::string & key)
     }
 }
 
-Scanner Snapshot::Scan(const std::string & begin, const std::string & end) { return Scanner(*this, begin, end, scan_batch_size); }
+Scanner Snapshot::Scan(const std::string & begin, const std::string & end)
+{
+    return Scanner(*this, begin, end, scan_batch_size);
+}
 
 } // namespace kv
 } // namespace pingcap

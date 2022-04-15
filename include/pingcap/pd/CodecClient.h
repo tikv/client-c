@@ -12,7 +12,9 @@ namespace pd
 {
 struct CodecClient : public Client
 {
-    CodecClient(const std::vector<std::string> & addrs, const ClusterConfig & config) : Client(addrs, config) {}
+    CodecClient(const std::vector<std::string> & addrs, const ClusterConfig & config)
+        : Client(addrs, config)
+    {}
 
     std::pair<metapb::Region, metapb::Peer> getRegionByKey(const std::string & key) override
     {

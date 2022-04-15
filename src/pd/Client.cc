@@ -32,13 +32,13 @@ inline std::vector<std::string> addrsToUrls(const std::vector<std::string> & add
 }
 
 Client::Client(const std::vector<std::string> & addrs, const ClusterConfig & config_)
-    : max_init_cluster_retries(100),
-      pd_timeout(3),
-      loop_interval(100),
-      update_leader_interval(60),
-      urls(addrsToUrls(addrs, config_)),
-      config(config_),
-      log(&Logger::get("pingcap.pd"))
+    : max_init_cluster_retries(100)
+    , pd_timeout(3)
+    , loop_interval(100)
+    , update_leader_interval(60)
+    , urls(addrsToUrls(addrs, config_))
+    , config(config_)
+    , log(&Logger::get("pingcap.pd"))
 {
     initClusterID();
 
@@ -61,7 +61,10 @@ Client::~Client()
     }
 }
 
-bool Client::isMock() { return false; }
+bool Client::isMock()
+{
+    return false;
+}
 
 std::shared_ptr<Client::PDConnClient> Client::getOrCreateGRPCConn(const std::string & addr)
 {

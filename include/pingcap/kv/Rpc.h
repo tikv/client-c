@@ -35,7 +35,6 @@ using ConnArrayPtr = std::shared_ptr<ConnArray>;
 template <class T>
 class RpcCall
 {
-
     using Trait = RpcTypeTraits<T>;
     using S = typename Trait::ResultType;
 
@@ -44,7 +43,11 @@ class RpcCall
     Logger * log;
 
 public:
-    RpcCall(std::shared_ptr<T> req_) : req(req_), resp(std::make_shared<S>()), log(&Logger::get("pingcap.tikv")) {}
+    RpcCall(std::shared_ptr<T> req_)
+        : req(req_)
+        , resp(std::make_shared<S>())
+        , log(&Logger::get("pingcap.tikv"))
+    {}
 
     void setCtx(RPCContextPtr rpc_ctx)
     {
@@ -71,7 +74,7 @@ public:
 
     auto callStream(grpc::ClientContext * context, std::shared_ptr<KvConnClient> client) { return Trait::doRPCCall(context, client, *req); }
 
-    auto callStreamAsync(grpc::ClientContext * context, std::shared_ptr<KvConnClient> client, grpc::CompletionQueue& cq, void* call) { return Trait::doAsyncRPCCall(context, client, *req, cq, call); }
+    auto callStreamAsync(grpc::ClientContext * context, std::shared_ptr<KvConnClient> client, grpc::CompletionQueue & cq, void * call) { return Trait::doAsyncRPCCall(context, client, *req, cq, call); }
 };
 
 template <typename T>
@@ -87,7 +90,9 @@ struct RpcClient
 
     RpcClient() {}
 
-    RpcClient(const ClusterConfig & config_) : config(config_) {}
+    RpcClient(const ClusterConfig & config_)
+        : config(config_)
+    {}
 
     ConnArrayPtr getConnArray(const std::string & addr);
 
@@ -110,7 +115,7 @@ struct RpcClient
     }
 
     template <class T>
-    auto sendStreamRequestAsync(std::string addr, grpc::ClientContext * context, RpcCall<T> & rpc, grpc::CompletionQueue& cq, void* call)
+    auto sendStreamRequestAsync(std::string addr, grpc::ClientContext * context, RpcCall<T> & rpc, grpc::CompletionQueue & cq, void * call)
     {
         ConnArrayPtr connArray = getConnArray(addr);
         auto connClient = connArray->get();

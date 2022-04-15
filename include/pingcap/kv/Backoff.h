@@ -33,7 +33,10 @@ enum BackoffType
     boTxnNotFound
 };
 
-inline int expo(int base, int cap, int n) { return std::min(double(cap), double(base) * std::pow(2.0, double(n))); }
+inline int expo(int base, int cap, int n)
+{
+    return std::min(double(cap), double(base) * std::pow(2.0, double(n)));
+}
 
 struct Backoff
 {
@@ -43,7 +46,11 @@ struct Backoff
     int last_sleep;
     int attempts;
 
-    Backoff(int base_, int cap_, Jitter jitter_) : base(base_), cap(cap_), jitter(jitter_), attempts(0)
+    Backoff(int base_, int cap_, Jitter jitter_)
+        : base(base_)
+        , cap(cap_)
+        , jitter(jitter_)
+        , attempts(0)
     {
         if (base < 2)
         {
@@ -58,19 +65,19 @@ struct Backoff
         int v = 0;
         switch (jitter)
         {
-            case NoJitter:
-                sleep_time = expo(base, cap, attempts);
-                break;
-            case FullJitter:
-                v = expo(base, cap, attempts);
-                sleep_time = rand() % v;
-                break;
-            case EqualJitter:
-                v = expo(base, cap, attempts);
-                sleep_time = v / 2 + rand() % (v / 2);
-                break;
-            case DecorrJitter:
-                sleep_time = int(std::min(double(cap), double(base + rand() % (last_sleep * 3 - base))));
+        case NoJitter:
+            sleep_time = expo(base, cap, attempts);
+            break;
+        case FullJitter:
+            v = expo(base, cap, attempts);
+            sleep_time = rand() % v;
+            break;
+        case EqualJitter:
+            v = expo(base, cap, attempts);
+            sleep_time = v / 2 + rand() % (v / 2);
+            break;
+        case DecorrJitter:
+            sleep_time = int(std::min(double(cap), double(base + rand() % (last_sleep * 3 - base))));
         }
         if (max_sleep_time >= 0 && max_sleep_time < sleep_time)
             sleep_time = max_sleep_time;
@@ -97,9 +104,12 @@ struct Backoffer
 {
     std::map<BackoffType, BackoffPtr> backoff_map;
     size_t total_sleep; // ms
-    size_t max_sleep;   // ms
+    size_t max_sleep; // ms
 
-    Backoffer(size_t max_sleep_) : total_sleep(0), max_sleep(max_sleep_) {}
+    Backoffer(size_t max_sleep_)
+        : total_sleep(0)
+        , max_sleep(max_sleep_)
+    {}
 
     void backoff(BackoffType tp, const Exception & exc);
     void backoffWithMaxSleep(BackoffType tp, int max_sleep_time, const Exception & exc);
