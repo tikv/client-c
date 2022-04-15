@@ -28,9 +28,12 @@ struct Store
     const std::map<std::string, std::string> labels;
     const StoreType store_type;
 
-    Store(uint64_t id_, const std::string & addr_, const std::string & peer_addr_, const std::map<std::string, std::string> & labels_,
-        StoreType store_type_)
-        : id(id_), addr(addr_), peer_addr(peer_addr_), labels(labels_), store_type(store_type_)
+    Store(uint64_t id_, const std::string & addr_, const std::string & peer_addr_, const std::map<std::string, std::string> & labels_, StoreType store_type_)
+        : id(id_)
+        , addr(addr_)
+        , peer_addr(peer_addr_)
+        , labels(labels_)
+        , store_type(store_type_)
     {}
 };
 
@@ -41,7 +44,11 @@ struct RegionVerID
     uint64_t ver;
 
     RegionVerID() = default;
-    RegionVerID(uint64_t id_, uint64_t conf_ver_, uint64_t ver_) : id(id_), conf_ver(conf_ver_), ver(ver_) {}
+    RegionVerID(uint64_t id_, uint64_t conf_ver_, uint64_t ver_)
+        : id(id_)
+        , conf_ver(conf_ver_)
+        , ver(ver_)
+    {}
 
     bool operator==(const RegionVerID & rhs) const { return id == rhs.id && conf_ver == rhs.conf_ver && ver == rhs.ver; }
 
@@ -74,7 +81,11 @@ struct Region
     metapb::Peer leader_peer;
     std::atomic_uint work_tiflash_peer_idx;
 
-    Region(const metapb::Region & meta_, const metapb::Peer & peer_) : meta(meta_), leader_peer(peer_), work_tiflash_peer_idx(0) {}
+    Region(const metapb::Region & meta_, const metapb::Peer & peer_)
+        : meta(meta_)
+        , leader_peer(peer_)
+        , work_tiflash_peer_idx(0)
+    {}
 
     const std::string & startKey() { return meta.start_key(); }
 
@@ -115,7 +126,9 @@ struct KeyLocation
 
     KeyLocation() = default;
     KeyLocation(const RegionVerID & region_, const std::string & start_key_, const std::string & end_key_)
-        : region(region_), start_key(start_key_), end_key(end_key_)
+        : region(region_)
+        , start_key(start_key_)
+        , end_key(end_key_)
     {}
 
     bool contains(const std::string & key) { return key >= start_key && (key < end_key || end_key == ""); }
@@ -129,11 +142,14 @@ struct RPCContext
     std::string addr;
 
     RPCContext(const RegionVerID & region_, const metapb::Region & meta_, const metapb::Peer & peer_, const std::string & addr_)
-        : region(region_), meta(meta_), peer(peer_), addr(addr_)
+        : region(region_)
+        , meta(meta_)
+        , peer(peer_)
+        , addr(addr_)
     {}
 
     std::string toString() const { return "region id: " + std::to_string(region.id) + ", meta: " + meta.DebugString() + ", peer: "
-                                    + peer.DebugString() + ", addr: " + addr; }
+                                   + peer.DebugString() + ", addr: " + addr; }
 };
 
 using RPCContextPtr = std::shared_ptr<RPCContext>;
@@ -142,10 +158,10 @@ class RegionCache
 {
 public:
     RegionCache(pd::ClientPtr pdClient_, const ClusterConfig & config)
-        : pd_client(pdClient_),
-          tiflash_engine_key(config.tiflash_engine_key),
-          tiflash_engine_value(config.tiflash_engine_value),
-          log(&Logger::get("pingcap.tikv"))
+        : pd_client(pdClient_)
+        , tiflash_engine_key(config.tiflash_engine_key)
+        , tiflash_engine_value(config.tiflash_engine_value)
+        , log(&Logger::get("pingcap.tikv"))
     {}
 
     RPCContextPtr getRPCContext(Backoffer & bo, const RegionVerID & id, const StoreType store_type = StoreType::TiKV);
@@ -167,7 +183,8 @@ public:
     Store getStore(Backoffer & bo, uint64_t id);
 
     std::pair<std::unordered_map<RegionVerID, std::vector<std::string>>, RegionVerID> groupKeysByRegion(
-        Backoffer & bo, const std::vector<std::string> & keys);
+        Backoffer & bo,
+        const std::vector<std::string> & keys);
 
 private:
     RegionPtr loadRegionByKey(Backoffer & bo, const std::string & key);

@@ -9,8 +9,7 @@ namespace pingcap
 {
 namespace coprocessor
 {
-std::vector<copTask> buildCopTasks(kv::Backoffer & bo, kv::Cluster * cluster, std::vector<KeyRange> ranges, Request * cop_req,
-    kv::StoreType, Logger * log = &Logger::get("pingcap/coprocessor"));
+std::vector<copTask> buildCopTasks(kv::Backoffer & bo, kv::Cluster * cluster, std::vector<KeyRange> ranges, Request * cop_req, kv::StoreType, Logger * log = &Logger::get("pingcap/coprocessor"));
 }
 } // namespace pingcap
 
@@ -57,7 +56,12 @@ TEST_F(TestCoprocessor, testBuildTask1)
     req->start_ts = test_cluster->pd_client->getTS();
 
     auto tasks = pingcap::coprocessor::buildCopTasks(
-        bo, test_cluster.get(), ranges, req, kv::StoreType::TiKV, &Logger::get("pingcap/coprocessor"));
+        bo,
+        test_cluster.get(),
+        ranges,
+        req,
+        kv::StoreType::TiKV,
+        &Logger::get("pingcap/coprocessor"));
 
     ASSERT_EQ(tasks.size(), 2);
 

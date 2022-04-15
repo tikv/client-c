@@ -39,7 +39,6 @@ public:
 
 TEST_P(TestWithMockKV, testGetInjectError)
 {
-
     Txn txn(test_cluster.get());
     txn.set("abc", "edf");
     txn.commit();

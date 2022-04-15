@@ -30,7 +30,11 @@ struct RegionClient
 
     Logger * log;
 
-    RegionClient(Cluster * cluster_, const RegionVerID & id) : cluster(cluster_), region_id(id), log(&Logger::get("pingcap.tikv")) {}
+    RegionClient(Cluster * cluster_, const RegionVerID & id)
+        : cluster(cluster_)
+        , region_id(id)
+        , log(&Logger::get("pingcap.tikv"))
+    {}
 
     // This method send a request to region, but is NOT Thread-Safe !!
     template <typename T>

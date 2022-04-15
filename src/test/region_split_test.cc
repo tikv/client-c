@@ -34,7 +34,6 @@ protected:
 
 TEST_F(TestWithMockKVRegionSplit, testSplitRegionGet)
 {
-
     {
         Txn txn(test_cluster.get());
 

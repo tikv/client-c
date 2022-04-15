@@ -26,7 +26,10 @@ struct KeyRange
 {
     std::string start_key;
     std::string end_key;
-    KeyRange(const std::string & start_key_, const std::string & end_key_) : start_key(start_key_), end_key(end_key_) {}
+    KeyRange(const std::string & start_key_, const std::string & end_key_)
+        : start_key(start_key_)
+        , end_key(end_key_)
+    {}
     KeyRange(KeyRange &&) = default;
     KeyRange(const KeyRange &) = default;
     KeyRange & operator=(const KeyRange &) = default;
@@ -66,14 +69,22 @@ public:
         Exception error;
 
         Result() {}
-        Result(std::shared_ptr<::coprocessor::Response> resp_) : resp(resp_) {}
-        Result(const Exception & err) : error(err) {}
+        Result(std::shared_ptr<::coprocessor::Response> resp_)
+            : resp(resp_)
+        {}
+        Result(const Exception & err)
+            : error(err)
+        {}
 
         const std::string & data() { return resp->data(); }
     };
 
     ResponseIter(std::vector<copTask> && tasks_, kv::Cluster * cluster_, int concurrency_, Logger * log_)
-        : tasks(std::move(tasks_)), cluster(cluster_), concurrency(concurrency_), cancelled(false), log(log_)
+        : tasks(std::move(tasks_))
+        , cluster(cluster_)
+        , concurrency(concurrency_)
+        , cancelled(false)
+        , log(log_)
     {}
 
     ~ResponseIter()
@@ -175,7 +186,12 @@ private:
 };
 
 std::vector<copTask> buildCopTasks(
-    kv::Backoffer & bo, kv::Cluster * cluster, std::vector<KeyRange> ranges, RequestPtr cop_req, kv::StoreType store_type, Logger * log);
+    kv::Backoffer & bo,
+    kv::Cluster * cluster,
+    std::vector<KeyRange> ranges,
+    RequestPtr cop_req,
+    kv::StoreType store_type,
+    Logger * log);
 
 } // namespace coprocessor
 } // namespace pingcap

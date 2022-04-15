@@ -1,7 +1,7 @@
 #include <pingcap/Exception.h>
+#include <pingcap/RedactHelpers.h>
 #include <pingcap/kv/RegionCache.h>
 #include <pingcap/pd/CodecClient.h>
-#include <pingcap/RedactHelpers.h>
 
 namespace pingcap
 {
@@ -41,8 +41,8 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
             {
                 dropStore(peer.store_id());
                 bo.backoff(boRegionMiss,
-                    Exception("miss store, region id is: " + std::to_string(id.id) + " store id is: " + std::to_string(peer.store_id()),
-                        StoreNotReady));
+                           Exception("miss store, region id is: " + std::to_string(id.id) + " store id is: " + std::to_string(peer.store_id()),
+                                     StoreNotReady));
                 continue;
             }
             if (store_type == StoreType::TiFlash)
@@ -286,13 +286,16 @@ void RegionCache::onSendReqFail(RPCContextPtr & ctx, const Exception & exc)
     dropStore(failed_store_id);
 }
 
-bool RegionCache::updateLeader(const RegionVerID & region_id, const metapb::Peer & leader) {
+bool RegionCache::updateLeader(const RegionVerID & region_id, const metapb::Peer & leader)
+{
     std::unique_lock<std::shared_mutex> lock(region_mutex);
     auto it = regions.find(region_id);
-    if (it == regions.end()) {
+    if (it == regions.end())
+    {
         return false;
     }
-    if (!it->second->switchPeer(leader.id())) {
+    if (!it->second->switchPeer(leader.id()))
+    {
         lock.unlock();
         log->warning("failed to update leader, region " + region_id.toString() + ", new leader {" + std::to_string(leader.id())
                      + "," + std::to_string(leader.store_id()) + "}");
@@ -322,7 +325,8 @@ void RegionCache::onRegionStale(Backoffer & bo, RPCContextPtr ctx, const errorpb
 }
 
 std::pair<std::unordered_map<RegionVerID, std::vector<std::string>>, RegionVerID> RegionCache::groupKeysByRegion(
-    Backoffer & bo, const std::vector<std::string> & keys)
+    Backoffer & bo,
+    const std::vector<std::string> & keys)
 {
     std::unordered_map<RegionVerID, std::vector<std::string>> result_map;
     KeyLocation loc;

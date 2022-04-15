@@ -23,7 +23,11 @@ int64_t LockResolver::ResolveLocks(Backoffer & bo, uint64_t caller_start_ts, std
 }
 
 int64_t LockResolver::resolveLocks(
-    Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks, std::vector<uint64_t> & pushed, bool for_write)
+    Backoffer & bo,
+    uint64_t caller_start_ts,
+    std::vector<LockPtr> & locks,
+    std::vector<uint64_t> & pushed,
+    bool for_write)
 {
     TxnExpireTime before_txn_expired;
     if (locks.empty())
@@ -144,8 +148,7 @@ int64_t LockResolver::resolveLocksForWrite(Backoffer & bo, uint64_t caller_start
     return resolveLocks(bo, caller_start_ts, locks, ignored, true);
 }
 
-TxnStatus LockResolver::getTxnStatus(Backoffer & bo, uint64_t txn_id, const std::string & primary, uint64_t caller_start_ts,
-    uint64_t current_ts, bool rollback_if_not_exists, bool force_sync_commit)
+TxnStatus LockResolver::getTxnStatus(Backoffer & bo, uint64_t txn_id, const std::string & primary, uint64_t caller_start_ts, uint64_t current_ts, bool rollback_if_not_exists, bool force_sync_commit)
 {
     TxnStatus * cached_status = getResolved(txn_id);
     if (cached_status != nullptr)
@@ -341,7 +344,11 @@ void LockResolver::resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & st
 }
 
 void LockResolver::resolveRegionLocks(
-    Backoffer & bo, LockPtr lock, RegionVerID region_id, std::vector<std::string> & keys, TxnStatus & status)
+    Backoffer & bo,
+    LockPtr lock,
+    RegionVerID region_id,
+    std::vector<std::string> & keys,
+    TxnStatus & status)
 {
     auto req = std::make_shared<::kvrpcpb::ResolveLockRequest>();
     req->set_start_version(lock->txn_id);
@@ -436,7 +443,11 @@ AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lo
 }
 
 void LockResolver::checkSecondaries(
-    Backoffer & bo, uint64_t txn_id, std::vector<std::string> & cur_keys, RegionVerID cur_region_id, AsyncResolveDataPtr shared_data)
+    Backoffer & bo,
+    uint64_t txn_id,
+    std::vector<std::string> & cur_keys,
+    RegionVerID cur_region_id,
+    AsyncResolveDataPtr shared_data)
 {
     auto check_request = std::make_shared<::kvrpcpb::CheckSecondaryLocksRequest>();
     for (auto & key : cur_keys)
