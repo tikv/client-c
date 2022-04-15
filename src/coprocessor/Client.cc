@@ -11,7 +11,12 @@ namespace coprocessor
 using namespace std::chrono_literals;
 
 std::vector<copTask> buildCopTasks(
-    kv::Backoffer & bo, kv::Cluster * cluster, std::vector<KeyRange> ranges, RequestPtr cop_req, kv::StoreType store_type, Logger * log)
+    kv::Backoffer & bo,
+    kv::Cluster * cluster,
+    std::vector<KeyRange> ranges,
+    RequestPtr cop_req,
+    kv::StoreType store_type,
+    Logger * log)
 {
     log->debug("build " + std::to_string(ranges.size()) + " ranges.");
     std::vector<copTask> tasks;

@@ -39,8 +39,8 @@ struct Cluster
     {
         HTTPClientSession sess("127.0.0.1", 2378);
         HTTPRequest req(HTTPRequest::HTTP_POST,
-            std::string(mock_server) + "/mock-tikv/api/v1/clusters/" + std::to_string(id) + "/stores/" + std::to_string(store_id)
-                + "/failpoints/" + fail_point);
+                        std::string(mock_server) + "/mock-tikv/api/v1/clusters/" + std::to_string(id) + "/stores/" + std::to_string(store_id)
+                            + "/failpoints/" + fail_point);
         req.setContentLength(term.size());
         auto & ostream = sess.sendRequest(req);
         ostream << term;

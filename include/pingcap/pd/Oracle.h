@@ -14,7 +14,10 @@ namespace pd
 
 constexpr int physicalShiftBits = 18;
 
-inline int64_t extractPhysical(uint64_t ts) { return ts >> physicalShiftBits; }
+inline int64_t extractPhysical(uint64_t ts)
+{
+    return ts >> physicalShiftBits;
+}
 
 // Oracle provides strictly ascending timestamps.
 class Oracle
@@ -32,7 +35,9 @@ class Oracle
 
 public:
     Oracle(ClientPtr pd_client_, std::chrono::milliseconds update_interval_)
-        : pd_client(pd_client_), update_interval(update_interval_), log(&Logger::get("pd/oracle"))
+        : pd_client(pd_client_)
+        , update_interval(update_interval_)
+        , log(&Logger::get("pd/oracle"))
     {
         quit = false;
         work_thread = std::thread([&]() { updateTS(update_interval); });

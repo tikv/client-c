@@ -40,7 +40,9 @@ uint64_t txnLockTTL(std::chrono::milliseconds start, uint64_t txn_size)
 }
 
 TwoPhaseCommitter::TwoPhaseCommitter(Txn * txn, bool _use_async_commit)
-  : start_time(txn->start_time), use_async_commit(_use_async_commit), log(&Logger::get("pingcap.tikv"))
+    : start_time(txn->start_time)
+    , use_async_commit(_use_async_commit)
+    , log(&Logger::get("pingcap.tikv"))
 {
     commited = false;
     txn->walkBuffer([&](const std::string & key, const std::string & value) {
@@ -121,7 +123,7 @@ void TwoPhaseCommitter::calculateMaxCommitTS()
 {
     uint64_t current_ts
         = (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch() - start_time).count()
-              << pd::physicalShiftBits)
+           << pd::physicalShiftBits)
         + start_ts;
     uint64_t safe_window = std::chrono::milliseconds(std::chrono::seconds(2)).count() << pd::physicalShiftBits;
     max_commit_ts = current_ts + safe_window;
@@ -200,7 +202,9 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
             if (ms_before_expired > 0)
             {
                 bo.backoffWithMaxSleep(
-                    boTxnLock, ms_before_expired, Exception("2PC prewrite locked: " + std::to_string(locks.size()), LockError));
+                    boTxnLock,
+                    ms_before_expired,
+                    Exception("2PC prewrite locked: " + std::to_string(locks.size()), LockError));
             }
             continue;
         }
@@ -294,7 +298,6 @@ uint64_t sendTxnHeartBeat(Backoffer & bo, Cluster * cluster, std::string & prima
         }
         if (response->has_error())
         {
-
             throw Exception("unexpected err :" + response->error().ShortDebugString(), ErrorCodes::UnknownError);
         }
 

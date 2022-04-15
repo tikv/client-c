@@ -46,14 +46,14 @@ struct Scanner
     Logger * log;
 
     Scanner(Snapshot & snapshot_, std::string start_key_, std::string end_key_, int batch_)
-        : snap(snapshot_),
-          next_start_key(start_key_),
-          end_key(end_key_),
-          batch(batch_),
-          idx(0),
-          valid(true),
-          eof(false),
-          log(&Logger::get("pingcap.tikv"))
+        : snap(snapshot_)
+        , next_start_key(start_key_)
+        , end_key(end_key_)
+        , batch(batch_)
+        , idx(0)
+        , valid(true)
+        , eof(false)
+        , log(&Logger::get("pingcap.tikv"))
     {
         next();
     }

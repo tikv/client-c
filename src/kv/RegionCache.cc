@@ -1,7 +1,7 @@
 #include <pingcap/Exception.h>
+#include <pingcap/RedactHelpers.h>
 #include <pingcap/kv/RegionCache.h>
 #include <pingcap/pd/CodecClient.h>
-#include <pingcap/RedactHelpers.h>
 
 namespace pingcap
 {
@@ -41,8 +41,8 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
             {
                 dropStore(peer.store_id());
                 bo.backoff(boRegionMiss,
-                    Exception("miss store, region id is: " + std::to_string(id.id) + " store id is: " + std::to_string(peer.store_id()),
-                        StoreNotReady));
+                           Exception("miss store, region id is: " + std::to_string(id.id) + " store id is: " + std::to_string(peer.store_id()),
+                                     StoreNotReady));
                 continue;
             }
             if (store_type == StoreType::TiFlash)
@@ -315,7 +315,8 @@ void RegionCache::onRegionStale(Backoffer & bo, RPCContextPtr ctx, const errorpb
 }
 
 std::pair<std::unordered_map<RegionVerID, std::vector<std::string>>, RegionVerID> RegionCache::groupKeysByRegion(
-    Backoffer & bo, const std::vector<std::string> & keys)
+    Backoffer & bo,
+    const std::vector<std::string> & keys)
 {
     std::unordered_map<RegionVerID, std::vector<std::string>> result_map;
     KeyLocation loc;

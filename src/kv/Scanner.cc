@@ -97,7 +97,9 @@ void Scanner::getData(Backoffer & bo)
             if (ms_before_expired > 0)
             {
                 bo.backoffWithMaxSleep(
-                    BackoffType::boTxnLockFast, ms_before_expired, Exception("key is locked during scanning", ErrorCodes::LockError));
+                    BackoffType::boTxnLockFast,
+                    ms_before_expired,
+                    Exception("key is locked during scanning", ErrorCodes::LockError));
             }
             continue;
         }

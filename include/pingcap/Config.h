@@ -18,13 +18,12 @@ struct ClusterConfig
 
     ClusterConfig() {}
 
-    ClusterConfig(const std::string & engine_key_, const std::string & engine_value_, const std::string & ca_path_,
-        const std::string & cert_path_, const std::string & key_path_)
-        : tiflash_engine_key(engine_key_),
-          tiflash_engine_value(engine_value_),
-          ca_path(ca_path_),
-          cert_path(cert_path_),
-          key_path(key_path_)
+    ClusterConfig(const std::string & engine_key_, const std::string & engine_value_, const std::string & ca_path_, const std::string & cert_path_, const std::string & key_path_)
+        : tiflash_engine_key(engine_key_)
+        , tiflash_engine_value(engine_value_)
+        , ca_path(ca_path_)
+        , cert_path(cert_path_)
+        , key_path(key_path_)
     {}
 
     bool hasTlsConfig() const { return !ca_path.empty(); }
