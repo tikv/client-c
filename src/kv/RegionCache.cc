@@ -131,9 +131,9 @@ RegionPtr RegionCache::loadRegionByID(Backoffer & bo, uint64_t region_id)
             RegionPtr region = std::make_shared<Region>(meta, meta.peers(0));
             if (leader.IsInitialized())
             {
-                region->switchPeer(leader.store_id());
+                region->switchPeer(leader.id());
             }
-            log->debug("load region id: " + std::to_string(region->meta.id()) + " leader store id " + std::to_string(leader.store_id()));
+            log->debug("load region id: " + std::to_string(region->meta.id()) + " leader peer id: " + std::to_string(leader.id()) + " leader store id: " + std::to_string(leader.store_id()));
             return region;
         }
         catch (const Exception & e)
@@ -161,7 +161,7 @@ RegionPtr RegionCache::loadRegionByKey(Backoffer & bo, const std::string & key)
             RegionPtr region = std::make_shared<Region>(meta, meta.peers(0));
             if (leader.IsInitialized())
             {
-                region->switchPeer(leader.store_id());
+                region->switchPeer(leader.id());
             }
             return region;
         }
@@ -228,7 +228,7 @@ RegionPtr RegionCache::searchCachedRegion(const std::string & key)
     {
         return it->second;
     }
-    // An empty string is considered to be largest string in order.
+    // An empty string is considered to be the largest string in order.
     if (regions_map.begin() != regions_map.end() && regions_map.begin()->second->contains(key))
     {
         return regions_map.begin()->second;
@@ -286,13 +286,20 @@ void RegionCache::onSendReqFail(RPCContextPtr & ctx, const Exception & exc)
     dropStore(failed_store_id);
 }
 
-void RegionCache::updateLeader(Backoffer & bo, const RegionVerID & region_id, uint64_t leader_store_id)
-{
-    auto region = getRegionByID(bo, region_id);
-    if (!region->switchPeer(leader_store_id))
-    {
-        dropRegion(region_id);
+bool RegionCache::updateLeader(const RegionVerID & region_id, const metapb::Peer & leader) {
+    std::unique_lock<std::shared_mutex> lock(region_mutex);
+    auto it = regions.find(region_id);
+    if (it == regions.end()) {
+        return false;
     }
+    if (!it->second->switchPeer(leader.id())) {
+        lock.unlock();
+        log->warning("failed to update leader, region " + region_id.toString() + ", new leader {" + std::to_string(leader.id())
+                     + "," + std::to_string(leader.store_id()) + "}");
+        dropRegion(region_id);
+        return false;
+    }
+    return true;
 }
 
 void RegionCache::onRegionStale(Backoffer & bo, RPCContextPtr ctx, const errorpb::EpochNotMatch & stale_epoch)
@@ -309,7 +316,7 @@ void RegionCache::onRegionStale(Backoffer & bo, RPCContextPtr ctx, const errorpb
             pd->processRegionResult(meta);
         }
         RegionPtr region = std::make_shared<Region>(meta, meta.peers(0));
-        region->switchPeer(ctx->peer.store_id());
+        region->switchPeer(ctx->peer.id());
         insertRegionToCache(region);
     }
 }

@@ -20,36 +20,22 @@ BackoffPtr newBackoff(BackoffType tp)
             return std::make_shared<Backoff>(500, 3000, EqualJitter);
         case boRegionMiss:
             return std::make_shared<Backoff>(2, 500, NoJitter);
-        case boUpdateLeader:
-            return std::make_shared<Backoff>(1, 10, NoJitter);
+        case boRegionScheduling:
+            return std::make_shared<Backoff>(2, 500, NoJitter);
         case boServerBusy:
             return std::make_shared<Backoff>(2000, 10000, EqualJitter);
+        case boTiKVDiskFull:
+            return std::make_shared<Backoff>(500, 5000, NoJitter);
         case boTxnNotFound:
             return std::make_shared<Backoff>(2, 500, NoJitter);
+        case boMaxTsNotSynced:
+            return std::make_shared<Backoff>(2, 500, NoJitter);
+        case boMaxDataNotReady:
+            return std::make_shared<Backoff>(100, 2000, NoJitter);
+        case boMaxRegionNotInitialized:
+            return std::make_shared<Backoff>(2, 1000, NoJitter);
     }
     return nullptr;
-}
-
-Exception Type2Exception(BackoffType tp)
-{
-    switch (tp)
-    {
-        case boTiKVRPC:
-            return Exception("TiKV Timeout", TimeoutError);
-        case boTxnLock:
-        case boTxnLockFast:
-            return Exception("Resolve lock Timeout", TimeoutError);
-        case boPDRPC:
-            return Exception("PD Timeout", TimeoutError);
-        case boRegionMiss:
-        case boUpdateLeader:
-            return Exception("Region Unavaliable", RegionUnavailable);
-        case boServerBusy:
-            return Exception("TiKV Server Busy", TimeoutError);
-        case boTxnNotFound:
-            return Exception("Transaction not found", TxnNotFound);
-    }
-    return Exception("Unknown Exception, tp is :" + std::to_string(tp));
 }
 
 void Backoffer::backoff(pingcap::kv::BackoffType tp, const pingcap::Exception & exc) { backoffWithMaxSleep(tp, -1, exc); }
