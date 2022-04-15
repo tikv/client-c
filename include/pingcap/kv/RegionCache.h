@@ -102,11 +102,11 @@ struct Region
         };
     }
 
-    bool switchPeer(uint64_t store_id)
+    bool switchPeer(uint64_t peer_id)
     {
         for (auto & peer : meta.peers())
         {
-            if (peer.store_id() == store_id)
+            if (peer.id() == peer_id)
             {
                 leader_peer = peer;
                 return true;
@@ -147,6 +147,9 @@ struct RPCContext
         , peer(peer_)
         , addr(addr_)
     {}
+
+    std::string toString() const { return "region id: " + std::to_string(region.id) + ", meta: " + meta.DebugString() + ", peer: "
+                                   + peer.DebugString() + ", addr: " + addr; }
 };
 
 using RPCContextPtr = std::shared_ptr<RPCContext>;
@@ -163,7 +166,7 @@ public:
 
     RPCContextPtr getRPCContext(Backoffer & bo, const RegionVerID & id, const StoreType store_type = StoreType::TiKV);
 
-    void updateLeader(Backoffer & bo, const RegionVerID & region_id, uint64_t leader_store_id);
+    bool updateLeader(const RegionVerID & region_id, const metapb::Peer & leader);
 
     KeyLocation locateKey(Backoffer & bo, const std::string & key);
 

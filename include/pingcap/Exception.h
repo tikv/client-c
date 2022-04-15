@@ -22,7 +22,7 @@ enum ErrorCodes : int
     StoreNotReady = 10,
     RaftEntryTooLarge = 11,
     ServerIsBusy = 12,
-    LeaderNotMatch = 13,
+    NotLeader = 13,
     RegionEpochNotMatch = 14,
     CoprocessorError = 15,
     TxnNotFound = 16,

@@ -28,9 +28,13 @@ enum BackoffType
     boTxnLockFast,
     boPDRPC,
     boRegionMiss,
-    boUpdateLeader,
+    boRegionScheduling,
     boServerBusy,
-    boTxnNotFound
+    boTiKVDiskFull,
+    boTxnNotFound,
+    boMaxTsNotSynced,
+    boMaxDataNotReady,
+    boMaxRegionNotInitialized,
 };
 
 inline int expo(int base, int cap, int n)
