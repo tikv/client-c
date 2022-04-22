@@ -1,15 +1,38 @@
 #include <pingcap/kv/RawClient.h>
 #include <iostream>
 #include <memory>
+#include <chrono>
+
+class TimerCounter {
+  std::chrono::time_point<std::chrono::system_clock> start_;
+  std::chrono::time_point<std::chrono::system_clock> end_;
+
+public:
+  void Start() { start_ = std::chrono::high_resolution_clock::now(); }
+  void Stop() { end_ = std::chrono::high_resolution_clock::now(); }
+  void PrintTime(const std::string &msg, int64_t base) {
+    std::cout
+        << msg << " Run time "
+        << base * 1000 / std::chrono::duration<double, std::milli>(end_ - start_).count()
+        << "QPS" << std::endl;
+  }
+};
 
 using namespace pingcap;
 using namespace pingcap::kv;
 
-void TestPutAndGet(std::shared_ptr<RawClient> client, const int start) {
-    for(int i = start; i < start + 10; i++) {
+void TestPutAndGet(std::shared_ptr<RawClient> client, const int cnt) {
+    for(int i = 0; i < cnt; i++) {
             client->Put("key" + std::to_string(i), "value" + std::to_string(i));
     }
-    for(int i = start; i < start + 10; i++) {
+    // for(int i = start; i < start + 10; i++) {
+    //     auto value = client->Get("key" + std::to_string(i));
+    //     std::cout << "value is : " << value.value_or("null") << std::endl; 
+    // }
+}
+
+void TestValidGet(std::shared_ptr<RawClient> client, const int cnt) {
+    for(int i = 0; i < cnt + 10; i++) {
         auto value = client->Get("key" + std::to_string(i));
         std::cout << "value is : " << value.value_or("null") << std::endl; 
     }
@@ -61,9 +84,11 @@ void TestCompareAndSwap(std::shared_ptr<RawClient> client, const int start) {
 int main() {
     std::vector<std::string> pd_addrs{"127.0.0.1:2379"};
     std::shared_ptr<RawClient> client = std::shared_ptr<RawClient>(new RawClient(pd_addrs));
-    TestPutAndGet(client, 0);
+    TimerCounter tc;
+    tc.Start();
+    TestPutAndGet(client, 10000);
+    tc.Stop();
+    tc.PrintTime("run time", 10000);
     // with TTL
-    TestCompareAndSwap(client, 0);
-    TestDeleteValues(client, 0);
     return 0;
 }
