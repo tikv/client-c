@@ -13,6 +13,7 @@ list(APPEND kvClient_sources pd/Client.cc)
 list(APPEND kvClient_sources coprocessor/Client.cc)
 list(APPEND kvClient_sources RedactHelpers.cc)
 list(APPEND kvClient_sources kv/RawClient.cc)
+list(APPEND kvClient_sources Histogram.cc)
 
 set(kvClient_INCLUDE_DIR ${kvClient_SOURCE_DIR}/include)
 
