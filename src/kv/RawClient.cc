@@ -9,22 +9,26 @@ namespace kv {
 
 RawClient::RawClient(const std::vector<std::string> & pd_addrs)
   : for_cas(false), cf(Default)  {
-      cluster_ptr = std::make_unique<Cluster>(pd_addrs, ClusterConfig());
+    //   cluster_ptr = std::make_unique<Cluster>(pd_addrs, ClusterConfig());
+    cluster_ptr = std::make_shared<Cluster>(pd_addrs, ClusterConfig());
 }
 
 RawClient::RawClient(const std::vector<std::string> & pd_addrs, bool cas)
   : for_cas(cas), cf(Default) {
-    cluster_ptr = std::make_unique<Cluster>(pd_addrs, ClusterConfig());
+    // cluster_ptr = std::make_unique<Cluster>(pd_addrs, ClusterConfig());
+    cluster_ptr = std::make_shared<Cluster>(pd_addrs, ClusterConfig());
 }
 
 RawClient::RawClient(const std::vector<std::string> & pd_addrs, const ClusterConfig & config)
   : for_cas(false), cf(Default) {
-      cluster_ptr = std::make_unique<Cluster>(pd_addrs, config);
+    //   cluster_ptr = std::make_unique<Cluster>(pd_addrs, config);
+    cluster_ptr = std::make_shared<Cluster>(pd_addrs, ClusterConfig());
 }
 
 RawClient::RawClient(const std::vector<std::string> & pd_addrs, const ClusterConfig & config, bool cas)
   : for_cas(cas), cf(Default) {
-      cluster_ptr = std::make_unique<Cluster>(pd_addrs, config);
+    //   cluster_ptr = std::make_unique<Cluster>(pd_addrs, config);
+    cluster_ptr = std::make_shared<Cluster>(pd_addrs, ClusterConfig());
 }
 
 bool RawClient::IsCASClient() {

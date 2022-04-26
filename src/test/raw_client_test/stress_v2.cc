@@ -34,18 +34,13 @@ public:
 };
 
 void multithread_write_to_db(
-   const std::vector<std::string> &ip_addr, size_t start, size_t end) {
+    std::shared_ptr<RawClient> client, size_t start, size_t end) {
   Histogram his;
   his.Clear();
   struct timeval s, e;
-  std::shared_ptr<RawClient> client = std::shared_ptr<RawClient>(new RawClient(ip_addr));
   for (size_t i = start; i < end; i++) {
     gettimeofday(&s, NULL);
-    try {
-      client->Put("key" + std::to_string(i), "test_value");
-    } catch(...) {
-      std::cout << "put data exception" << std::endl;
-    }
+    client->Put("key" + std::to_string(i), "test_value");
     gettimeofday(&e, NULL);
     his.Add((e.tv_sec-s.tv_sec)*1000000 + (e.tv_usec - s.tv_usec));
   }
@@ -60,19 +55,13 @@ void multithread_write_to_db(
 }
 
 void multithread_read_db(
-   const std::vector<std::string> &ip_addr, size_t start, size_t end) {
+    std::shared_ptr<RawClient> client, size_t start, size_t end) {
   Histogram his;
   his.Clear();
   struct timeval s, e;
-  std::optional<std::string> ret;
-  std::shared_ptr<RawClient> client = std::shared_ptr<RawClient>(new RawClient(ip_addr));
   for (size_t i = start; i < end; i++) {
     gettimeofday(&s, NULL);
-    try {
-      ret = client->Get("key" + std::to_string(i));
-    } catch (...) {
-      std::cout << "get key exception error" << std::endl;
-    }
+    auto ret = client->Get("key" + std::to_string(i));
     gettimeofday(&e, NULL);
     if(!ret.has_value()) {
       fail_cnt.fetch_add(1, std::memory_order_relaxed);
@@ -90,13 +79,10 @@ void multithread_read_db(
 }
 
 void multithread_cas_db(
-    const std::vector<std::string> &ip_addr, size_t start, size_t end) {
+    std::shared_ptr<RawClient> client, size_t start, size_t end) {
   Histogram his;
   his.Clear();
   struct timeval s, e;
-  auto clit = new RawClient(ip_addr);
-  clit->AsCASClient();
-  std::shared_ptr<RawClient> client = std::shared_ptr<RawClient>(clit);
   for (size_t i = start; i < end; i++) {
     gettimeofday(&s, NULL);
     bool is_swap;
@@ -117,36 +103,35 @@ void multithread_cas_db(
   << std::endl;
 }
 
-void random_valid_to_db(const std::vector<std::string> &ip_addr, size_t start, size_t end) {
-  std::shared_ptr<RawClient> client = std::shared_ptr<RawClient>(new RawClient(ip_addr));
+void random_valid_to_db(std::shared_ptr<RawClient> client, size_t start, size_t end) {
   for (size_t i = 0; i < 100; i++) {
     auto ret = client->Get("key" + std::to_string(i));
     std::cout << "valid key: " << i << " ,value: "  << ret.value_or("NOT FOUND") << std::endl;
   }
 }
 
-bool multi_assign_jobs(std::vector<std::string> &ip_addr, size_t jobs, size_t workers, std::string rw) {
+bool multi_assign_jobs(std::shared_ptr<RawClient> client, size_t jobs, size_t workers, std::string rw) {
   size_t per_job = (jobs + workers - 1) / workers;
   std::vector<std::thread> pool;
   pool.reserve(workers);
   
   if(rw == "w") {
     for (size_t w = 0; w < workers; w++) {
-      pool.emplace_back(multithread_write_to_db, std::ref(ip_addr),
+      pool.emplace_back(multithread_write_to_db, client,
                       w * per_job, (std::min((w + 1) * per_job, jobs)));
     }
   } else if(rw == "r") {
     for (size_t w = 0; w < workers; w++) {
-      pool.emplace_back(multithread_read_db, std::ref(ip_addr),
+      pool.emplace_back(multithread_read_db, client,
                       w * per_job, (std::min((w + 1) * per_job, jobs)));
     }
   } else if(rw == "cas") {
     for (size_t w = 0; w < workers; w++) {
-      pool.emplace_back(multithread_cas_db, std::ref(ip_addr),
+      pool.emplace_back(multithread_cas_db, client,
                       w * per_job, (std::min((w + 1) * per_job, jobs)));
     }
   } else {
-    random_valid_to_db(std::ref(ip_addr), 0, jobs);
+    random_valid_to_db(client, 0, jobs);
     return true;
   }
 
@@ -187,18 +172,18 @@ int main(int argc, char *argv[]) {
   ip_add = ip_add.empty()? "127.0.0.1:2379": ip_add;
   std::vector<std::string> pd_addrs{ip_add};
 
-  // std::shared_ptr<RawClient> client;
-  // if(rw != "cas") 
-  //   client = std::shared_ptr<RawClient>(new RawClient(pd_addrs));
-  // else {
-  //   auto clit = new RawClient(pd_addrs);
-  //   clit->AsCASClient();
-  //   client = std::shared_ptr<RawClient>(clit);
-  // }
+  std::shared_ptr<RawClient> client;
+  if(rw != "cas") 
+    client = std::shared_ptr<RawClient>(new RawClient(pd_addrs));
+  else {
+    auto clit = new RawClient(pd_addrs);
+    clit->AsCASClient();
+    client = std::shared_ptr<RawClient>(clit);
+  }
 
   TimerCounter tc;
   tc.Start();
-  multi_assign_jobs(pd_addrs, batch, cpu_num, rw);
+  multi_assign_jobs(client, batch, cpu_num, rw);
   tc.Stop();
   std::cout << "failed: " << fail_cnt << std::endl;
   tc.PrintTime(batch);
