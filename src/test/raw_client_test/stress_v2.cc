@@ -40,7 +40,7 @@ void multithread_write_to_db(
   struct timeval s, e;
   for (size_t i = start; i < end; i++) {
     gettimeofday(&s, NULL);
-    client->Put("key" + std::to_string(i), "test_value");
+    client->Put(std::to_string(i), std::string(20480, 'a'));
     gettimeofday(&e, NULL);
     his.Add((e.tv_sec-s.tv_sec)*1000000 + (e.tv_usec - s.tv_usec));
   }
@@ -61,7 +61,7 @@ void multithread_read_db(
   struct timeval s, e;
   for (size_t i = start; i < end; i++) {
     gettimeofday(&s, NULL);
-    auto ret = client->Get("key" + std::to_string(i));
+    auto ret = client->Get(std::to_string(i));
     gettimeofday(&e, NULL);
     if(!ret.has_value()) {
       fail_cnt.fetch_add(1, std::memory_order_relaxed);
@@ -86,7 +86,7 @@ void multithread_cas_db(
   for (size_t i = start; i < end; i++) {
     gettimeofday(&s, NULL);
     bool is_swap;
-    client->CompareAndSwap("key" + std::to_string(i), "test_value", "test_new_value", is_swap);
+    client->CompareAndSwap(std::to_string(i), std::string(20480, 'a'), "test_new_value", is_swap);
     gettimeofday(&e, NULL);
     if(!is_swap) {
       fail_cnt.fetch_add(1, std::memory_order_relaxed);
@@ -105,7 +105,7 @@ void multithread_cas_db(
 
 void random_valid_to_db(std::shared_ptr<RawClient> client, size_t start, size_t end) {
   for (size_t i = 0; i < 100; i++) {
-    auto ret = client->Get("key" + std::to_string(i));
+    auto ret = client->Get(std::to_string(i));
     std::cout << "valid key: " << i << " ,value: "  << ret.value_or("NOT FOUND") << std::endl;
   }
 }

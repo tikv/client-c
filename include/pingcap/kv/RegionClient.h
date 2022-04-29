@@ -10,7 +10,7 @@ namespace pingcap
 namespace kv
 {
 
-constexpr int dailTimeout = 10000;
+constexpr int dailTimeout = 100000;
 constexpr int copTimeout = 20;
 
 // RegionClient sends KV/Cop requests to tikv server (corresponding to `RegionRequestSender` in go-client). It handles network errors and some region errors internally.
@@ -64,6 +64,7 @@ struct RegionClient
             {
                 log->warning("region " + region_id.toString() + " find error: " + resp->region_error().message());
                 onRegionError(bo, ctx, resp->region_error());
+                // set error and return 
             }
             else
             {

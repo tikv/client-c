@@ -21,8 +21,7 @@ constexpr const char* kCfString[3]  = {"default", "lock", "write"};
 //https://docs.rs/tikv-client/latest/tikv_client/struct.RawClient.html
 struct RawClient
 {
-    // ClusterPtr  cluster_ptr;
-    std::shared_ptr<pingcap::kv::Cluster> cluster_ptr;
+    ClusterPtr  cluster_ptr;
     bool for_cas;
     ColumnFamily cf;
 

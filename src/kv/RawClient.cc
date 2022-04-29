@@ -9,26 +9,22 @@ namespace kv {
 
 RawClient::RawClient(const std::vector<std::string> & pd_addrs)
   : for_cas(false), cf(Default)  {
-    //   cluster_ptr = std::make_unique<Cluster>(pd_addrs, ClusterConfig());
-    cluster_ptr = std::make_shared<Cluster>(pd_addrs, ClusterConfig());
+      cluster_ptr = std::make_unique<Cluster>(pd_addrs, ClusterConfig());
 }
 
 RawClient::RawClient(const std::vector<std::string> & pd_addrs, bool cas)
   : for_cas(cas), cf(Default) {
-    // cluster_ptr = std::make_unique<Cluster>(pd_addrs, ClusterConfig());
-    cluster_ptr = std::make_shared<Cluster>(pd_addrs, ClusterConfig());
+    cluster_ptr = std::make_unique<Cluster>(pd_addrs, ClusterConfig());
 }
 
 RawClient::RawClient(const std::vector<std::string> & pd_addrs, const ClusterConfig & config)
   : for_cas(false), cf(Default) {
-    //   cluster_ptr = std::make_unique<Cluster>(pd_addrs, config);
-    cluster_ptr = std::make_shared<Cluster>(pd_addrs, ClusterConfig());
+      cluster_ptr = std::make_unique<Cluster>(pd_addrs, config);
 }
 
 RawClient::RawClient(const std::vector<std::string> & pd_addrs, const ClusterConfig & config, bool cas)
   : for_cas(cas), cf(Default) {
-    //   cluster_ptr = std::make_unique<Cluster>(pd_addrs, config);
-    cluster_ptr = std::make_shared<Cluster>(pd_addrs, ClusterConfig());
+      cluster_ptr = std::make_unique<Cluster>(pd_addrs, config);
 }
 
 bool RawClient::IsCASClient() {
@@ -189,22 +185,27 @@ uint64_t RawClient::GetKeyTTL(const std::string &key, int64_t to_ms) {
 }
 
 std::optional<std::string> RawClient::Get(const std::string &key) {
-  Backoffer bo(RawGetMaxBackoff);
-  auto local = cluster_ptr->region_cache->locateKey(bo, key);
-  RegionClient client(cluster_ptr.get(), local.region);
-  auto req = std::shared_ptr<kvrpcpb::RawGetRequest>(new kvrpcpb::RawGetRequest());
-  req->set_key(key);
-  auto resp = client.sendReqToRegion(bo, req);
-  if(resp->has_region_error()) {
-      throw Exception(resp->region_error().message(), RegionUnavailable);
+  try {
+        Backoffer bo(RawGetMaxBackoff);
+        auto local = cluster_ptr->region_cache->locateKey(bo, key);
+        RegionClient client(cluster_ptr.get(), local.region);
+        auto req = std::shared_ptr<kvrpcpb::RawGetRequest>(new kvrpcpb::RawGetRequest());
+        req->set_key(key);
+
+        auto resp = client.sendReqToRegion(bo, req);
+        if(resp->has_region_error()) {
+            throw Exception(resp->region_error().message(), RegionUnavailable);
+        }
+        if(resp->error() != "") {
+            throw Exception("unexpected error: " + resp->error(), ErrorCodes::UnknownError);
+        }
+        if(resp->not_found()) {
+            return std::nullopt;
+        }
+        return resp->value();
+  } catch(const std::exception &e) {
+      std::cout << "get value with expections: " << std::endl;
   }
-  if(resp->error() != "") {
-      throw Exception("unexpected error: " + resp->error(), ErrorCodes::UnknownError);
-  }
-  if(resp->not_found()) {
-      return std::nullopt;
-  }
-  return resp->value();
 }
 
 std::optional<std::string> RawClient::Get(const std::string &key, int64_t to_ms) {
