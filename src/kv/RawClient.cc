@@ -184,28 +184,24 @@ uint64_t RawClient::GetKeyTTL(const std::string &key, int64_t to_ms) {
   return resp->ttl();
 }
 
-std::optional<std::string> RawClient::Get(const std::string &key) {
-  try {
-        Backoffer bo(RawGetMaxBackoff);
-        auto local = cluster_ptr->region_cache->locateKey(bo, key);
-        RegionClient client(cluster_ptr.get(), local.region);
-        auto req = std::shared_ptr<kvrpcpb::RawGetRequest>(new kvrpcpb::RawGetRequest());
-        req->set_key(key);
+std::optional<std::string> RawClient::Get(const std::string &key) { 
+    Backoffer bo(RawGetMaxBackoff);
+    auto local = cluster_ptr->region_cache->locateKey(bo, key);
+    RegionClient client(cluster_ptr.get(), local.region);
+    auto req = std::shared_ptr<kvrpcpb::RawGetRequest>(new kvrpcpb::RawGetRequest());
+    req->set_key(key);
 
-        auto resp = client.sendReqToRegion(bo, req);
-        if(resp->has_region_error()) {
-            throw Exception(resp->region_error().message(), RegionUnavailable);
-        }
-        if(resp->error() != "") {
-            throw Exception("unexpected error: " + resp->error(), ErrorCodes::UnknownError);
-        }
-        if(resp->not_found()) {
-            return std::nullopt;
-        }
-        return resp->value();
-  } catch(const std::exception &e) {
-      std::cout << "get value with expections: " << std::endl;
-  }
+    auto resp = client.sendReqToRegion(bo, req);
+    if(resp->has_region_error()) {
+        throw Exception(resp->region_error().message(), RegionUnavailable);
+    }
+    if(resp->error() != "") {
+        throw Exception("unexpected error: " + resp->error(), ErrorCodes::UnknownError);
+    }
+    if(resp->not_found()) {
+        return std::nullopt;
+    }
+    return resp->value();
 }
 
 std::optional<std::string> RawClient::Get(const std::string &key, int64_t to_ms) {

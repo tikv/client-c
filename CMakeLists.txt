@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 2.8)
 project(kvClient)
 set (CMAKE_CXX_STANDARD 17)
-set (CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wno-narrowing -O2")
-#set (CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wno-narrowing")
+#set (CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wno-narrowing -O2")
+set (CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wno-narrowing -O0 -g")
 set (CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 message("${CMAKE_CXX_FLAGS}")

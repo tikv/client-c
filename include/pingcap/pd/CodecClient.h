@@ -28,8 +28,10 @@ struct CodecClient : public Client
 
     metapb::Region processRegionResult(metapb::Region & region)
     {
-        region.set_start_key(decodeBytes(region.start_key()));
-        region.set_end_key(decodeBytes(region.end_key()));
+        // region.set_start_key(decodeBytes(region.start_key()));
+        // region.set_end_key(decodeBytes(region.end_key()));
+        region.set_start_key(encodeBytes(region.start_key()));
+        region.set_end_key(encodeBytes(region.end_key()));
         return region;
     }
 

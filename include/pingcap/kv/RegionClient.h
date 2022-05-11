@@ -4,6 +4,8 @@
 #include <pingcap/kv/Cluster.h>
 #include <pingcap/kv/RegionCache.h>
 #include <pingcap/kv/Rpc.h>
+#include <Poco/AutoPtr.h>
+#include <Poco/ConsoleChannel.h>
 
 namespace pingcap
 {
@@ -56,6 +58,7 @@ struct RegionClient
             }
             catch (const Exception & e)
             {
+                log->warning("send rpc excpetion: " + e.displayText());
                 onSendFail(bo, e, ctx);
                 continue;
             }

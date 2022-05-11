@@ -13,10 +13,14 @@
 #include <sys/time.h>
 #include <time.h>
 #include <stdlib.h>
+#include <Poco/AutoPtr.h>
+#include <Poco/ConsoleChannel.h>
+#include "pingcap/Log.h"
 
 using namespace pingcap;
 using namespace pingcap::kv;
 
+#define LARGE_VALUE
 std::atomic<int64_t> fail_cnt;
 
 class TimerCounter {
@@ -40,7 +44,20 @@ void multithread_write_to_db(
   struct timeval s, e;
   for (size_t i = start; i < end; i++) {
     gettimeofday(&s, NULL);
-    client->Put(std::to_string(i), std::string(20480, 'a'));
+    if(i % 100 == 0) std::cout << "key: " << i << std::endl;
+#ifdef LARGE_VALUE
+    for(;;) {
+      try{
+        client->Put(std::to_string(i), std::string(20480, 'a'));
+      } catch(...) {
+        std::cout << "put key error and try re-put: " << i << std::endl;
+        continue;
+      }
+      break;
+    }
+#else
+    client->Put(std::to_string(i), std::string(10, 'a'));
+#endif
     gettimeofday(&e, NULL);
     his.Add((e.tv_sec-s.tv_sec)*1000000 + (e.tv_usec - s.tv_usec));
   }
@@ -60,9 +77,29 @@ void multithread_read_db(
   his.Clear();
   struct timeval s, e;
   for (size_t i = start; i < end; i++) {
+    if(i % 100 == 0) std::cout << "key: " << i << std::endl;
     gettimeofday(&s, NULL);
-    auto ret = client->Get(std::to_string(i));
+    std::optional<std::string> ret;
+    for(;;) {
+      try {
+        ret = client->Get(std::to_string(i));
+      }
+      catch(...) {
+        std::cerr << "get key error, and try re-get" << i << '\n';
+        continue;
+      }
+      break;
+    }
     gettimeofday(&e, NULL);
+#ifdef LARGE_VALUE
+    if(ret.value_or("").size() < 20480) {
+      std::cout << "get value error key: " << i << std::endl;
+    }
+#else
+    if(ret.value_or("").size() < 10) {
+      std::cout << "get value error"<< std::endl;
+    }
+#endif
     if(!ret.has_value()) {
       fail_cnt.fetch_add(1, std::memory_order_relaxed);
     }
@@ -86,7 +123,11 @@ void multithread_cas_db(
   for (size_t i = start; i < end; i++) {
     gettimeofday(&s, NULL);
     bool is_swap;
+#ifdef LARGE_VALUE
     client->CompareAndSwap(std::to_string(i), std::string(20480, 'a'), "test_new_value", is_swap);
+#else
+    client->CompareAndSwap(std::to_string(i), std::string(10, 'a'), "test_new_value", is_swap);
+#endif
     gettimeofday(&e, NULL);
     if(!is_swap) {
       fail_cnt.fetch_add(1, std::memory_order_relaxed);
@@ -171,6 +212,8 @@ int main(int argc, char *argv[]) {
   batch = batch? batch: BATCH;
   ip_add = ip_add.empty()? "127.0.0.1:2379": ip_add;
   std::vector<std::string> pd_addrs{ip_add};
+  Poco::AutoPtr<Poco::ConsoleChannel> console_channel(new Poco::ConsoleChannel);
+  pingcap::Logger::get("pingcap.tikv").setChannel(console_channel);
 
   std::shared_ptr<RawClient> client;
   if(rw != "cas") 

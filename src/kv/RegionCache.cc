@@ -89,7 +89,7 @@ KeyLocation RegionCache::locateKey(Backoffer & bo, const std::string & key)
     }
 
     region = loadRegionByKey(bo, key);
-
+    log->information("add locate region: " + region->verID().toString() +", start key: " + region->startKey() + ", end key: " + region->endKey());
     insertRegionToCache(region);
 
     return KeyLocation(region->verID(), region->startKey(), region->endKey());
@@ -312,6 +312,7 @@ void RegionCache::onRegionStale(Backoffer & bo, RPCContextPtr ctx, const errorpb
         region->switchPeer(ctx->peer.store_id());
         insertRegionToCache(region);
     }
+    log->information("region stale for region " + ctx->region.toString() + " end.");
 }
 
 std::pair<std::unordered_map<RegionVerID, std::vector<std::string>>, RegionVerID> RegionCache::groupKeysByRegion(
