@@ -37,6 +37,8 @@ public:
     virtual uint64_t getGCSafePoint() = 0;
 
     virtual bool isMock() = 0;
+
+    virtual std::string name() {return "base";}
 };
 
 using ClientPtr = std::shared_ptr<IClient>;

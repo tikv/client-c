@@ -14,9 +14,13 @@ struct CodecClient : public Client
 {
     CodecClient(const std::vector<std::string> & addrs, const ClusterConfig & config) : Client(addrs, config) {}
 
+    std::string name() override {return "codeClient";}
+
     std::pair<metapb::Region, metapb::Peer> getRegionByKey(const std::string & key) override
     {
         auto [region, leader] = Client::getRegionByKey(encodeBytes(key));
+        if(!region.has_encryption_meta()) 
+            return std::make_pair(region, leader);
         return std::make_pair(processRegionResult(region), leader);
     }
 
@@ -28,10 +32,8 @@ struct CodecClient : public Client
 
     metapb::Region processRegionResult(metapb::Region & region)
     {
-        // region.set_start_key(decodeBytes(region.start_key()));
-        // region.set_end_key(decodeBytes(region.end_key()));
-        region.set_start_key(encodeBytes(region.start_key()));
-        region.set_end_key(encodeBytes(region.end_key()));
+        region.set_start_key(decodeBytes(region.start_key()));
+        region.set_end_key(decodeBytes(region.end_key()));
         return region;
     }
 

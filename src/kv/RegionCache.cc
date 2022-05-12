@@ -82,14 +82,15 @@ RegionPtr RegionCache::getRegionByID(Backoffer & bo, const RegionVerID & id)
 
 KeyLocation RegionCache::locateKey(Backoffer & bo, const std::string & key)
 {
-    RegionPtr region = searchCachedRegion(key);
+    RegionPtr region = searchCachedRegion(key); /*key not encode*/
+
     if (region != nullptr)
     {
         return KeyLocation(region->verID(), region->startKey(), region->endKey());
     }
 
     region = loadRegionByKey(bo, key);
-    log->information("add locate region: " + region->verID().toString() +", start key: " + region->startKey() + ", end key: " + region->endKey());
+    log->information("add region: " + region->verID().toString() +", start key: " + region->startKey() + ", end key: " + region->endKey());
     insertRegionToCache(region);
 
     return KeyLocation(region->verID(), region->startKey(), region->endKey());
@@ -149,6 +150,7 @@ RegionPtr RegionCache::loadRegionByKey(Backoffer & bo, const std::string & key)
     {
         try
         {
+            log->information("pd client name: " + pd_client->name());
             auto [meta, leader] = pd_client->getRegionByKey(key);
             if (!meta.IsInitialized())
             {
@@ -167,6 +169,7 @@ RegionPtr RegionCache::loadRegionByKey(Backoffer & bo, const std::string & key)
         }
         catch (const Exception & e)
         {
+            log->information( "exception: " + e.displayText());
             bo.backoff(boPDRPC, e);
         }
     }
@@ -304,15 +307,17 @@ void RegionCache::onRegionStale(Backoffer & bo, RPCContextPtr ctx, const errorpb
     for (int i = 0; i < stale_epoch.current_regions_size(); i++)
     {
         auto meta = stale_epoch.current_regions(i);
-        if (auto * pd = static_cast<pd::CodecClient *>(pd_client.get()))
-        {
-            pd->processRegionResult(meta);
+        if(meta.has_encryption_meta()) {
+            log->information("keys encryption");
+            if (auto * pd = static_cast<pd::CodecClient *>(pd_client.get()))
+            {
+                pd->processRegionResult(meta);
+            }
         }
         RegionPtr region = std::make_shared<Region>(meta, meta.peers(0));
         region->switchPeer(ctx->peer.store_id());
         insertRegionToCache(region);
     }
-    log->information("region stale for region " + ctx->region.toString() + " end.");
 }
 
 std::pair<std::unordered_map<RegionVerID, std::vector<std::string>>, RegionVerID> RegionCache::groupKeysByRegion(

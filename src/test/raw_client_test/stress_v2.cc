@@ -84,9 +84,9 @@ void multithread_read_db(
       try {
         ret = client->Get(std::to_string(i));
       }
-      catch(...) {
-        std::cerr << "get key error, and try re-get" << i << '\n';
-        continue;
+      catch(const Exception &exc) {
+        std::cerr << "get key: " << i << ",error, and try re-get, because: " << exc.displayText() << '\n';
+        // continue;
       }
       break;
     }

@@ -39,6 +39,8 @@ public:
     // only implement a weak get ts.
     uint64_t getTS() override;
 
+    std::string name() override {return "client";}
+
     std::pair<metapb::Region, metapb::Peer> getRegionByKey(const std::string & key) override;
 
     //std::pair<metapb::Region, metapb::Peer> getPrevRegion(std::string key) override;
