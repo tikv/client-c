@@ -6,7 +6,6 @@ namespace pingcap
 {
 namespace pd
 {
-
 inline std::vector<std::string> addrsToUrls(const std::vector<std::string> & addrs, const ClusterConfig & config)
 {
     std::vector<std::string> urls;
@@ -42,7 +41,7 @@ Client::Client(const std::vector<std::string> & addrs, const ClusterConfig & con
 {
     initClusterID();
 
-    updateLeader();
+    initLeader();
 
     work_threads_stop = false;
 
@@ -128,10 +127,35 @@ void Client::initClusterID()
     throw Exception("failed to init cluster id", InitClusterIDFailed);
 }
 
+void Client::initLeader()
+{
+    static const size_t init_leader_retry_times = 5;
+    for (size_t i = 0; i < init_leader_retry_times; i++)
+    {
+        try
+        {
+            updateLeader();
+        }
+        catch (Exception & e)
+        {
+            if (i < init_leader_retry_times - 1)
+            {
+                log->warning("failed to update leader, will retry");
+                std::this_thread::sleep_for(std::chrono::seconds(2));
+            }
+            else
+            {
+                log->warning("failed to update leader, exit");
+                throw e;
+            }
+        }
+    }
+}
+
 void Client::updateLeader()
 {
     std::unique_lock lk(leader_mutex);
-    for (auto url : urls)
+    for (auto & url : urls)
     {
         auto resp = getMembers(url);
         if (!resp.has_header() || resp.leader().client_urls_size() == 0)
