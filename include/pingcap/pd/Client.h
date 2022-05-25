@@ -18,7 +18,6 @@ namespace pingcap
 {
 namespace pd
 {
-
 class Client : public IClient
 {
     const int max_init_cluster_retries;
@@ -57,6 +56,8 @@ private:
     void initClusterID();
 
     void updateLeader();
+
+    void initLeader();
 
     void updateURLs(const ::google::protobuf::RepeatedPtrField<::pdpb::Member> & members);
 
