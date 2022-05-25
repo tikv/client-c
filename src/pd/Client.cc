@@ -145,7 +145,7 @@ void Client::initLeader()
             }
             else
             {
-                log->warning("failed to update leader, exit");
+                log->error("failed to update leader, stop retrying");
                 throw e;
             }
         }
