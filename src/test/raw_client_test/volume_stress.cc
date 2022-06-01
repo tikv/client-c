@@ -17,159 +17,123 @@
 #include <Poco/ConsoleChannel.h>
 #include "pingcap/Log.h"
 #include <cassert>
+#include <thread>
+#include <mutex>
 
 using namespace pingcap;
 using namespace pingcap::kv;
 
-#define LARGE_VALUE
 std::atomic<int64_t> fail_cnt;
-
-class TimerCounter {
-  struct timeval start_, end_;
-public:
-  void Start() { gettimeofday(&start_, NULL); }
-  void Stop() { gettimeofday(&end_, NULL); }
-  void PrintTime(int64_t base) {
-    std::cout << "Queries: "
-        << base << " Runtime: "
-        << ((end_.tv_sec - start_.tv_sec) + (end_.tv_usec - start_.tv_usec)/1000000.0) << "s, QPS: "
-        << (base * 1000) / ((end_.tv_sec - start_.tv_sec) *1000 + (end_.tv_usec - start_.tv_usec)/1000)
-        << std::endl;
-  }
-};
+std::mutex plk;
 
 void multithread_write_to_db(
     std::shared_ptr<RawClient> client, size_t start, size_t end) {
-  // Histogram his;
-  // his.Clear();
-  // struct timeval s, e;
+  int64_t fail_sta = 0;
+  
   for (size_t i = start; i < end; i++) {
-    // gettimeofday(&s, NULL);
-    if(i % 100 == 0) std::cout << "key: " << i << std::endl;
-#ifdef LARGE_VALUE
-    for(int ty = 0; ty < 5; ty ++) {
+    int ty = 0;
+    for(; ty < 5; ty ++) {
       try{
         client->Put(std::to_string(i), std::string(20480, 'a'));
       } catch(...) {
-        std::cout << "put key error: " << i << ", retry: " << ty << std::endl;
         continue;
       }
       break;
+    } // end try loop
+    if(ty >= 5) {
+        fail_sta ++;
     }
-#else
-    client->Put(std::to_string(i), std::string(10, 'a'));
-#endif
-    // gettimeofday(&e, NULL);
-    // his.Add((e.tv_sec-s.tv_sec)*1000000 + (e.tv_usec - s.tv_usec));
+  } // end for loop
+
+  {
+      std::lock_guard<std::mutex> lk(plk);
+      std::cout << "|  tid  |  number_keys  |  fail number  |" << std::endl;
+      std::cout << "|  " << std::this_thread::get_id() << "  |  " << end-start << "  |  " << fail_sta << "  |" << std::endl;
+      std::cout << "|-------|---------------|---------------|" << std::endl;
   }
-  // std::cout << "Latency (us):"
-  // << " Min: " << his.Minimum()
-  // << " Avg: " << his.Average()
-  // << " P99: " << his.Percentile(99.0)
-  // << " Max: " << his.Maximum()
-  // << " StdDev: " << his.StandardDeviation()
-  // << " Queries: " << his.Count()
-  // << std::endl;
+
 }
 
 void multithread_read_db(
     std::shared_ptr<RawClient> client, size_t start, size_t end) {
-  // Histogram his;
-  // his.Clear();
-  // struct timeval s, e;
+  int64_t fail_read = 0;
+  
   for (size_t i = start; i < end; i++) {
-    if(i % 100 == 0) std::cout << "key: " << i << std::endl;
-    // gettimeofday(&s, NULL);
     std::optional<std::string> ret;
-    for(int ty = 0; ty < 5; ty ++) {
+    int ty = 0;
+    for(; ty < 5; ty ++) {
       try {
         ret = client->Get(std::to_string(i));
       }
       catch(const Exception &exc) {
-        std::cerr << "get key: " << i << ",error, and try re-get, because: " << exc.displayText() << '\n';
         continue;
       }
       break;
-    }
-    // gettimeofday(&e, NULL);
-#ifdef LARGE_VALUE
+    } // end try loop
     assert(ret.has_value() && (ret.value().size() == 20480));
-#else
-    if(ret.value_or("").size() < 10) {
-      std::cout << "get value error"<< std::endl;
-    }
-#endif
-    if(!ret.has_value()) {
+    if(!ret.has_value() || ty >=5) {
+      fail_read ++;
       fail_cnt.fetch_add(1, std::memory_order_relaxed);
     }
-    // his.Add((e.tv_sec-s.tv_sec)*1000000 + (e.tv_usec - s.tv_usec));
+  } // end for loop
+
+  {
+      std::lock_guard<std::mutex> lk(plk);
+      std::cout << "|  tid  |  number_keys  |  fail number  |" << std::endl;
+      std::cout << "|  " << std::this_thread::get_id() << "  |  " << end-start << "  |  " << fail_read << "  |" << std::endl;
+      std::cout << "|-------|---------------|---------------|" << std::endl;
   }
-  // std::cout << "Latency (us):"
-  // << " Min: " << his.Minimum()
-  // << " Avg: " << his.Average()
-  // << " P99: " << his.Percentile(99.0)
-  // << " Max: " << his.Maximum()
-  // << " StdDev: " << his.StandardDeviation()
-  // << " Queries: " << his.Count()
-  // << std::endl;
+
 }
 
 void multithread_cas_db(
     std::shared_ptr<RawClient> client, size_t start, size_t end) {
-  // Histogram his;
-  // his.Clear();
-  // struct timeval s, e;
+  int64_t fail_cas = 0;
+
   for (size_t i = start; i < end; i++) {
-    // gettimeofday(&s, NULL);
     bool is_swap;
-#ifdef LARGE_VALUE
-    for(int ty = 0; ty < 5; ty ++) {
+    int ty = 0;
+    for(; ty < 5; ty ++) {
       try{
-          client->CompareAndSwap(std::to_string(i), std::string(20480, 'a'), "test_new_value", is_swap);
+          client->CompareAndSwap(std::to_string(i), std::string(20480, 'a'), std::string(20480, 'b'), is_swap);
       } catch(...) {
-        std::cout << "cas key error: " << i << ", retry: " << ty << std::endl;
         continue;
       }
       break;
-    }
-#else
-    client->CompareAndSwap(std::to_string(i), std::string(10, 'a'), "test_new_value", is_swap);
-#endif
-    // gettimeofday(&e, NULL);
+    } // end try loop
     if(!is_swap) {
+      fail_cas ++;
       fail_cnt.fetch_add(1, std::memory_order_relaxed);
     }
-    // his.Add((e.tv_sec-s.tv_sec)*1000000 + (e.tv_usec - s.tv_usec));
+  }// end for loop
+  
+  {
+      std::lock_guard<std::mutex> lk(plk);
+      std::cout << "|  tid  |  number_keys  |  fail number  |" << std::endl;
+      std::cout << "|  " << std::this_thread::get_id() << "  |  " << end-start << "  |  " << fail_cas << "  |" << std::endl;
+      std::cout << "|-------|---------------|---------------|" << std::endl;
+
   }
-  // std::cout << "Latency (us):"
-  // << " Min: " << his.Minimum()
-  // << " Avg: " << his.Average()
-  // << " P99: " << his.Percentile(99.0)
-  // << " Max: " << his.Maximum()
-  // << " StdDev: " << his.StandardDeviation()
-  // << " Queries: " << his.Count()
-  // << std::endl;
 }
 
 void random_valid_to_db(std::shared_ptr<RawClient> client, size_t start, size_t end) {
   size_t cnt = 0;
-  for (size_t i = 0; i < 10000000; i++) {
+  for (size_t i = 0; i < 100; i++) {
     for(int k = 0; k < 5; k++) {
       std::optional<std::string> ret;
       try {
         ret = client->Get(std::to_string(i));
       }
       catch(const Exception &exc) {
-        std::cerr << "get key: " << i << "retry: " << k << '\n';
         continue;
       }
       if(ret.has_value() && ret.value().size() == 14) {
         cnt ++;
       }
+      std::cout << "get key: " << ret.value() << std::endl;
       break;
     }
   }
-  std::cout << "key-value number" << cnt << std::endl;
 }
 
 bool multi_assign_jobs(std::shared_ptr<RawClient> client, size_t jobs, size_t workers, std::string rw) {
@@ -245,11 +209,7 @@ int main(int argc, char *argv[]) {
     client = std::shared_ptr<RawClient>(clit);
   }
 
-  // TimerCounter tc;
-  // tc.Start();
   multi_assign_jobs(client, batch, cpu_num, rw);
-  // tc.Stop();
   std::cout << "failed: " << fail_cnt << std::endl;
-  // tc.PrintTime(batch);
   return 0;
 }

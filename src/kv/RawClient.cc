@@ -186,7 +186,6 @@ uint64_t RawClient::GetKeyTTL(const std::string &key, int64_t to_ms) {
 
 std::optional<std::string> RawClient::Get(const std::string &key) { 
     Backoffer bo(RawGetMaxBackoff);
-    std::cout << "get key is: " << key << "\n";
     auto local = cluster_ptr->region_cache->locateKey(bo, key);
     RegionClient client(cluster_ptr.get(), local.region);
     auto req = std::shared_ptr<kvrpcpb::RawGetRequest>(new kvrpcpb::RawGetRequest());
