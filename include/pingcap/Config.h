@@ -7,7 +7,6 @@
 
 namespace pingcap
 {
-
 struct ClusterConfig
 {
     std::string tiflash_engine_key;
@@ -16,7 +15,7 @@ struct ClusterConfig
     std::string cert_path;
     std::string key_path;
 
-    ClusterConfig() {}
+    ClusterConfig() = default;
 
     ClusterConfig(const std::string & engine_key_, const std::string & engine_value_, const std::string & ca_path_, const std::string & cert_path_, const std::string & key_path_)
         : tiflash_engine_key(engine_key_)
@@ -43,7 +42,7 @@ struct ClusterConfig
     }
 
 private:
-    std::string readFile(const std::string & path) const
+    static std::string readFile(const std::string & path)
     {
         std::ifstream t(path.data());
         std::string str((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());

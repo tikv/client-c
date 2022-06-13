@@ -7,7 +7,6 @@ namespace pingcap
 {
 namespace coprocessor
 {
-
 using namespace std::chrono_literals;
 
 std::vector<copTask> buildCopTasks(
@@ -20,7 +19,7 @@ std::vector<copTask> buildCopTasks(
 {
     log->debug("build " + std::to_string(ranges.size()) + " ranges.");
     std::vector<copTask> tasks;
-    while (ranges.size() > 0)
+    while (!ranges.empty())
     {
         auto loc = cluster->region_cache->locateKey(bo, ranges[0].start_key);
 
@@ -127,7 +126,7 @@ void ResponseIter::handle_task(const copTask & task)
             auto & current_task = remain_tasks[idx];
             auto new_tasks
                 = handle_task_impl(bo_maps.try_emplace(current_task.region_id.id, kv::copNextMaxBackoff).first->second, current_task);
-            if (new_tasks.size() > 0)
+            if (!new_tasks.empty())
             {
                 remain_tasks.insert(remain_tasks.end(), new_tasks.begin(), new_tasks.end());
             }

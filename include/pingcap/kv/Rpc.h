@@ -13,13 +13,12 @@ namespace pingcap
 {
 namespace kv
 {
-
 struct ConnArray
 {
     std::mutex mutex;
     std::string address;
 
-    size_t index;
+    size_t index = 0;
     std::vector<std::shared_ptr<KvConnClient>> vec;
 
     ConnArray() = default;
@@ -43,7 +42,7 @@ class RpcCall
     Logger * log;
 
 public:
-    RpcCall(std::shared_ptr<T> req_)
+    explicit RpcCall(std::shared_ptr<T> req_)
         : req(req_)
         , resp(std::make_shared<S>())
         , log(&Logger::get("pingcap.tikv"))
@@ -88,9 +87,9 @@ struct RpcClient
 
     std::map<std::string, ConnArrayPtr> conns;
 
-    RpcClient() {}
+    RpcClient() = default;
 
-    RpcClient(const ClusterConfig & config_)
+    explicit RpcClient(const ClusterConfig & config_)
         : config(config_)
     {}
 
@@ -101,25 +100,25 @@ struct RpcClient
     template <class T>
     void sendRequest(std::string addr, RpcCall<T> & rpc, int timeout)
     {
-        ConnArrayPtr connArray = getConnArray(addr);
-        auto connClient = connArray->get();
-        rpc.call(connClient, timeout);
+        ConnArrayPtr conn_array = getConnArray(addr);
+        auto conn_client = conn_array->get();
+        rpc.call(conn_client, timeout);
     }
 
     template <class T>
     auto sendStreamRequest(std::string addr, grpc::ClientContext * context, RpcCall<T> & rpc)
     {
-        ConnArrayPtr connArray = getConnArray(addr);
-        auto connClient = connArray->get();
-        return rpc.callStream(context, connClient);
+        ConnArrayPtr conn_array = getConnArray(addr);
+        auto conn_client = conn_array->get();
+        return rpc.callStream(context, conn_client);
     }
 
     template <class T>
     auto sendStreamRequestAsync(std::string addr, grpc::ClientContext * context, RpcCall<T> & rpc, grpc::CompletionQueue & cq, void * call)
     {
-        ConnArrayPtr connArray = getConnArray(addr);
-        auto connClient = connArray->get();
-        return rpc.callStreamAsync(context, connClient, cq, call);
+        ConnArrayPtr conn_array = getConnArray(addr);
+        auto conn_client = conn_array->get();
+        return rpc.callStreamAsync(context, conn_client, cq, call);
     }
 };
 

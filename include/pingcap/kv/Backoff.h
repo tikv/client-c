@@ -12,7 +12,6 @@ namespace pingcap
 {
 namespace kv
 {
-
 enum Jitter
 {
     NoJitter = 1,
@@ -110,7 +109,7 @@ struct Backoffer
     size_t total_sleep; // ms
     size_t max_sleep; // ms
 
-    Backoffer(size_t max_sleep_)
+    explicit Backoffer(size_t max_sleep_)
         : total_sleep(0)
         , max_sleep(max_sleep_)
     {}

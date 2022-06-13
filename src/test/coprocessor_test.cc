@@ -15,7 +15,6 @@ std::vector<copTask> buildCopTasks(kv::Backoffer & bo, kv::Cluster * cluster, st
 
 namespace
 {
-
 using namespace pingcap;
 using namespace pingcap::kv;
 

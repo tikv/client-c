@@ -13,7 +13,6 @@ namespace pingcap
 {
 namespace kv
 {
-
 struct Cluster;
 
 // TxnStatus represents a txn's final status. It should be Lock or Commit or Rollback.
@@ -23,9 +22,9 @@ struct TxnStatus
     uint64_t commit_ts = 0;
     ::kvrpcpb::Action action;
     std::optional<::kvrpcpb::LockInfo> primary_lock;
-    bool isCommitted() { return ttl == 0 && commit_ts > 0; }
+    bool isCommitted() const { return ttl == 0 && commit_ts > 0; }
 
-    bool isCacheable()
+    bool isCacheable() const
     {
         if (isCommitted())
         {
@@ -65,7 +64,7 @@ struct Lock
     uint64_t lock_for_update_ts;
     uint64_t min_commit_ts;
 
-    Lock(const ::kvrpcpb::LockInfo & l)
+    explicit Lock(const ::kvrpcpb::LockInfo & l)
         : key(l.key())
         , primary(l.primary_lock())
         , txn_id(l.lock_version())
@@ -114,7 +113,7 @@ struct TxnExpireTime
             txn_expire = lock_expire;
     }
 
-    int64_t value() { return initialized ? txn_expire : 0; }
+    int64_t value() const { return initialized ? txn_expire : 0; }
 };
 
 // AsyncResolveData is data contributed by multiple threads when resolving locks using the async commit protocol. All
@@ -174,7 +173,7 @@ struct AsyncResolveData
 
         for (int i = 0; i < resp->locks_size(); i++)
         {
-            auto & lock = resp->locks(i);
+            const auto & lock = resp->locks(i);
             if (lock.lock_version() != start_ts)
             {
                 throw Exception(
@@ -202,7 +201,7 @@ using AsyncResolveDataPtr = std::shared_ptr<AsyncResolveData>;
 class LockResolver
 {
 public:
-    LockResolver(Cluster * cluster_)
+    explicit LockResolver(Cluster * cluster_)
         : cluster(cluster_)
         , log(&Logger::get("pingcap/resolve_lock"))
     {}

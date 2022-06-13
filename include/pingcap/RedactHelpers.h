@@ -5,7 +5,6 @@
 
 namespace pingcap
 {
-
 class Redact
 {
 public:
@@ -18,7 +17,7 @@ public:
     static std::string keyToHexString(const char * key, size_t size);
 
 protected:
-    Redact() {}
+    Redact() = default;
 
 private:
     // Log user data to log only when this flag is set to false.

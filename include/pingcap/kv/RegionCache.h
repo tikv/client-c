@@ -13,7 +13,6 @@ namespace pingcap
 {
 namespace kv
 {
-
 enum class StoreType
 {
     TiKV,
@@ -43,7 +42,9 @@ struct RegionVerID
     uint64_t conf_ver;
     uint64_t ver;
 
-    RegionVerID() = default;
+    RegionVerID()
+        : RegionVerID(0, 0, 0)
+    {}
     RegionVerID(uint64_t id_, uint64_t conf_ver_, uint64_t ver_)
         : id(id_)
         , conf_ver(conf_ver_)
@@ -74,7 +75,6 @@ namespace pingcap
 {
 namespace kv
 {
-
 struct Region
 {
     metapb::Region meta;
@@ -87,13 +87,13 @@ struct Region
         , work_tiflash_peer_idx(0)
     {}
 
-    const std::string & startKey() { return meta.start_key(); }
+    const std::string & startKey() const { return meta.start_key(); }
 
-    const std::string & endKey() { return meta.end_key(); }
+    const std::string & endKey() const { return meta.end_key(); }
 
-    bool contains(const std::string & key) { return key >= startKey() && (key < endKey() || meta.end_key() == ""); }
+    bool contains(const std::string & key) const { return key >= startKey() && (key < endKey() || meta.end_key().empty()); }
 
-    RegionVerID verID()
+    RegionVerID verID() const
     {
         return RegionVerID{
             meta.id(),
@@ -104,7 +104,7 @@ struct Region
 
     bool switchPeer(uint64_t peer_id)
     {
-        for (auto & peer : meta.peers())
+        for (const auto & peer : meta.peers())
         {
             if (peer.id() == peer_id)
             {
@@ -131,7 +131,7 @@ struct KeyLocation
         , end_key(end_key_)
     {}
 
-    bool contains(const std::string & key) { return key >= start_key && (key < end_key || end_key == ""); }
+    bool contains(const std::string & key) const { return key >= start_key && (key < end_key || end_key.empty()); }
 };
 
 struct RPCContext
@@ -164,7 +164,7 @@ public:
         , log(&Logger::get("pingcap.tikv"))
     {}
 
-    RPCContextPtr getRPCContext(Backoffer & bo, const RegionVerID & id, const StoreType store_type = StoreType::TiKV);
+    RPCContextPtr getRPCContext(Backoffer & bo, const RegionVerID & id, StoreType store_type = StoreType::TiKV);
 
     bool updateLeader(const RegionVerID & region_id, const metapb::Peer & leader);
 
@@ -176,7 +176,7 @@ public:
 
     void onSendReqFail(RPCContextPtr & ctx, const Exception & exc);
 
-    void onRegionStale(Backoffer & bo, RPCContextPtr ctx, const errorpb::EpochNotMatch & epoch_not_match);
+    void onRegionStale(Backoffer & bo, RPCContextPtr ctx, const errorpb::EpochNotMatch & stale_epoch);
 
     RegionPtr getRegionByID(Backoffer & bo, const RegionVerID & id);
 

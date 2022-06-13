@@ -8,7 +8,6 @@ namespace pingcap
 {
 namespace kv
 {
-
 constexpr uint64_t managedLockTTL = 20000; // 20s
 
 constexpr uint64_t bytesPerMiB = 1024 * 1024;
@@ -23,7 +22,7 @@ uint64_t txnLockTTL(std::chrono::milliseconds start, uint64_t txn_size)
     if (txn_size >= txnCommitBatchSize)
     {
         uint64_t txn_size_mb = txn_size / bytesPerMiB;
-        lock_ttl = (uint64_t)(ttlFactor * sqrt(txn_size_mb));
+        lock_ttl = static_cast<uint64_t>(ttlFactor * sqrt(txn_size_mb));
         if (lock_ttl < defaultLockTTL)
         {
             lock_ttl = defaultLockTTL;

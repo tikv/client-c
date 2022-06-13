@@ -16,7 +16,6 @@ namespace kv
 {
 namespace mockkv
 {
-
 using namespace Poco::Net;
 
 constexpr char mock_server[] = "http://127.0.0.1:2378";

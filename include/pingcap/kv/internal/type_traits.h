@@ -9,7 +9,6 @@ namespace pingcap
 {
 namespace kv
 {
-
 template <class T>
 struct RpcTypeTraits
 {

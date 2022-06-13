@@ -4,7 +4,6 @@ namespace pingcap
 {
 namespace kv
 {
-
 ConnArray::ConnArray(size_t max_size, const std::string & addr, const ClusterConfig & config_)
     : address(addr)
     , index(0)

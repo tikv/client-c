@@ -8,7 +8,6 @@ namespace pingcap
 {
 namespace kv
 {
-
 inline std::string prefixNext(const std::string & str)
 {
     auto new_str = str;

@@ -9,7 +9,6 @@ namespace pingcap
 {
 namespace kv
 {
-
 constexpr int dailTimeout = 5;
 constexpr int copTimeout = 20;
 
@@ -77,10 +76,10 @@ struct RegionClient
     }
 
 protected:
-    void onRegionError(Backoffer & bo, RPCContextPtr rpc_ctx, const errorpb::Error & err);
+    void onRegionError(Backoffer & bo, RPCContextPtr rpc_ctx, const errorpb::Error & err) const;
 
     // Normally, it happens when machine down or network partition between tidb and kv or process crash.
-    void onSendFail(Backoffer & bo, const Exception & e, RPCContextPtr rpc_ctx);
+    void onSendFail(Backoffer & bo, const Exception & e, RPCContextPtr rpc_ctx) const;
 };
 
 } // namespace kv

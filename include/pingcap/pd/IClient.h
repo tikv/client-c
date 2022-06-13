@@ -12,13 +12,12 @@ namespace pingcap
 {
 namespace pd
 {
-
 class IClient
 {
 public:
     //    virtual uint64_t getClusterID() = 0;
 
-    virtual ~IClient() {}
+    virtual ~IClient() = default;
 
     virtual uint64_t getTS() = 0;
 

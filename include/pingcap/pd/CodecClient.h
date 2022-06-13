@@ -28,7 +28,7 @@ struct CodecClient : public Client
         return std::make_pair(processRegionResult(region), leader);
     }
 
-    metapb::Region processRegionResult(metapb::Region & region)
+    static metapb::Region processRegionResult(metapb::Region & region)
     {
         region.set_start_key(decodeBytes(region.start_key()));
         region.set_end_key(decodeBytes(region.end_key()));
@@ -40,9 +40,9 @@ private:
     static constexpr uint8_t ENC_GROUP_SIZE = 8;
     static constexpr char ENC_ASC_PADDING[ENC_GROUP_SIZE] = {0};
 
-    std::string encodeBytes(const std::string & raw)
+    static std::string encodeBytes(const std::string & raw)
     {
-        if (raw.size() == 0)
+        if (raw.empty())
             return "";
         std::stringstream ss;
         size_t len = raw.size();
@@ -61,15 +61,15 @@ private:
                 ss.write(raw.data() + index, remain);
                 ss.write(ENC_ASC_PADDING, pad);
             }
-            ss.put(static_cast<char>(ENC_MARKER - (uint8_t)pad));
+            ss.put(static_cast<char>(ENC_MARKER - static_cast<uint8_t>(pad)));
             index += ENC_GROUP_SIZE;
         }
         return ss.str();
     }
 
-    std::string decodeBytes(const std::string & raw)
+    static std::string decodeBytes(const std::string & raw)
     {
-        if (raw.size() == 0)
+        if (raw.empty())
             return "";
         std::stringstream ss;
         int cursor = 0;
@@ -78,7 +78,7 @@ private:
             size_t next_cursor = cursor + 9;
             if (next_cursor > raw.size())
                 throw Exception("Wrong format, cursor over buffer size. (DecodeBytes)", ErrorCodes::LogicalError);
-            uint8_t marker = (uint8_t)raw[cursor + 8];
+            auto marker = static_cast<uint8_t>(raw[cursor + 8]);
             uint8_t pad_size = ENC_MARKER - marker;
 
             if (pad_size > 8)

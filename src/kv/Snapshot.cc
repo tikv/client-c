@@ -7,7 +7,6 @@ namespace pingcap
 {
 namespace kv
 {
-
 constexpr int scan_batch_size = 256;
 
 //bool extractLockFromKeyErr()

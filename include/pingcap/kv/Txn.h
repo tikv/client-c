@@ -12,7 +12,6 @@ namespace pingcap
 {
 namespace kv
 {
-
 using Buffer = std::map<std::string, std::string>;
 
 // Txn supports transaction operation for TiKV.
@@ -27,11 +26,11 @@ struct Txn
 
     std::chrono::milliseconds start_time;
 
-    Txn(Cluster * cluster_)
+    explicit Txn(Cluster * cluster_)
         : cluster(cluster_)
         , start_ts(cluster_->pd_client->getTS())
+        , start_time(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()))
     {
-        start_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
     }
 
     void commit()
@@ -54,16 +53,16 @@ struct Txn
         }
         Snapshot snapshot(cluster, start_ts);
         std::string value = snapshot.Get(key);
-        if (value == "")
+        if (value.empty())
             return std::make_pair("", false);
         return std::make_pair(value, true);
     }
 
     void walkBuffer(std::function<void(const std::string &, const std::string &)> foo)
     {
-        for (auto it = buffer.begin(); it != buffer.end(); it++)
+        for (auto & it : buffer)
         {
-            foo(it->first, it->second);
+            foo(it.first, it.second);
         }
     }
 };

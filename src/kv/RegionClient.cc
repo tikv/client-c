@@ -4,12 +4,11 @@ namespace pingcap
 {
 namespace kv
 {
-
-void RegionClient::onRegionError(Backoffer & bo, RPCContextPtr rpc_ctx, const errorpb::Error & err)
+void RegionClient::onRegionError(Backoffer & bo, RPCContextPtr rpc_ctx, const errorpb::Error & err) const
 {
     if (err.has_not_leader())
     {
-        auto not_leader = err.not_leader();
+        const auto & not_leader = err.not_leader();
         if (not_leader.has_leader())
         {
             // don't backoff if a new leader is returned.
@@ -107,7 +106,7 @@ void RegionClient::onRegionError(Backoffer & bo, RPCContextPtr rpc_ctx, const er
     cluster->region_cache->dropRegion(rpc_ctx->region);
 }
 
-void RegionClient::onSendFail(Backoffer & bo, const Exception & e, RPCContextPtr rpc_ctx)
+void RegionClient::onSendFail(Backoffer & bo, const Exception & e, RPCContextPtr rpc_ctx) const
 {
     cluster->region_cache->onSendReqFail(rpc_ctx, e);
     // Retry on send request failure when it's not canceled.
