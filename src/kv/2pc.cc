@@ -152,6 +152,7 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
             {
                 for (auto & [k, v] : mutations)
                 {
+                    (void)v;
                     if (k == primary_lock)
                         continue;
                     auto * secondary = req->add_secondaries();
