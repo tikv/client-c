@@ -93,7 +93,7 @@ void Scanner::getData(Backoffer & bo)
             auto lock = extractLockFromKeyErr(response->error());
             std::vector<LockPtr> locks{lock};
             std::vector<uint64_t> pushed{};
-            auto ms_before_expired = snap.cluster->lock_resolver->ResolveLocks(bo, snap.version, locks, pushed);
+            auto ms_before_expired = snap.cluster->lock_resolver->resolveLocks(bo, snap.version, locks, pushed);
             if (ms_before_expired > 0)
             {
                 bo.backoffWithMaxSleep(

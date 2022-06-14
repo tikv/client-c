@@ -43,3 +43,6 @@ cmake-build*
 tags
 .clang-format
 .vscode
+
+# vscode clangd cache
+.cache

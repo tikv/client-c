@@ -16,7 +16,7 @@ std::string Lock::toDebugString() const
         + " ttl: " + std::to_string(ttl) + " type: " + std::to_string(lock_type);
 }
 
-int64_t LockResolver::ResolveLocks(Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks, std::vector<uint64_t> & pushed)
+int64_t LockResolver::resolveLocks(Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks, std::vector<uint64_t> & pushed)
 {
     return resolveLocks(bo, caller_start_ts, locks, pushed, false);
 }

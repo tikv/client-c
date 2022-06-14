@@ -14,7 +14,7 @@ struct KvConnClient
     KvConnClient(std::string addr, const ClusterConfig & config)
     {
         grpc::ChannelArguments ch_args;
-        // set max size that grpc client can recieve to max value.
+        // set max size that grpc client can receive to max value.
         ch_args.SetMaxReceiveMessageSize(-1);
         ch_args.SetInt(GRPC_ARG_MIN_RECONNECT_BACKOFF_MS, 1 * 1000);
         ch_args.SetInt(GRPC_ARG_MAX_RECONNECT_BACKOFF_MS, 3 * 1000);

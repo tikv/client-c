@@ -56,13 +56,13 @@ struct MinCommitTSPushed
 
     MinCommitTSPushed(MinCommitTSPushed &) {}
 
-    inline void add_timestamps(std::vector<uint64_t> & tss)
+    inline void addTimestamps(std::vector<uint64_t> & tss)
     {
         std::lock_guard guard{mutex};
         container.insert(tss.begin(), tss.end());
     }
 
-    inline std::vector<uint64_t> get_timestamps() const
+    inline std::vector<uint64_t> getTimestamps() const
     {
         std::lock_guard guard{mutex};
         std::vector<uint64_t> result;

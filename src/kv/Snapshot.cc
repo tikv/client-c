@@ -27,7 +27,7 @@ std::string Snapshot::Get(Backoffer & bo, const std::string & key)
         ::kvrpcpb::Context * context = request->mutable_context();
         context->set_priority(::kvrpcpb::Normal);
         context->set_not_fill_cache(false);
-        for (auto ts : min_commit_ts_pushed.get_timestamps())
+        for (auto ts : min_commit_ts_pushed.getTimestamps())
         {
             context->add_resolved_locks(ts);
         }
@@ -50,11 +50,11 @@ std::string Snapshot::Get(Backoffer & bo, const std::string & key)
             auto lock = extractLockFromKeyErr(response->error());
             std::vector<LockPtr> locks{lock};
             std::vector<uint64_t> pushed;
-            auto before_expired = cluster->lock_resolver->ResolveLocks(bo, version, locks, pushed);
+            auto before_expired = cluster->lock_resolver->resolveLocks(bo, version, locks, pushed);
 
             if (!pushed.empty())
             {
-                min_commit_ts_pushed.add_timestamps(pushed);
+                min_commit_ts_pushed.addTimestamps(pushed);
             }
             if (before_expired > 0)
             {

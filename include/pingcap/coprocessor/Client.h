@@ -158,12 +158,12 @@ private:
             const copTask & task = tasks[task_index];
             task_index++;
             lk.unlock();
-            handle_task(task);
+            handleTask(task);
         }
     }
 
-    std::vector<copTask> handle_task_impl(kv::Backoffer & bo, const copTask & task);
-    void handle_task(const copTask & task);
+    std::vector<copTask> handleTaskImpl(kv::Backoffer & bo, const copTask & task);
+    void handleTask(const copTask & task);
 
     size_t task_index = 0;
     std::vector<copTask> tasks;

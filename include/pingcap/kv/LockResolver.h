@@ -206,7 +206,7 @@ public:
         , log(&Logger::get("pingcap/resolve_lock"))
     {}
 
-    // ResolveLocks tries to resolve Locks. The resolving process is in 3 steps:
+    // resolveLocks tries to resolve Locks. The resolving process is in 3 steps:
     // 1) Use the `lockTTL` to pick up all expired locks. Only locks that are too
     //    old are considered orphan locks and will be handled later. If all locks
     //    are expired then all locks will be resolved so the returned `ok` will be
@@ -216,7 +216,7 @@ public:
     // 3) Send `ResolveLock` cmd to the lock's region to resolve all locks belong to
     //    the same transaction.
 
-    int64_t ResolveLocks(Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks, std::vector<uint64_t> & pushed);
+    int64_t resolveLocks(Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks, std::vector<uint64_t> & pushed);
 
     int64_t resolveLocks(
         Backoffer & bo,
