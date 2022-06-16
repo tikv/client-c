@@ -7,7 +7,6 @@
 
 namespace pingcap
 {
-
 enum ErrorCodes : int
 {
     MismatchClusterIDCode = 1,
@@ -33,8 +32,8 @@ enum ErrorCodes : int
 class Exception : public Poco::Exception
 {
 public:
-    Exception() {} /// For deferred initialization.
-    Exception(const std::string & msg, int code = 0)
+    Exception() = default; /// For deferred initialization.
+    explicit Exception(const std::string & msg, int code = 0)
         : Poco::Exception(msg, code)
     {}
     Exception(const std::string & msg, const std::string & arg, int code = 0)

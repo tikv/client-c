@@ -6,7 +6,6 @@
 
 namespace
 {
-
 using namespace pingcap;
 using namespace pingcap::kv;
 

@@ -12,7 +12,6 @@ namespace pingcap
 {
 namespace coprocessor
 {
-
 enum ReqType : int16_t
 {
     Select = 101,
@@ -68,21 +67,22 @@ public:
         std::shared_ptr<::coprocessor::Response> resp;
         Exception error;
 
-        Result() {}
-        Result(std::shared_ptr<::coprocessor::Response> resp_)
+        Result() = default;
+        explicit Result(std::shared_ptr<::coprocessor::Response> resp_)
             : resp(resp_)
         {}
-        Result(const Exception & err)
+        explicit Result(const Exception & err)
             : error(err)
         {}
 
-        const std::string & data() { return resp->data(); }
+        const std::string & data() const { return resp->data(); }
     };
 
     ResponseIter(std::vector<copTask> && tasks_, kv::Cluster * cluster_, int concurrency_, Logger * log_)
         : tasks(std::move(tasks_))
         , cluster(cluster_)
         , concurrency(concurrency_)
+        , unfinished_thread(0)
         , cancelled(false)
         , log(log_)
     {}
@@ -90,9 +90,9 @@ public:
     ~ResponseIter()
     {
         cancelled = true;
-        for (auto it = worker_threads.begin(); it != worker_threads.end(); it++)
+        for (auto & worker_thread : worker_threads)
         {
-            it->join();
+            worker_thread.join();
         }
     }
 
@@ -117,12 +117,12 @@ public:
     std::pair<Result, bool> next()
     {
         std::unique_lock<std::mutex> lk(results_mutex);
-        cond_var.wait(lk, [this] { return unfinished_thread == 0 || cancelled || results.size() > 0; });
+        cond_var.wait(lk, [this] { return unfinished_thread == 0 || cancelled || !results.empty(); });
         if (cancelled)
         {
             return std::make_pair(Result(), false);
         }
-        if (results.size() > 0)
+        if (!results.empty())
         {
             auto ret = std::make_pair(results.front(), true);
             results.pop();
@@ -158,12 +158,12 @@ private:
             const copTask & task = tasks[task_index];
             task_index++;
             lk.unlock();
-            handle_task(task);
+            handleTask(task);
         }
     }
 
-    std::vector<copTask> handle_task_impl(kv::Backoffer & bo, const copTask & task);
-    void handle_task(const copTask & task);
+    std::vector<copTask> handleTaskImpl(kv::Backoffer & bo, const copTask & task);
+    void handleTask(const copTask & task);
 
     size_t task_index = 0;
     std::vector<copTask> tasks;

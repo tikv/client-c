@@ -7,7 +7,6 @@ namespace pingcap
 {
 namespace coprocessor
 {
-
 using namespace std::chrono_literals;
 
 std::vector<copTask> buildCopTasks(
@@ -20,7 +19,7 @@ std::vector<copTask> buildCopTasks(
 {
     log->debug("build " + std::to_string(ranges.size()) + " ranges.");
     std::vector<copTask> tasks;
-    while (ranges.size() > 0)
+    while (!ranges.empty())
     {
         auto loc = cluster->region_cache->locateKey(bo, ranges[0].start_key);
 
@@ -51,7 +50,7 @@ std::vector<copTask> buildCopTasks(
     return tasks;
 }
 
-std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const copTask & task)
+std::vector<copTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const copTask & task)
 {
     auto req = std::make_shared<::coprocessor::Request>();
     req->set_tp(task.req->tp);
@@ -59,7 +58,7 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
     req->set_schema_ver(task.req->schema_version);
     req->set_data(task.req->data);
     req->set_is_cache_enabled(false);
-    for (auto ts : min_commit_ts_pushed.get_timestamps())
+    for (auto ts : min_commit_ts_pushed.getTimestamps())
     {
         req->mutable_context()->add_resolved_locks(ts);
     }
@@ -86,10 +85,10 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
         log->debug("encounter lock problem: " + resp->locked().DebugString());
         std::vector<uint64_t> pushed;
         std::vector<kv::LockPtr> locks{lock};
-        auto before_expired = cluster->lock_resolver->ResolveLocks(bo, task.req->start_ts, locks, pushed);
+        auto before_expired = cluster->lock_resolver->resolveLocks(bo, task.req->start_ts, locks, pushed);
         if (!pushed.empty())
         {
-            min_commit_ts_pushed.add_timestamps(pushed);
+            min_commit_ts_pushed.addTimestamps(pushed);
         }
         if (before_expired > 0)
         {
@@ -113,7 +112,7 @@ std::vector<copTask> ResponseIter::handle_task_impl(kv::Backoffer & bo, const co
     return {};
 }
 
-void ResponseIter::handle_task(const copTask & task)
+void ResponseIter::handleTask(const copTask & task)
 {
     std::unordered_map<uint64_t, kv::Backoffer> bo_maps;
     std::vector<copTask> remain_tasks({task});
@@ -126,8 +125,8 @@ void ResponseIter::handle_task(const copTask & task)
         {
             auto & current_task = remain_tasks[idx];
             auto new_tasks
-                = handle_task_impl(bo_maps.try_emplace(current_task.region_id.id, kv::copNextMaxBackoff).first->second, current_task);
-            if (new_tasks.size() > 0)
+                = handleTaskImpl(bo_maps.try_emplace(current_task.region_id.id, kv::copNextMaxBackoff).first->second, current_task);
+            if (!new_tasks.empty())
             {
                 remain_tasks.insert(remain_tasks.end(), new_tasks.begin(), new_tasks.end());
             }

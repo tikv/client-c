@@ -8,7 +8,6 @@ namespace pingcap
 {
 namespace kv
 {
-
 std::string Lock::toDebugString() const
 {
     return "key: " + Redact::keyToDebugString(key) + " primary: " + Redact::keyToDebugString(primary)
@@ -17,7 +16,7 @@ std::string Lock::toDebugString() const
         + " ttl: " + std::to_string(ttl) + " type: " + std::to_string(lock_type);
 }
 
-int64_t LockResolver::ResolveLocks(Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks, std::vector<uint64_t> & pushed)
+int64_t LockResolver::resolveLocks(Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks, std::vector<uint64_t> & pushed)
 {
     return resolveLocks(bo, caller_start_ts, locks, pushed, false);
 }
@@ -182,7 +181,7 @@ TxnStatus LockResolver::getTxnStatus(Backoffer & bo, uint64_t txn_id, const std:
         }
         if (response->has_error())
         {
-            auto & key_error = response->error();
+            const auto & key_error = response->error();
             if (key_error.has_txn_not_found())
             {
                 throw Exception("txn not found: ", ErrorCodes::TxnNotFound);
@@ -291,7 +290,7 @@ void LockResolver::resolvePessimisticLock(Backoffer & bo, LockPtr lock, std::uno
             bo.backoff(boRegionMiss, e);
             continue;
         }
-        auto & key_errors = response->errors();
+        const auto & key_errors = response->errors();
         if (!key_errors.empty())
         {
             log->error("unexpected resolve pessimistic lock err: " + key_errors[0].ShortDebugString());
@@ -317,7 +316,7 @@ void LockResolver::resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & st
     std::atomic<int> errors{};
     for (auto & pair : keys_by_region)
     {
-        auto & region_id = pair.first;
+        const auto & region_id = pair.first;
         auto & locks = pair.second;
         threads.emplace_back([&]() {
             try
@@ -360,7 +359,7 @@ void LockResolver::resolveRegionLocks(
 
     for (auto & key : keys)
     {
-        auto k = req->add_keys();
+        auto * k = req->add_keys();
         *k = key;
     }
 
@@ -406,7 +405,7 @@ AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lo
     std::atomic_int8_t errors{0};
     for (auto & pair : regions)
     {
-        auto & region_id = pair.first;
+        const auto & region_id = pair.first;
         auto & keys = pair.second;
         threads.emplace_back([&]() {
             try

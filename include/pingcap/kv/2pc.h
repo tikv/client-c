@@ -118,7 +118,7 @@ private:
     friend class TestTwoPhaseCommitter;
 
 public:
-    TwoPhaseCommitter(Txn * txn, bool _use_async_commit = false);
+    explicit TwoPhaseCommitter(Txn * txn, bool _use_async_commit = false);
 
     void execute();
 

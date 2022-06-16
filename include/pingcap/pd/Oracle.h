@@ -11,7 +11,6 @@ namespace pingcap
 {
 namespace pd
 {
-
 constexpr int physicalShiftBits = 18;
 
 inline int64_t extractPhysical(uint64_t ts)

@@ -5,7 +5,6 @@ namespace pingcap
 {
 namespace kv
 {
-
 BackoffPtr newBackoff(BackoffType tp)
 {
     switch (tp)

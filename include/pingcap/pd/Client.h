@@ -87,7 +87,7 @@ private:
 
     pdpb::GetMembersResponse getMembers(std::string);
 
-    pdpb::RequestHeader * requestHeader();
+    pdpb::RequestHeader * requestHeader() const;
 
     std::shared_ptr<PDConnClient> getOrCreateGRPCConn(const std::string &);
 

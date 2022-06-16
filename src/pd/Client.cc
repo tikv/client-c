@@ -36,6 +36,9 @@ Client::Client(const std::vector<std::string> & addrs, const ClusterConfig & con
     , loop_interval(100)
     , update_leader_interval(60)
     , urls(addrsToUrls(addrs, config_))
+    , cluster_id(0)
+    , work_threads_stop(false)
+    , check_leader(false)
     , config(config_)
     , log(&Logger::get("pingcap.pd"))
 {
@@ -111,7 +114,7 @@ void Client::initClusterID()
 {
     for (int i = 0; i < max_init_cluster_retries; i++)
     {
-        for (auto url : urls)
+        for (const auto & url : urls)
         {
             auto resp = getMembers(url);
             if (!resp.has_header())
@@ -155,7 +158,7 @@ void Client::initLeader()
 void Client::updateLeader()
 {
     std::unique_lock lk(leader_mutex);
-    for (auto & url : urls)
+    for (const auto & url : urls)
     {
         auto resp = getMembers(url);
         if (!resp.has_header() || resp.leader().client_urls_size() == 0)
@@ -185,12 +188,12 @@ void Client::switchLeader(const ::google::protobuf::RepeatedPtrField<std::string
 void Client::updateURLs(const ::google::protobuf::RepeatedPtrField<::pdpb::Member> & members)
 {
     std::vector<std::string> tmp_urls;
-    for (int i = 0; i < members.size(); i++)
+    for (const auto & member : members)
     {
-        auto client_urls = members[i].client_urls();
-        for (int j = 0; j < client_urls.size(); j++)
+        auto client_urls = member.client_urls();
+        for (auto & client_url : client_urls)
         {
-            tmp_urls.push_back(client_urls[j]);
+            tmp_urls.push_back(client_url);
         }
     }
     urls = tmp_urls;
@@ -238,9 +241,9 @@ void Client::leaderLoop()
     }
 }
 
-pdpb::RequestHeader * Client::requestHeader()
+pdpb::RequestHeader * Client::requestHeader() const
 {
-    auto header = new pdpb::RequestHeader();
+    auto * header = new pdpb::RequestHeader();
     header->set_cluster_id(cluster_id);
     return header;
 }

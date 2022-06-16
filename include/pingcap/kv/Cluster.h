@@ -12,7 +12,6 @@ namespace pingcap
 {
 namespace kv
 {
-
 constexpr int oracle_update_interval = 2000;
 // Cluster represents a tikv+pd cluster.
 
@@ -41,7 +40,7 @@ struct Cluster
 
     // TODO: When the cluster is closed, we should release all the resources
     // (e.g. background threads) that cluster object holds so as to exit elegantly.
-    ~Cluster() {}
+    ~Cluster() = default;
 
     // Only used by Test and this is not safe !
     void splitRegion(const std::string & split_key);
@@ -51,19 +50,19 @@ struct MinCommitTSPushed
 {
     std::unordered_set<uint64_t> container;
 
-    std::mutex mutex;
+    mutable std::mutex mutex;
 
-    MinCommitTSPushed(){};
+    MinCommitTSPushed() = default;
 
-    MinCommitTSPushed(MinCommitTSPushed &){};
+    MinCommitTSPushed(MinCommitTSPushed &) {}
 
-    inline void add_timestamps(std::vector<uint64_t> & tss)
+    inline void addTimestamps(std::vector<uint64_t> & tss)
     {
         std::lock_guard guard{mutex};
         container.insert(tss.begin(), tss.end());
     }
 
-    inline std::vector<uint64_t> get_timestamps()
+    inline std::vector<uint64_t> getTimestamps() const
     {
         std::lock_guard guard{mutex};
         std::vector<uint64_t> result;

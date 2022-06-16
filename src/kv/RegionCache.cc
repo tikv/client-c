@@ -7,7 +7,6 @@ namespace pingcap
 {
 namespace kv
 {
-
 RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id, const StoreType store_type)
 {
     for (;;)
@@ -99,7 +98,7 @@ KeyLocation RegionCache::locateKey(Backoffer & bo, const std::string & key)
 std::vector<metapb::Peer> RegionCache::selectTiFlashPeers(Backoffer & bo, const metapb::Region & meta)
 {
     std::vector<metapb::Peer> tiflash_peers;
-    for (auto & peer : meta.peers())
+    for (const auto & peer : meta.peers())
     {
         if (getStore(bo, peer.store_id()).store_type == StoreType::TiFlash)
         {
@@ -305,7 +304,7 @@ bool RegionCache::updateLeader(const RegionVerID & region_id, const metapb::Peer
     return true;
 }
 
-void RegionCache::onRegionStale(Backoffer & bo, RPCContextPtr ctx, const errorpb::EpochNotMatch & stale_epoch)
+void RegionCache::onRegionStale(Backoffer & /*bo*/, RPCContextPtr ctx, const errorpb::EpochNotMatch & stale_epoch)
 {
     log->information("region stale for region " + ctx->region.toString() + ".");
 

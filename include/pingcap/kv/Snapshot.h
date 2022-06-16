@@ -7,7 +7,6 @@ namespace pingcap
 {
 namespace kv
 {
-
 struct Scanner;
 
 struct Snapshot
@@ -20,7 +19,7 @@ struct Snapshot
         : cluster(cluster_)
         , version(version_)
     {}
-    Snapshot(Cluster * cluster_)
+    explicit Snapshot(Cluster * cluster_)
         : cluster(cluster_)
         , version(cluster_->pd_client->getTS())
     {}

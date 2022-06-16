@@ -18,7 +18,7 @@ namespace pingcap
 {
 inline void SetThreadName(const char * tname)
 {
-    constexpr auto MAX_LEN = 15; // thread name will be tname[:MAX_LEN]
+    constexpr static auto MAX_LEN = 15; // thread name will be tname[:MAX_LEN]
     if (std::strlen(tname) > MAX_LEN)
         std::cerr << "set thread name " << tname << " is too long and will be truncated by system\n";
 
