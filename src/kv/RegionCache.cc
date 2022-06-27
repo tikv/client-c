@@ -14,18 +14,23 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
         auto region = getRegionByIDFromCache(id);
         if (region == nullptr)
             return nullptr;
+
         const auto & meta = region->meta;
         std::vector<metapb::Peer> peers;
         size_t start_index = 0;
         if (store_type == StoreType::TiKV)
+        {
+            // only access to the leader
             peers.push_back(region->leader_peer);
+        }
         else
         {
+            // can access to all tiflash peers
             peers = selectTiFlashPeers(bo, meta);
             start_index = ++region->work_tiflash_peer_idx;
         }
 
-        size_t peer_size = peers.size();
+        const size_t peer_size = peers.size();
         for (size_t i = 0; i < peer_size; i++)
         {
             size_t peer_index = (i + start_index) % peer_size;
@@ -45,7 +50,10 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
                 continue;
             }
             if (store_type == StoreType::TiFlash)
+            {
+                // set the index for next access in order to balance the workload among all tiflash peers
                 region->work_tiflash_peer_idx.store(peer_index);
+            }
             return std::make_shared<RPCContext>(id, meta, peer, store.addr);
         }
         dropRegion(id);
@@ -217,6 +225,21 @@ Store RegionCache::getStore(Backoffer & bo, uint64_t id)
         return (it->second);
     }
     return reloadStore(bo, id);
+}
+
+std::vector<uint64_t> RegionCache::getAllValidTiFlashStores(const RegionVerID & region_id)
+{
+    std::vector<uint64_t> all_stores;
+    RegionPtr cached_region = getRegionByIDFromCache(region_id);
+    if (cached_region == nullptr)
+    {
+        // FIXME: should contain one store id
+        return all_stores;
+    }
+    // TODO: check region cache DDL
+    // auto region_store = cached_region->getStore();
+    // TODO: get others store id by `region_store`
+    return all_stores;
 }
 
 RegionPtr RegionCache::searchCachedRegion(const std::string & key)
