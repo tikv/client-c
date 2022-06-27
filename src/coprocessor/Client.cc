@@ -3,13 +3,18 @@
 
 #include <chrono>
 
+#include "coprocessor.pb.h"
+#include "hash.h"
+#include "pingcap/kv/Backoff.h"
+#include "pingcap/kv/RegionCache.h"
+
 namespace pingcap
 {
 namespace coprocessor
 {
 using namespace std::chrono_literals;
 
-std::vector<copTask> buildCopTasks(
+std::vector<CopTask> buildCopTasks(
     kv::Backoffer & bo,
     kv::Cluster * cluster,
     std::vector<KeyRange> ranges,
@@ -18,7 +23,7 @@ std::vector<copTask> buildCopTasks(
     Logger * log)
 {
     log->debug("build " + std::to_string(ranges.size()) + " ranges.");
-    std::vector<copTask> tasks;
+    std::vector<CopTask> tasks;
     while (!ranges.empty())
     {
         auto loc = cluster->region_cache->locateKey(bo, ranges[0].start_key);
@@ -33,24 +38,84 @@ std::vector<copTask> buildCopTasks(
         // all ranges belong to same region.
         if (i == ranges.size())
         {
-            tasks.push_back(copTask{loc.region, ranges, cop_req, store_type});
+            tasks.push_back(CopTask{loc.region, ranges, cop_req, store_type});
             break;
         }
+
         std::vector<KeyRange> task_ranges(ranges.begin(), ranges.begin() + i);
+        // Split the last range if it is overlapped with the region
         auto & bound = ranges[i];
         if (loc.contains(bound.start_key))
         {
             task_ranges.push_back(KeyRange{bound.start_key, loc.end_key});
-            bound.start_key = loc.end_key;
+            bound.start_key = loc.end_key; // update the last range start key after splitted
         }
-        tasks.push_back(copTask{loc.region, task_ranges, cop_req, store_type});
+        tasks.push_back(CopTask{loc.region, task_ranges, cop_req, store_type});
+
         ranges.erase(ranges.begin(), ranges.begin() + i);
     }
     log->debug("has " + std::to_string(tasks.size()) + " tasks.");
     return tasks;
 }
 
-std::vector<copTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const copTask & task)
+
+std::vector<BatchCopTask> buildBatchCopTasks(
+    kv::Backoffer & bo,
+    kv::Cluster * cluster,
+    std::vector<CopTask> cop_tasks,
+    Logger * log)
+{
+    std::map<std::string, BatchCopTask> store_task_map;
+    for (const auto & cop_task : cop_tasks)
+    {
+        auto rpc_context = cluster->region_cache->getRPCContext(bo, cop_task.region_id, kv::StoreType::TiFlash);
+        if (rpc_context == nullptr)
+        {
+            // TODO: handle this error
+            throw Exception("rpc_context is null");
+        }
+        auto all_stores = cluster->region_cache->getAllValidTiFlashStores(cop_task.region_id /*, rpc_context.store*/);
+        if (auto iter = store_task_map.find(rpc_context->addr); iter == store_task_map.end())
+        {
+            BatchCopTask batch_cop_task;
+            batch_cop_task.store_addr = rpc_context->addr;
+            // batch_cop_task.cmd_type = cmd_type;
+            batch_cop_task.store_type = kv::StoreType::TiFlash;
+            batch_cop_task.region_infos.emplace_back(coprocessor::RegionInfo{
+                .region_id = cop_task.region_id,
+                // .meta = rpc_context.meta
+                .ranges = cop_task.ranges,
+                .all_stores = all_stores,
+                // .partition_index = cop_task.partition_index,
+            });
+            store_task_map[rpc_context->addr] = std::move(batch_cop_task);
+        }
+        else
+        {
+            iter->second.region_infos.emplace_back(coprocessor::RegionInfo{
+                .region_id = cop_task.region_id,
+                // .meta = rpc_context.meta
+                .ranges = cop_task.ranges,
+                .all_stores = all_stores,
+                // .partition_index = cop_task.partition_index,
+            });
+        }
+    }
+    // if (need_retry)
+    std::vector<BatchCopTask> batch_cop_tasks;
+    batch_cop_tasks.reserve(store_task_map.size());
+    for (const auto & iter: store_task_map)
+    {
+        batch_cop_tasks.emplace_back(iter.second);
+    }
+    log->debug("Before region balance:");
+    // TODO: balance batch cop task between different stores
+    log->debug("After region balance:");
+    return batch_cop_tasks;
+}
+
+
+std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopTask & task)
 {
     auto req = std::make_shared<::coprocessor::Request>();
     req->set_tp(task.req->tp);
@@ -112,10 +177,10 @@ std::vector<copTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const copT
     return {};
 }
 
-void ResponseIter::handleTask(const copTask & task)
+void ResponseIter::handleTask(const CopTask & task)
 {
     std::unordered_map<uint64_t, kv::Backoffer> bo_maps;
-    std::vector<copTask> remain_tasks({task});
+    std::vector<CopTask> remain_tasks({task});
     size_t idx = 0;
     while (idx < remain_tasks.size())
     {

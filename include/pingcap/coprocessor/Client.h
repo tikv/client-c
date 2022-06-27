@@ -1,5 +1,6 @@
 #pragma once
 #include <pingcap/kv/Cluster.h>
+#include <pingcap/kv/RegionCache.h>
 #include <pingcap/kv/RegionClient.h>
 
 #include <atomic>
@@ -54,10 +55,28 @@ struct Request
 
 using RequestPtr = std::shared_ptr<Request>;
 
-struct copTask
+struct CopTask
 {
     kv::RegionVerID region_id;
     std::vector<KeyRange> ranges;
+    RequestPtr req;
+    kv::StoreType store_type;
+};
+
+struct RegionInfo
+{
+    kv::RegionVerID region_id;
+    // meta;
+    std::vector<KeyRange> ranges;
+    std::vector<uint64_t> all_stores;
+    // Used by PartitionTableScan, indicates the n-th partition of the partition table
+    int64_t partition_index;
+};
+struct BatchCopTask
+{
+    std::string store_addr;
+    std::vector<pingcap::coprocessor::RegionInfo> region_infos;
+    // TODO: PartitionTableRegions
     RequestPtr req;
     kv::StoreType store_type;
 };
@@ -81,7 +100,7 @@ public:
         const std::string & data() const { return resp->data(); }
     };
 
-    ResponseIter(std::vector<copTask> && tasks_, kv::Cluster * cluster_, int concurrency_, Logger * log_)
+    ResponseIter(std::vector<CopTask> && tasks_, kv::Cluster * cluster_, int concurrency_, Logger * log_)
         : tasks(std::move(tasks_))
         , cluster(cluster_)
         , concurrency(concurrency_)
@@ -158,18 +177,18 @@ private:
                 cond_var.notify_one();
                 return;
             }
-            const copTask & task = tasks[task_index];
+            const CopTask & task = tasks[task_index];
             task_index++;
             lk.unlock();
             handleTask(task);
         }
     }
 
-    std::vector<copTask> handleTaskImpl(kv::Backoffer & bo, const copTask & task);
-    void handleTask(const copTask & task);
+    std::vector<CopTask> handleTaskImpl(kv::Backoffer & bo, const CopTask & task);
+    void handleTask(const CopTask & task);
 
     size_t task_index = 0;
-    std::vector<copTask> tasks;
+    const std::vector<CopTask> tasks;
     std::vector<std::thread> worker_threads;
 
     kv::Cluster * cluster;
@@ -179,7 +198,6 @@ private:
     std::mutex results_mutex;
 
     std::queue<Result> results;
-    Exception cop_error;
 
     std::atomic_int unfinished_thread;
     std::atomic_bool cancelled;
@@ -188,12 +206,18 @@ private:
     Logger * log;
 };
 
-std::vector<copTask> buildCopTasks(
+std::vector<CopTask> buildCopTasks(
     kv::Backoffer & bo,
     kv::Cluster * cluster,
     std::vector<KeyRange> ranges,
     RequestPtr cop_req,
     kv::StoreType store_type,
+    Logger * log);
+
+std::vector<BatchCopTask> buildBatchCopTasks(
+    kv::Backoffer & bo,
+    kv::Cluster * cluster,
+    std::vector<CopTask> cop_tasks,
     Logger * log);
 
 } // namespace coprocessor

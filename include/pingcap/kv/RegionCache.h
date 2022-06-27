@@ -188,6 +188,8 @@ public:
 
     Store getStore(Backoffer & bo, uint64_t id);
 
+    std::vector<uint64_t> getAllValidTiFlashStores(const RegionVerID & region_id);
+
     std::pair<std::unordered_map<RegionVerID, std::vector<std::string>>, RegionVerID>
     groupKeysByRegion(Backoffer & bo,
                       const std::vector<std::string> & keys);
