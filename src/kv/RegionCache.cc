@@ -7,7 +7,7 @@ namespace pingcap
 {
 namespace kv
 {
-RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id, const StoreType store_type)
+RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id, const StoreType store_type, bool load_balance)
 {
     for (;;)
     {
@@ -27,7 +27,10 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
         {
             // can access to all tiflash peers
             peers = selectTiFlashPeers(bo, meta);
-            start_index = ++region->work_tiflash_peer_idx;
+            if (load_balance)
+                start_index = ++region->work_tiflash_peer_idx;
+            else
+                start_index = region->work_tiflash_peer_idx;
         }
 
         const size_t peer_size = peers.size();
@@ -54,7 +57,7 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
                 // set the index for next access in order to balance the workload among all tiflash peers
                 region->work_tiflash_peer_idx.store(peer_index);
             }
-            return std::make_shared<RPCContext>(id, meta, peer, store.addr);
+            return std::make_shared<RPCContext>(id, meta, peer, store, store.addr);
         }
         dropRegion(id);
         bo.backoff(boRegionMiss, Exception("region miss, region id is: " + std::to_string(id.id), RegionUnavailable));
@@ -227,18 +230,27 @@ Store RegionCache::getStore(Backoffer & bo, uint64_t id)
     return reloadStore(bo, id);
 }
 
-std::vector<uint64_t> RegionCache::getAllValidTiFlashStores(const RegionVerID & region_id)
+std::vector<uint64_t> RegionCache::getAllValidTiFlashStores(Backoffer & bo, const RegionVerID & region_id, const Store & current_store)
 {
     std::vector<uint64_t> all_stores;
     RegionPtr cached_region = getRegionByIDFromCache(region_id);
     if (cached_region == nullptr)
     {
-        // FIXME: should contain one store id
+        all_stores.emplace_back(current_store.id);
         return all_stores;
     }
+
     // TODO: check region cache DDL
-    // auto region_store = cached_region->getStore();
-    // TODO: get others store id by `region_store`
+
+    // Get others tiflash store ids
+    // TODO: get store info without network request
+    auto peers = selectTiFlashPeers(bo, cached_region->meta);
+    for (const auto & peer : peers)
+    {
+        if (peer.store_id() == current_store.id)
+            continue;
+        all_stores.emplace_back(peer.store_id());
+    }
     return all_stores;
 }
 
