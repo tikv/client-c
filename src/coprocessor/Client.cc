@@ -68,13 +68,13 @@ std::vector<BatchCopTask> buildBatchCopTasks(
     std::map<std::string, BatchCopTask> store_task_map;
     for (const auto & cop_task : cop_tasks)
     {
-        auto rpc_context = cluster->region_cache->getRPCContext(bo, cop_task.region_id, kv::StoreType::TiFlash);
+        auto rpc_context = cluster->region_cache->getRPCContext(bo, cop_task.region_id, kv::StoreType::TiFlash, false);
         if (rpc_context == nullptr)
         {
             // TODO: handle this error
             throw Exception("rpc_context is null");
         }
-        auto all_stores = cluster->region_cache->getAllValidTiFlashStores(cop_task.region_id /*, rpc_context.store*/);
+        auto all_stores = cluster->region_cache->getAllValidTiFlashStores(bo, cop_task.region_id , rpc_context->store);
         if (auto iter = store_task_map.find(rpc_context->addr); iter == store_task_map.end())
         {
             BatchCopTask batch_cop_task;

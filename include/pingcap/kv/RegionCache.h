@@ -142,12 +142,14 @@ struct RPCContext
     RegionVerID region;
     metapb::Region meta;
     metapb::Peer peer;
+    Store store;
     std::string addr;
 
-    RPCContext(const RegionVerID & region_, const metapb::Region & meta_, const metapb::Peer & peer_, const std::string & addr_)
+    RPCContext(const RegionVerID & region_, const metapb::Region & meta_, const metapb::Peer & peer_, const Store & store_, const std::string & addr_)
         : region(region_)
         , meta(meta_)
         , peer(peer_)
+        , store(store_)
         , addr(addr_)
     {}
 
@@ -170,7 +172,7 @@ public:
         , log(&Logger::get("pingcap.tikv"))
     {}
 
-    RPCContextPtr getRPCContext(Backoffer & bo, const RegionVerID & id, StoreType store_type = StoreType::TiKV);
+    RPCContextPtr getRPCContext(Backoffer & bo, const RegionVerID & id, StoreType store_type, bool load_balance);
 
     bool updateLeader(const RegionVerID & region_id, const metapb::Peer & leader);
 
@@ -188,7 +190,7 @@ public:
 
     Store getStore(Backoffer & bo, uint64_t id);
 
-    std::vector<uint64_t> getAllValidTiFlashStores(const RegionVerID & region_id);
+    std::vector<uint64_t> getAllValidTiFlashStores(Backoffer & bo, const RegionVerID & region_id, const Store & current_store);
 
     std::pair<std::unordered_map<RegionVerID, std::vector<std::string>>, RegionVerID>
     groupKeysByRegion(Backoffer & bo,
