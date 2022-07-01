@@ -1,3 +1,6 @@
+#pragma once
+#include <grpcpp/create_channel.h>
+#include <kvproto/tikvpb.grpc.pb.h>
 #include <pingcap/Config.h>
 
 namespace pingcap
