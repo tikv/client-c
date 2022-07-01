@@ -78,7 +78,7 @@ std::shared_ptr<Client::PDConnClient> Client::getOrCreateGRPCConn(const std::str
     }
     // TODO Check Auth
     Poco::URI uri(addr);
-    auto client_ptr = std::make_shared<PDConnClient>(uri.getHost() + ":" + std::to_string(uri.getPort()), config);
+    auto client_ptr = std::make_shared<PDConnClient>(uri.getAuthority(), config);
     channel_map[addr] = client_ptr;
 
     return client_ptr;
