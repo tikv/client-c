@@ -29,15 +29,18 @@ struct KeyRange
         : start_key(start_key_)
         , end_key(end_key_)
     {}
-    KeyRange(KeyRange &&) = default;
-    KeyRange(const KeyRange &) = default;
-    KeyRange & operator=(const KeyRange &) = default;
-    KeyRange & operator=(KeyRange &&) = default;
-    void set_pb_range(::coprocessor::KeyRange * range) const
+
+    void setKeyRange(::coprocessor::KeyRange * range) const
     {
         range->set_start(start_key);
         range->set_end(end_key);
     }
+
+    KeyRange(KeyRange &&) = default;
+    KeyRange(const KeyRange &) = default;
+    KeyRange & operator=(const KeyRange &) = default;
+    KeyRange & operator=(KeyRange &&) = default;
+
     bool operator<(const KeyRange & rhs) const { return start_key < rhs.start_key; }
 };
 

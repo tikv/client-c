@@ -65,7 +65,7 @@ std::vector<copTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const copT
     for (const auto & range : task.ranges)
     {
         auto * pb_range = req->add_ranges();
-        range.set_pb_range(pb_range);
+        range.setKeyRange(pb_range);
     }
 
     kv::RegionClient client(cluster, task.region_id);
