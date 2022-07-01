@@ -54,7 +54,10 @@ struct RegionVerID
     bool operator==(const RegionVerID & rhs) const { return id == rhs.id && conf_ver == rhs.conf_ver && ver == rhs.ver; }
 
     // for debug output
-    std::string toString() const { return "{" + std::to_string(id) + "," + std::to_string(conf_ver) + "," + std::to_string(ver) + "}"; }
+    std::string toString() const
+    {
+        return "{" + std::to_string(id) + "," + std::to_string(conf_ver) + "," + std::to_string(ver) + "}";
+    }
 };
 
 } // namespace kv
@@ -148,8 +151,11 @@ struct RPCContext
         , addr(addr_)
     {}
 
-    std::string toString() const { return "region id: " + std::to_string(region.id) + ", meta: " + meta.DebugString() + ", peer: "
-                                   + peer.DebugString() + ", addr: " + addr; }
+    std::string toString() const
+    {
+        return "region id: " + std::to_string(region.id) + ", meta: " + meta.DebugString() + ", peer: "
+            + peer.DebugString() + ", addr: " + addr;
+    }
 };
 
 using RPCContextPtr = std::shared_ptr<RPCContext>;
