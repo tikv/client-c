@@ -22,7 +22,7 @@ protected:
         control_cluster = createCluster(pd_addrs);
 
         fiu_init(0);
-        fiu_enable("use_async_commit", 1, NULL, 0);
+        fiu_enable("use_async_commit", 1, nullptr, 0);
     }
 
     mockkv::ClusterPtr mock_kv_cluster;

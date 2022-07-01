@@ -11,6 +11,8 @@
 #include <limits>
 #include <vector>
 
+#include "pingcap/Exception.h"
+
 namespace pingcap
 {
 namespace coprocessor
@@ -20,7 +22,7 @@ using namespace std::chrono_literals;
 std::vector<CopTask> buildCopTasks(
     kv::Backoffer & bo,
     kv::Cluster * cluster,
-    std::vector<KeyRange> ranges,
+    KeyRanges ranges,
     RequestPtr cop_req,
     kv::StoreType store_type,
     Logger * log)
@@ -45,7 +47,7 @@ std::vector<CopTask> buildCopTasks(
             break;
         }
 
-        std::vector<KeyRange> task_ranges(ranges.begin(), ranges.begin() + i);
+        KeyRanges task_ranges(ranges.begin(), ranges.begin() + i);
         // Split the last range if it is overlapped with the region
         auto & bound = ranges[i];
         if (loc.contains(bound.start_key))
@@ -59,6 +61,57 @@ std::vector<CopTask> buildCopTasks(
     }
     log->debug("has " + std::to_string(tasks.size()) + " tasks.");
     return tasks;
+}
+
+
+namespace details
+{
+std::vector<LocationKeyRanges> splitKeyRangesByLocations(
+    const kv::RegionCachePtr & cache,
+    kv::Backoffer & bo,
+    std::vector<::pingcap::coprocessor::KeyRange> ranges)
+{
+    std::vector<LocationKeyRanges> res;
+    while (!ranges.empty())
+    {
+        const auto loc = cache->locateKey(bo, ranges[0].start_key);
+        // Iterate to the first range that is not complete in the region.
+        auto r = ranges.begin();
+        for (/**/; r < ranges.end(); ++r)
+        {
+            if (!(loc.contains(r->end_key) || loc.end_key == r->end_key))
+                break;
+        }
+        // All rest ranges belong to the same region.
+        if (r == ranges.end())
+        {
+            res.emplace_back(LocationKeyRanges{loc, ranges});
+            break;
+        }
+
+        assert(r != ranges.end()); // r+1 is a valid iterator
+        if (loc.contains(r->start_key))
+        {
+            // Part of r is not in the region. We need to split it.
+            KeyRanges task_ranges(ranges.begin(), r + 1);
+            assert(!task_ranges.empty());
+            task_ranges.rbegin()->end_key = loc.end_key;
+            res.emplace_back(LocationKeyRanges{loc, task_ranges});
+
+            r->start_key = loc.end_key;
+            if (r != ranges.begin())
+                r = ranges.erase(ranges.begin(), r);
+        }
+        else
+        {
+            // ranges[i] is not in the region.
+            KeyRanges task_ranges(ranges.begin(), r + 1);
+            res.emplace_back(LocationKeyRanges{loc, task_ranges});
+            r = ranges.erase(ranges.begin(), r);
+        }
+        // continue to split other ranges
+    }
+    return res;
 }
 
 std::vector<BatchCopTask> balanceBatchCopTasks(std::vector<BatchCopTask> && original_tasks, Poco::Logger * log)
@@ -226,72 +279,109 @@ std::vector<BatchCopTask> balanceBatchCopTasks(std::vector<BatchCopTask> && orig
     return ret;
 }
 
+} // namespace details
+
 std::vector<BatchCopTask> buildBatchCopTasks(
     kv::Backoffer & bo,
     kv::Cluster * cluster,
-    std::vector<CopTask> cop_tasks,
+    std::vector<KeyRanges> ranges_for_each_physical_table,
+    RequestPtr cop_req,
+    kv::StoreType store_type,
     Logger * log)
 {
-    std::map<std::string, BatchCopTask> store_task_map;
-    for (const auto & cop_task : cop_tasks)
-    {
-        auto rpc_context = cluster->region_cache->getRPCContext(bo, cop_task.region_id, kv::StoreType::TiFlash, false);
-        if (rpc_context == nullptr)
-        {
-            // TODO: handle this error
-            throw Exception("rpc_context is null");
-        }
-        auto all_stores = cluster->region_cache->getAllValidTiFlashStores(bo, cop_task.region_id, rpc_context->store);
-        if (auto iter = store_task_map.find(rpc_context->addr); iter == store_task_map.end())
-        {
-            BatchCopTask batch_cop_task;
-            batch_cop_task.store_addr = rpc_context->addr;
-            // batch_cop_task.cmd_type = cmd_type;
-            batch_cop_task.store_type = kv::StoreType::TiFlash;
-            batch_cop_task.region_infos.emplace_back(coprocessor::RegionInfo{
-                .region_id = cop_task.region_id,
-                // .meta = rpc_context.meta
-                .ranges = cop_task.ranges,
-                .all_stores = all_stores,
-                // .partition_index = cop_task.partition_index,
-            });
-            store_task_map[rpc_context->addr] = std::move(batch_cop_task);
-        }
-        else
-        {
-            iter->second.region_infos.emplace_back(coprocessor::RegionInfo{
-                .region_id = cop_task.region_id,
-                // .meta = rpc_context.meta
-                .ranges = cop_task.ranges,
-                .all_stores = all_stores,
-                // .partition_index = cop_task.partition_index,
-            });
-        }
-    }
-    // if (need_retry)
-    std::vector<BatchCopTask> batch_cop_tasks;
-    batch_cop_tasks.reserve(store_task_map.size());
-    for (const auto & iter : store_task_map)
-    {
-        batch_cop_tasks.emplace_back(iter.second);
-    }
+    auto & cache = cluster->region_cache;
 
-    // balance batch cop task between different stores
-    auto tasks_to_str = [](const std::string_view prefix, const std::vector<BatchCopTask> & tasks) -> std::string {
-        std::string msg(prefix);
-        for (const auto & task : tasks)
-            msg += " store " + task.store_addr + ": " + std::to_string(task.region_infos.size()) + " regions,";
-        return msg;
-    };
-    if (log->getLevel() >= Poco::Message::PRIO_DEBUG)
-        log->debug(tasks_to_str("Before region balance:", batch_cop_tasks));
-    batch_cop_tasks = balanceBatchCopTasks(std::move(batch_cop_tasks), log);
-    if (log->getLevel() >= Poco::Message::PRIO_DEBUG)
-        log->debug(tasks_to_str("After region balance:", batch_cop_tasks));
+    while (true) // for `need_retry`
+    {
+        std::vector<CopTask> cop_tasks;
+        for (size_t idx = 0; idx < ranges_for_each_physical_table.size(); ++idx)
+        {
+            const auto & ranges = ranges_for_each_physical_table[idx];
+            const auto locations = details::splitKeyRangesByLocations(cache, bo, ranges);
+            for (const auto & loc : locations)
+            {
+                cop_tasks.emplace_back(CopTask{loc.location.region, loc.ranges, cop_req, store_type, idx});
+            }
+        }
 
-    return batch_cop_tasks;
+        // store_addr -> BatchCopTask
+        std::map<std::string, BatchCopTask> store_task_map;
+        bool need_retry = false;
+        for (const auto & cop_task : cop_tasks)
+        {
+            auto rpc_context = cluster->region_cache->getRPCContext(bo, cop_task.region_id, store_type, false);
+            // When rpcCtx is nil, it's not only attributed to the miss region, but also
+            // some TiFlash stores crash and can't be recovered.
+            // That is not an error that can be easily recovered, so we regard this error
+            // same as rpc error.
+            if (rpc_context == nullptr)
+            {
+                need_retry = true;
+                log->information("retry for TiFlash peer with region missing, region=" + cop_task.region_id.toString());
+                // Probably all the regions are invalid. Make the loop continue and mark all the regions invalid.
+                // Then `splitRegion` will reloads these regions.
+                continue;
+            }
+            auto all_stores = cluster->region_cache->getAllValidTiFlashStores(bo, cop_task.region_id, rpc_context->store);
+            if (auto iter = store_task_map.find(rpc_context->addr); iter == store_task_map.end())
+            {
+                BatchCopTask batch_cop_task;
+                batch_cop_task.store_addr = rpc_context->addr;
+                // batch_cop_task.cmd_type = cmd_type;
+                batch_cop_task.store_type = store_type;
+                batch_cop_task.region_infos.emplace_back(coprocessor::RegionInfo{
+                    .region_id = cop_task.region_id,
+                    // .meta = rpc_context.meta
+                    .ranges = cop_task.ranges,
+                    .all_stores = all_stores,
+                    .partition_index = cop_task.partition_index,
+                });
+                store_task_map[rpc_context->addr] = std::move(batch_cop_task);
+            }
+            else
+            {
+                iter->second.region_infos.emplace_back(coprocessor::RegionInfo{
+                    .region_id = cop_task.region_id,
+                    // .meta = rpc_context.meta
+                    .ranges = cop_task.ranges,
+                    .all_stores = all_stores,
+                    .partition_index = cop_task.partition_index,
+                });
+            }
+        }
+        if (need_retry)
+        {
+            // As mentioned above, null rpc_context is always attributed to failed stores.
+            // It's equal to long pool the store but get no response. Here we'd better use
+            // TiFlash error to trigger the TiKV fallback mechanism.
+            // TODO: Do we need to add `boTiFlashRPC`?
+            bo.backoff(kv::boRegionMiss, Exception("Cannot find region with TiFlash peer"));
+            continue;
+        }
+
+        std::vector<BatchCopTask> batch_cop_tasks;
+        batch_cop_tasks.reserve(store_task_map.size());
+        for (const auto & iter : store_task_map)
+        {
+            batch_cop_tasks.emplace_back(iter.second);
+        }
+
+        // balance batch cop task between different stores
+        auto tasks_to_str = [](const std::string_view prefix, const std::vector<BatchCopTask> & tasks) -> std::string {
+            std::string msg(prefix);
+            for (const auto & task : tasks)
+                msg += " store " + task.store_addr + ": " + std::to_string(task.region_infos.size()) + " regions,";
+            return msg;
+        };
+        if (log->getLevel() >= Poco::Message::PRIO_DEBUG)
+            log->debug(tasks_to_str("Before region balance:", batch_cop_tasks));
+        batch_cop_tasks = details::balanceBatchCopTasks(std::move(batch_cop_tasks), log);
+        if (log->getLevel() >= Poco::Message::PRIO_DEBUG)
+            log->debug(tasks_to_str("After region balance:", batch_cop_tasks));
+
+        return batch_cop_tasks;
+    }
 }
-
 
 std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopTask & task)
 {
@@ -367,8 +457,7 @@ void ResponseIter::handleTask(const CopTask & task)
         try
         {
             auto & current_task = remain_tasks[idx];
-            auto new_tasks
-                = handleTaskImpl(bo_maps.try_emplace(current_task.region_id.id, kv::copNextMaxBackoff).first->second, current_task);
+            auto new_tasks = handleTaskImpl(bo_maps.try_emplace(current_task.region_id.id, kv::copNextMaxBackoff).first->second, current_task);
             if (!new_tasks.empty())
             {
                 remain_tasks.insert(remain_tasks.end(), new_tasks.begin(), new_tasks.end());

@@ -44,6 +44,7 @@ struct KeyRange
 
     bool operator<(const KeyRange & rhs) const { return start_key < rhs.start_key; }
 };
+using KeyRanges = std::vector<KeyRange>;
 
 struct Request
 {
@@ -58,16 +59,17 @@ using RequestPtr = std::shared_ptr<Request>;
 struct CopTask
 {
     kv::RegionVerID region_id;
-    std::vector<KeyRange> ranges;
+    KeyRanges ranges;
     RequestPtr req;
     kv::StoreType store_type;
+    size_t partition_index;
 };
 
 struct RegionInfo
 {
     kv::RegionVerID region_id;
     // meta;
-    std::vector<KeyRange> ranges;
+    KeyRanges ranges;
     std::vector<uint64_t> all_stores;
     // Used by PartitionTableScan, indicates the n-th partition of the partition table
     int64_t partition_index;
@@ -209,7 +211,7 @@ private:
 std::vector<CopTask> buildCopTasks(
     kv::Backoffer & bo,
     kv::Cluster * cluster,
-    std::vector<KeyRange> ranges,
+    KeyRanges ranges,
     RequestPtr cop_req,
     kv::StoreType store_type,
     Logger * log);
@@ -217,8 +219,27 @@ std::vector<CopTask> buildCopTasks(
 std::vector<BatchCopTask> buildBatchCopTasks(
     kv::Backoffer & bo,
     kv::Cluster * cluster,
-    std::vector<CopTask> cop_tasks,
+    std::vector<KeyRanges> ranges_for_each_physical_table,
+    RequestPtr cop_req,
+    kv::StoreType store_type,
     Logger * log);
+
+namespace details
+{
+// LocationKeyRanges wraps a real Location in PD and its logical ranges info.
+struct LocationKeyRanges
+{
+    // The read location in PD.
+    kv::KeyLocation location;
+    // The logic ranges the current Location contains.
+    KeyRanges ranges;
+};
+
+std::vector<LocationKeyRanges> splitKeyRangesByLocations(
+    const kv::RegionCachePtr & cache,
+    kv::Backoffer & bo,
+    std::vector<::pingcap::coprocessor::KeyRange> ranges);
+} // namespace details
 
 } // namespace coprocessor
 } // namespace pingcap
