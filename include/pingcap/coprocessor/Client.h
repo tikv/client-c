@@ -220,7 +220,6 @@ std::vector<BatchCopTask> buildBatchCopTasks(
     kv::Backoffer & bo,
     kv::Cluster * cluster,
     std::vector<KeyRanges> ranges_for_each_physical_table,
-    RequestPtr cop_req,
     kv::StoreType store_type,
     Logger * log);
 
