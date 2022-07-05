@@ -119,13 +119,13 @@ std::vector<BatchCopTask> balanceBatchCopTasks(std::vector<BatchCopTask> && orig
     if (original_tasks.empty())
     {
         log->information("Batch cop task balancer got an empty task set.");
-        return original_tasks;
+        return std::move(original_tasks);
     }
 
     // Only one tiflash store
     if (original_tasks.size() <= 1)
     {
-        return original_tasks;
+        return std::move(original_tasks);
     }
 
     std::map<uint64_t, BatchCopTask> store_task_map;
@@ -163,7 +163,7 @@ std::vector<BatchCopTask> balanceBatchCopTasks(std::vector<BatchCopTask> && orig
             if (valid_store_num == 0)
             {
                 log->warning("Meet regions that don't have an available store. Give up balancing");
-                return original_tasks;
+                return std::move(original_tasks);
             }
             else if (valid_store_num == 1)
             {
@@ -187,7 +187,7 @@ std::vector<BatchCopTask> balanceBatchCopTasks(std::vector<BatchCopTask> && orig
                     if (auto [task_iter, task_created] = iter->second.insert(std::make_pair(task_key, region_info)); !task_created)
                     {
                         log->warning("Meet duplicated region info when trying to balance batch cop task, give up balancing");
-                        return original_tasks;
+                        return std::move(original_tasks);
                     }
                 }
             }
@@ -262,7 +262,7 @@ std::vector<BatchCopTask> balanceBatchCopTasks(std::vector<BatchCopTask> && orig
         if (total_remaining_region_num > 0)
         {
             log->warning("Some regions are not used when trying to balance batch cop task, give up balancing");
-            return original_tasks;
+            return std::move(original_tasks);
         }
     }
 
@@ -285,7 +285,6 @@ std::vector<BatchCopTask> buildBatchCopTasks(
     kv::Backoffer & bo,
     kv::Cluster * cluster,
     std::vector<KeyRanges> ranges_for_each_physical_table,
-    RequestPtr cop_req,
     kv::StoreType store_type,
     Logger * log)
 {
@@ -300,7 +299,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
             const auto locations = details::splitKeyRangesByLocations(cache, bo, ranges);
             for (const auto & loc : locations)
             {
-                cop_tasks.emplace_back(CopTask{loc.location.region, loc.ranges, cop_req, store_type, idx});
+                cop_tasks.emplace_back(CopTask{loc.location.region, loc.ranges, nullptr, store_type, idx});
             }
         }
 
