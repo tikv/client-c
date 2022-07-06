@@ -5,7 +5,7 @@
 #include "mock_tikv.h"
 #include "test_helper.h"
 
-namespace
+namespace pingcap::tests
 {
 using namespace pingcap;
 using namespace pingcap::kv;
@@ -76,4 +76,4 @@ TEST_F(TestCoprocessor, testBuildTask1)
     ASSERT_EQ(has_next, false);
 }
 
-} // namespace
+} // namespace pingcap

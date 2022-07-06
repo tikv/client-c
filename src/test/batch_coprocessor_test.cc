@@ -1,4 +1,6 @@
 #include <pingcap/coprocessor/Client.h>
+#include <pingcap/kv/Backoff.h>
+#include <pingcap/kv/RegionCache.h>
 
 #include "mock_tikv.h"
 #include "test_helper.h"
@@ -83,15 +85,36 @@ TEST_F(TestBatchCoprocessor, SplitKeyRanges2)
     ASSERT_EQ(loc_ranges[1].ranges[1].start_key, "bz");
     ASSERT_EQ(loc_ranges[1].ranges[1].end_key, "d");
 
-    ASSERT_EQ(loc_ranges[2].location.start_key, "d");
-    ASSERT_EQ(loc_ranges[2].location.end_key, "z");
-    ASSERT_EQ(loc_ranges[2].ranges.size(), 2);
-    ASSERT_EQ(loc_ranges[2].ranges[0].start_key, "d");
-    ASSERT_EQ(loc_ranges[2].ranges[0].end_key, "d2");
-    ASSERT_EQ(loc_ranges[2].ranges[1].start_key, "d5");
-    ASSERT_EQ(loc_ranges[2].ranges[1].end_key, "d9");
+    EXPECT_LOC_KEY_RANGES_EQ(loc_ranges[2].location, coprocessor::KeyRange("d", "z"));
+    const coprocessor::KeyRanges expect_ranges2{{"d", "d2"}, {"d5", "d9"}};
+    EXPECT_KEY_RANGES_EQ(loc_ranges[2].ranges, expect_ranges2);
 }
 
+TEST_F(TestBatchCoprocessor, SplitKeyRanges3)
+{
+    Backoffer bo(copBuildTaskMaxBackoff);
+    control_cluster->splitRegion("a");
+    control_cluster->splitRegion("b");
+    control_cluster->splitRegion("d");
+    control_cluster->splitRegion("z");
+
+    auto loc_ranges = coprocessor::details::splitKeyRangesByLocations(
+        test_cluster->region_cache,
+        bo,
+        coprocessor::KeyRanges{{"a", "b"}, {"b", "d"}, {"d", "z"}});
+    ASSERT_EQ(loc_ranges.size(), 3);
+    EXPECT_LOC_KEY_RANGES_EQ(loc_ranges[0].location, coprocessor::KeyRange("a", "b"));
+    const coprocessor::KeyRanges expect_ranges0{{"a", "b"}};
+    EXPECT_KEY_RANGES_EQ(loc_ranges[0].ranges, expect_ranges0);
+
+    EXPECT_LOC_KEY_RANGES_EQ(loc_ranges[1].location, coprocessor::KeyRange("b", "d"));
+    const coprocessor::KeyRanges expect_ranges1{{"b", "d"}};
+    EXPECT_KEY_RANGES_EQ(loc_ranges[1].ranges, expect_ranges1);
+
+    EXPECT_LOC_KEY_RANGES_EQ(loc_ranges[2].location, coprocessor::KeyRange("d", "z"));
+    const coprocessor::KeyRanges expect_ranges2{{"d", "z"}};
+    EXPECT_KEY_RANGES_EQ(loc_ranges[2].ranges, expect_ranges2);
+}
 
 TEST_F(TestBatchCoprocessor, BuildTask1)
 {
@@ -114,7 +137,6 @@ TEST_F(TestBatchCoprocessor, BuildTask1)
         bo,
         test_cluster.get(),
         ranges_for_each_physical_table,
-        req,
         kv::StoreType::TiKV,
         log);
 
@@ -157,7 +179,6 @@ TEST_F(TestBatchCoprocessor, BuildTask2)
         bo,
         test_cluster.get(),
         ranges_for_each_physical_table,
-        req,
         kv::StoreType::TiKV,
         log);
 

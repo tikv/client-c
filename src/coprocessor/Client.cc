@@ -104,8 +104,8 @@ std::vector<LocationKeyRanges> splitKeyRangesByLocations(
         }
         else
         {
-            // ranges[i] is not in the region.
-            KeyRanges task_ranges(ranges.begin(), r + 1);
+            // `r` is not in the region.
+            KeyRanges task_ranges(ranges.begin(), r);
             res.emplace_back(LocationKeyRanges{loc, task_ranges});
             r = ranges.erase(ranges.begin(), r);
         }

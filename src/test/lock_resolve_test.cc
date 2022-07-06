@@ -10,7 +10,7 @@
 #include "mock_tikv.h"
 #include "test_helper.h"
 
-namespace
+namespace pingcap::tests
 {
 using namespace pingcap;
 using namespace pingcap::kv;
