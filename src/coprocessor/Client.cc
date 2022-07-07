@@ -1,6 +1,7 @@
 #include <fiu-local.h>
 #include <hash.h>
 #include <kvproto/coprocessor.pb.h>
+#include <pingcap/Exception.h>
 #include <pingcap/coprocessor/Client.h>
 #include <pingcap/kv/Backoff.h>
 #include <pingcap/kv/RegionCache.h>
@@ -10,8 +11,6 @@
 #include <cstdint>
 #include <limits>
 #include <vector>
-
-#include "pingcap/Exception.h"
 
 namespace pingcap
 {
@@ -104,7 +103,7 @@ std::vector<LocationKeyRanges> splitKeyRangesByLocations(
         }
         else
         {
-            // `r` is not in the region.
+            // ranges[i] is not in the region.
             KeyRanges task_ranges(ranges.begin(), r);
             res.emplace_back(LocationKeyRanges{loc, task_ranges});
             r = ranges.erase(ranges.begin(), r);
@@ -279,6 +278,41 @@ std::vector<BatchCopTask> balanceBatchCopTasks(std::vector<BatchCopTask> && orig
     return ret;
 }
 
+std::vector<BatchCopTask> trySplitBatchCopTasksOnSameStore(std::vector<BatchCopTask> && original_tasks, size_t expect_concurrent_num, Poco::Logger * /*log*/)
+{
+    if (original_tasks.size() >= expect_concurrent_num)
+        return original_tasks;
+
+    // Expect that the number of key ranges in different task of `original_tasks` is roughly the same.
+    double further_split = 1.0 * expect_concurrent_num / original_tasks.size();
+    if (further_split < 2.0)
+        return original_tasks;
+
+    const auto num_further_split = static_cast<size_t>(further_split);
+    std::vector<BatchCopTask> ret;
+    ret.reserve(expect_concurrent_num);
+    for (const auto & task : original_tasks)
+    {
+        size_t origin_num_key_ranges = task.region_infos.size();
+        size_t num_key_ranges_per_task = origin_num_key_ranges / num_further_split;
+        for (size_t split_idx = 0; split_idx < num_further_split; ++split_idx)
+        {
+            BatchCopTask splitted_task;
+            splitted_task.store_addr = task.store_addr;
+            size_t start_offset = split_idx * num_key_ranges_per_task;
+            size_t end_offset = (split_idx + 1) * num_key_ranges_per_task;
+            if (split_idx == num_further_split - 1)
+                end_offset = task.region_infos.size();
+            splitted_task.region_infos.insert(
+                splitted_task.region_infos.end(),
+                task.region_infos.begin() + start_offset,
+                task.region_infos.begin() + end_offset);
+            ret.emplace_back(std::move(splitted_task));
+        }
+    }
+    return ret;
+}
+
 } // namespace details
 
 std::vector<BatchCopTask> buildBatchCopTasks(
@@ -286,6 +320,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
     kv::Cluster * cluster,
     std::vector<KeyRanges> ranges_for_each_physical_table,
     kv::StoreType store_type,
+    size_t expect_concurrent_num,
     Logger * log)
 {
     auto & cache = cluster->region_cache;
@@ -375,6 +410,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         if (log->getLevel() >= Poco::Message::PRIO_DEBUG)
             log->debug(tasks_to_str("Before region balance:", batch_cop_tasks));
         batch_cop_tasks = details::balanceBatchCopTasks(std::move(batch_cop_tasks), log);
+        batch_cop_tasks = details::trySplitBatchCopTasksOnSameStore(std::move(batch_cop_tasks), expect_concurrent_num, log);
         if (log->getLevel() >= Poco::Message::PRIO_DEBUG)
             log->debug(tasks_to_str("After region balance:", batch_cop_tasks));
 
