@@ -158,6 +158,10 @@ public:
         }
     }
 
+    // TODO: Make them private
+    size_t total_wait_net_elapse_ms = 0;
+    size_t total_net_recv_bytes = 0;
+
 private:
     void thread()
     {

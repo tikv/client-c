@@ -418,6 +418,16 @@ std::vector<BatchCopTask> buildBatchCopTasks(
     }
 }
 
+namespace details
+{
+inline uint64_t nanoseconds(clockid_t clock_type)
+{
+    struct timespec ts;
+    clock_gettime(clock_type, &ts);
+    return ts.tv_sec * 1000000000ULL + ts.tv_nsec;
+}
+} // namespace details
+
 std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopTask & task)
 {
     auto req = std::make_shared<::coprocessor::Request>();
@@ -440,7 +450,11 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
     std::shared_ptr<::coprocessor::Response> resp;
     try
     {
+        auto start_ns = details::nanoseconds(CLOCK_MONOTONIC);
         resp = client.sendReqToRegion(bo, req, kv::copTimeout, task.store_type);
+        auto end_ns = details::nanoseconds(CLOCK_MONOTONIC);
+        total_wait_net_elapse_ms += (end_ns - start_ns) / 1000000UL;
+        total_net_recv_bytes += resp->ByteSizeLong();
     }
     catch (Exception & e)
     {
