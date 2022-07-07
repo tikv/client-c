@@ -221,6 +221,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
     kv::Cluster * cluster,
     std::vector<KeyRanges> ranges_for_each_physical_table,
     kv::StoreType store_type,
+    size_t expect_concurrent_num,
     Logger * log);
 
 namespace details
