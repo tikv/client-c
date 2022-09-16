@@ -35,6 +35,8 @@ public:
 
     virtual uint64_t getGCSafePoint() = 0;
 
+    virtual uint32_t getKeyspaceID(const std::string & keyspace_name) = 0;
+
     virtual bool isMock() = 0;
 };
 

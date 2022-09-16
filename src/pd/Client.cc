@@ -376,5 +376,27 @@ metapb::Store Client::getStore(uint64_t store_id)
     return response.store();
 }
 
+uint32_t Client::getKeyspaceID(const std::string & keyspace_name)
+{
+    keyspacepb::LoadKeyspaceRequest request{};
+    keyspacepb::LoadKeyspaceResponse response{};
+
+    request.set_name(keyspace_name);
+
+    grpc::ClientContext context;
+
+    context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
+
+    auto status = leaderClient()->keyspace_stub->LoadKeyspace(&context, request, &response);
+    if (!status.ok())
+    {
+        std::string err_msg = ("get keyspace id failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
+        log->error(err_msg);
+        check_leader.store(true);
+        throw Exception(err_msg, GRPCErrorCode);
+    }
+    return response.keyspace().id();
+}
+
 } // namespace pd
 } // namespace pingcap
