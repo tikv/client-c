@@ -395,6 +395,13 @@ uint32_t Client::getKeyspaceID(const std::string & keyspace_name)
         check_leader.store(true);
         throw Exception(err_msg, GRPCErrorCode);
     }
+
+    if (response.keyspace().state() != keyspacepb::KeyspaceState::ENABLED)
+    {
+        std::string err_msg = ("keyspace " + keyspace_name + " is not enabled");
+        log->error(err_msg);
+        throw Exception(err_msg, KeyspaceNotFound);
+    }
     return response.keyspace().id();
 }
 
