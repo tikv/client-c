@@ -3,6 +3,8 @@
 #include <grpcpp/channel.h>
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
+#include <kvproto/keyspacepb.grpc.pb.h>
+#include <kvproto/keyspacepb.pb.h>
 #include <kvproto/pdpb.grpc.pb.h>
 #include <pingcap/Config.h>
 #include <pingcap/Log.h>
@@ -50,6 +52,8 @@ public:
 
     uint64_t getGCSafePoint() override;
 
+    uint32_t getKeyspaceID(const std::string & keyspace_name) override;
+
     bool isMock() override;
 
 private:
@@ -69,6 +73,7 @@ private:
     {
         std::shared_ptr<grpc::Channel> channel;
         std::unique_ptr<pdpb::PD::Stub> stub;
+        std::unique_ptr<keyspacepb::Keyspace::Stub> keyspace_stub;
         PDConnClient(std::string addr, const ClusterConfig & config)
         {
             if (config.hasTlsConfig())
@@ -80,6 +85,7 @@ private:
                 channel = grpc::CreateChannel(addr, grpc::InsecureChannelCredentials());
             }
             stub = pdpb::PD::NewStub(channel);
+            keyspace_stub = keyspacepb::Keyspace::NewStub(channel);
         }
     };
 
