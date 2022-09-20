@@ -400,7 +400,7 @@ uint32_t Client::getKeyspaceID(const std::string & keyspace_name)
     {
         std::string err_msg = ("keyspace " + keyspace_name + " is not enabled");
         log->error(err_msg);
-        throw Exception(err_msg, KeyspaceNotFound);
+        throw Exception(err_msg, KeyspaceNotEnabled);
     }
     return response.keyspace().id();
 }

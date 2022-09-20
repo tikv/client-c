@@ -26,7 +26,7 @@ enum ErrorCodes : int
     CoprocessorError = 15,
     TxnNotFound = 16,
     NonAsyncCommit = 17,
-    KeyspaceNotFound = 18,
+    KeyspaceNotEnabled = 18,
     UnknownError = 19
 };
 
