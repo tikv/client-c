@@ -381,6 +381,7 @@ uint32_t Client::getKeyspaceID(const std::string & keyspace_name)
     keyspacepb::LoadKeyspaceRequest request{};
     keyspacepb::LoadKeyspaceResponse response{};
 
+    request.set_allocated_header(requestHeader());
     request.set_name(keyspace_name);
 
     grpc::ClientContext context;
