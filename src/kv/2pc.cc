@@ -38,8 +38,9 @@ uint64_t txnLockTTL(std::chrono::milliseconds start, uint64_t txn_size)
     return lock_ttl + elapsed.count();
 }
 
-TwoPhaseCommitter::TwoPhaseCommitter(Txn * txn, bool _use_async_commit)
+TwoPhaseCommitter::TwoPhaseCommitter(Txn * txn, kvrpcpb::APIVersion api_version_, bool _use_async_commit)
     : start_time(txn->start_time)
+    , api_version(api_version_)
     , use_async_commit(_use_async_commit)
     , log(&Logger::get("pingcap.tikv"))
 {
@@ -168,6 +169,9 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
             req->set_min_commit_ts(start_ts + 1);
         }
 
+        auto * context = req->mutable_context();
+        context->set_api_version(api_version);
+
         fiu_do_on("invalid_max_commit_ts", { req->set_max_commit_ts(min_commit_ts - 1); });
 
         std::shared_ptr<kvrpcpb::PrewriteResponse> response;
@@ -253,6 +257,9 @@ void TwoPhaseCommitter::commitSingleBatch(Backoffer & bo, const BatchKeys & batc
     req->set_start_version(start_ts);
     req->set_commit_version(commit_ts);
 
+    auto * context = req->mutable_context();
+    context->set_api_version(api_version);
+
     std::shared_ptr<kvrpcpb::CommitResponse> response;
     RegionClient region_client(cluster, batch.region);
     try
@@ -274,7 +281,7 @@ void TwoPhaseCommitter::commitSingleBatch(Backoffer & bo, const BatchKeys & batc
     commited = true;
 }
 
-uint64_t sendTxnHeartBeat(Backoffer & bo, Cluster * cluster, std::string & primary_key, uint64_t start_ts, uint64_t ttl)
+uint64_t sendTxnHeartBeat(Backoffer & bo, Cluster * cluster, std::string & primary_key, uint64_t start_ts, uint64_t ttl, kvrpcpb::APIVersion api_version_)
 {
     for (;;)
     {
@@ -284,6 +291,9 @@ uint64_t sendTxnHeartBeat(Backoffer & bo, Cluster * cluster, std::string & prima
         req->set_primary_lock(primary_key);
         req->set_start_version(start_ts);
         req->set_advise_lock_ttl(ttl);
+
+        auto * context = req->mutable_context();
+        context->set_api_version(api_version_);
 
         RegionClient client(cluster, loc.region);
         std::shared_ptr<kvrpcpb::TxnHeartBeatResponse> response;
@@ -322,7 +332,7 @@ void TTLManager::keepAlive(TwoPhaseCommitterPtr committer)
         uint64_t new_ttl = uptime + managedLockTTL;
         try
         {
-            std::ignore = sendTxnHeartBeat(bo, committer->cluster, committer->primary_lock, committer->start_ts, new_ttl);
+            std::ignore = sendTxnHeartBeat(bo, committer->cluster, committer->primary_lock, committer->start_ts, new_ttl, committer->api_version);
         }
         catch (...)
         {

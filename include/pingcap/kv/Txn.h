@@ -38,7 +38,7 @@ struct Txn
         // Only enable async commit for test
         bool use_async_commit = false;
         fiu_do_on("use_async_commit", { use_async_commit = true; });
-        auto committer = std::make_shared<TwoPhaseCommitter>(this, use_async_commit);
+        auto committer = std::make_shared<TwoPhaseCommitter>(this, cluster->api_version, use_async_commit);
         committer->execute();
     }
 
