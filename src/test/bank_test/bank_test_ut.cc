@@ -4,7 +4,7 @@
 #include "fiu-control.h"
 #include "fiu.h"
 
-namespace
+namespace pingcap::tests
 {
 
 using namespace pingcap;
