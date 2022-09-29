@@ -71,14 +71,22 @@ struct RegionInfo
     // meta;
     KeyRanges ranges;
     std::vector<uint64_t> all_stores;
-    // Used by PartitionTableScan, indicates the n-th partition of the partition table
+    // Used by PartitionTableScan, indicates the n-th partition of the partition table.
     int64_t partition_index;
 };
+
+struct TableRegions
+{
+    int64_t physical_table_id;
+    std::vector<pingcap::coprocessor::RegionInfo> region_infos;
+};
+
 struct BatchCopTask
 {
     std::string store_addr;
     std::vector<pingcap::coprocessor::RegionInfo> region_infos;
-    // TODO: PartitionTableRegions
+    // Used by PartitionTableScan, indicates region infos for each partition.
+    std::vector<pingcap::coprocessor::TableRegions> table_regions;
     RequestPtr req;
     kv::StoreType store_type;
 };
@@ -219,9 +227,10 @@ std::vector<CopTask> buildCopTasks(
 std::vector<BatchCopTask> buildBatchCopTasks(
     kv::Backoffer & bo,
     kv::Cluster * cluster,
-    std::vector<KeyRanges> ranges_for_each_physical_table,
+    bool is_partition_table_scan,
+    const std::vector<int64_t> & physical_table_ids,
+    const std::vector<KeyRanges> & ranges_for_each_physical_table,
     kv::StoreType store_type,
-    size_t expect_concurrent_num,
     Logger * log);
 
 namespace details

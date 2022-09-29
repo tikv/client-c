@@ -133,35 +133,16 @@ TEST_F(TestBatchCoprocessor, BuildTask1)
         coprocessor::KeyRanges{{"a", "z"}},
     };
 
+    const bool is_partition_table = false;
+    const std::vector<int64_t> table_ids{-1};
     {
         auto batch_cop_tasks = coprocessor::buildBatchCopTasks(
             bo,
             test_cluster.get(),
+            is_partition_table,
+            table_ids,
             ranges_for_each_physical_table,
             kv::StoreType::TiKV,
-            1,
-            log);
-
-        // Only 1 store, so only 1 batch cop task is generated
-        ASSERT_EQ(batch_cop_tasks.size(), 1);
-        auto batch_cop_task = batch_cop_tasks.begin();
-        ASSERT_EQ(batch_cop_task->region_infos.size(), 2);
-        EXPECT_EQ(batch_cop_task->region_infos[0].partition_index, 0);
-        // region [a,b) with 1 key range [a,b)
-        const coprocessor::KeyRanges expect_ranges0{{"a", "b"}};
-        EXPECT_KEY_RANGES_EQ(batch_cop_task->region_infos[0].ranges, expect_ranges0);
-        // region [b,z) with 1 key range [b,z)
-        const coprocessor::KeyRanges expect_ranges1{{"b", "z"}};
-        EXPECT_KEY_RANGES_EQ(batch_cop_task->region_infos[1].ranges, expect_ranges1);
-    }
-
-    {
-        auto batch_cop_tasks = coprocessor::buildBatchCopTasks(
-            bo,
-            test_cluster.get(),
-            ranges_for_each_physical_table,
-            kv::StoreType::TiKV,
-            2,
             log);
 
         // Only 1 store, so only 1 batch cop task is generated
@@ -178,7 +159,7 @@ TEST_F(TestBatchCoprocessor, BuildTask1)
     }
 }
 
-TEST_F(TestBatchCoprocessor, BuildTask2)
+TEST_F(TestBatchCoprocessor, BuildTaskPartitionTable)
 {
     Backoffer bo(copBuildTaskMaxBackoff);
 
@@ -193,6 +174,8 @@ TEST_F(TestBatchCoprocessor, BuildTask2)
     req->tp = pingcap::coprocessor::DAG;
     req->start_ts = test_cluster->pd_client->getTS();
 
+    const bool is_partition_table = true;
+    const std::vector<int64_t> table_ids{100, 200};
     std::vector<coprocessor::KeyRanges> ranges_for_each_physical_table{
         /*partition-0*/ coprocessor::KeyRanges{{"aa", "ab"}, {"ac", "bb"}},
         /*partition-1*/ coprocessor::KeyRanges{{"bz", "d2"}, {"d5", "d9"}},
@@ -201,33 +184,45 @@ TEST_F(TestBatchCoprocessor, BuildTask2)
     auto batch_cop_tasks = coprocessor::buildBatchCopTasks(
         bo,
         test_cluster.get(),
+        is_partition_table,
+        table_ids,
         ranges_for_each_physical_table,
         kv::StoreType::TiKV,
-        1,
         log);
 
     // Only 1 store, so only 1 batch cop task is generated
     ASSERT_EQ(batch_cop_tasks.size(), 1);
     auto batch_cop_task = batch_cop_tasks.begin();
-    ASSERT_EQ(batch_cop_task->region_infos.size(), 4);
-    // region [a,b) with 2 key range [aa,ab),[ac,b)
-    EXPECT_EQ(batch_cop_task->region_infos[0].partition_index, 0);
-    const coprocessor::KeyRanges expect_ranges0{{"aa", "ab"}, {"ac", "b"}};
-    EXPECT_KEY_RANGES_EQ(batch_cop_task->region_infos[0].ranges, expect_ranges0);
-    // region [b,d) with 2 key range [b,z)
-    EXPECT_EQ(batch_cop_task->region_infos[1].partition_index, 0);
-    const coprocessor::KeyRanges expect_ranges1{{"b", "bb"}};
-    EXPECT_KEY_RANGES_EQ(batch_cop_task->region_infos[1].ranges, expect_ranges1);
-    // region [b,d) with 2 key range [bz,d)
-    EXPECT_EQ(batch_cop_task->region_infos[2].partition_index, 1);
-    const coprocessor::KeyRanges expect_ranges2{{"bz", "d"}};
-    EXPECT_KEY_RANGES_EQ(batch_cop_task->region_infos[2].ranges, expect_ranges2);
-    // region [d,z) with 2 key range [d,d2), [d5, d9)
-    EXPECT_EQ(batch_cop_task->region_infos[3].partition_index, 1);
-    const coprocessor::KeyRanges expect_ranges3{{"d", "d2"}, {"d5", "d9"}};
-    EXPECT_KEY_RANGES_EQ(batch_cop_task->region_infos[3].ranges, expect_ranges3);
-}
 
+    // region infos should put into table_regions instead of region_infos for partition table.
+    ASSERT_TRUE(batch_cop_task->region_infos.empty());
+    ASSERT_EQ(batch_cop_task->table_regions.size(), 2);
+
+    // Check the first partition table.
+    ASSERT_EQ(batch_cop_task->table_regions[0].physical_table_id, table_ids[0]);
+    ASSERT_EQ(batch_cop_task->table_regions[0].region_infos.size(), 2);
+    // region [a,b) with 2 key range [aa,ab),[ac,b)
+    const coprocessor::KeyRanges expect_ranges0{{"aa", "ab"}, {"ac", "b"}};
+    EXPECT_EQ(batch_cop_task->table_regions[0].region_infos[0].partition_index, 0);
+    EXPECT_KEY_RANGES_EQ(batch_cop_task->table_regions[0].region_infos[0].ranges, expect_ranges0);
+    // region [b,d) with 2 key range [b,z)
+    const coprocessor::KeyRanges expect_ranges1{{"b", "bb"}};
+    EXPECT_EQ(batch_cop_task->table_regions[0].region_infos[1].partition_index, 0);
+    EXPECT_KEY_RANGES_EQ(batch_cop_task->table_regions[0].region_infos[1].ranges, expect_ranges1);
+
+    // Check the second partition table.
+    ASSERT_EQ(batch_cop_task->table_regions[1].physical_table_id, table_ids[1]);
+    ASSERT_EQ(batch_cop_task->table_regions[1].region_infos.size(), 2);
+    // region [b,d) with 2 key range [bz,d)
+    const coprocessor::KeyRanges expect_ranges2{{"bz", "d"}};
+    EXPECT_EQ(batch_cop_task->table_regions[1].region_infos[0].partition_index, 1);
+    EXPECT_KEY_RANGES_EQ(batch_cop_task->table_regions[1].region_infos[0].ranges, expect_ranges2);
+    // region [d,z) with 2 key range [d,d2), [d5, d9)
+    const coprocessor::KeyRanges expect_ranges3{{"d", "d2"}, {"d5", "d9"}};
+    EXPECT_EQ(batch_cop_task->table_regions[1].region_infos[1].partition_index, 1);
+    EXPECT_KEY_RANGES_EQ(batch_cop_task->table_regions[1].region_infos[1].ranges, expect_ranges3);
+}
+ 
 TEST_F(TestBatchCoprocessor, BuildTask3)
 {
     Backoffer bo(copBuildTaskMaxBackoff);
@@ -252,13 +247,16 @@ TEST_F(TestBatchCoprocessor, BuildTask3)
         coprocessor::KeyRanges{{"a", "b"}, {"b", "c"}, {"c", "d"}, {"d", "e"}, {"e", "f"}, {"f", "g"}, {"g", "h"}, {"h", "z"}},
     };
 
+    const bool is_partition_table = false;
+    const std::vector<int64_t> table_ids{-1};
     {
         auto batch_cop_tasks = coprocessor::buildBatchCopTasks(
             bo,
             test_cluster.get(),
+            is_partition_table,
+            table_ids,
             ranges_for_each_physical_table,
             kv::StoreType::TiKV,
-            1,
             log);
 
         // Only 1 store, so only 1 batch cop task is generated
@@ -293,90 +291,6 @@ TEST_F(TestBatchCoprocessor, BuildTask3)
         EXPECT_EQ(batch_cop_task->region_infos[7].partition_index, 0);
         const coprocessor::KeyRanges expect_ranges7{{"h", "z"}};
         EXPECT_KEY_RANGES_EQ(batch_cop_task->region_infos[7].ranges, expect_ranges7);
-    }
-
-    {
-        auto batch_cop_tasks = coprocessor::buildBatchCopTasks(
-            bo,
-            test_cluster.get(),
-            ranges_for_each_physical_table,
-            kv::StoreType::TiKV,
-            2,
-            log);
-
-        // Only 1 store, so only 1 batch cop task is generated
-        ASSERT_EQ(batch_cop_tasks.size(), 2);
-        auto * batch_cop_task0 = &batch_cop_tasks[0];
-        ASSERT_EQ(batch_cop_task0->region_infos.size(), 4);
-        // region [a,b) with 2 key range [aa,ab),[ac,b)
-        EXPECT_EQ(batch_cop_task0->region_infos[0].partition_index, 0);
-        const coprocessor::KeyRanges expect_ranges0{{"a", "b"}};
-        EXPECT_KEY_RANGES_EQ(batch_cop_task0->region_infos[0].ranges, expect_ranges0);
-        // region [b,d) with 2 key range [b,z)
-        EXPECT_EQ(batch_cop_task0->region_infos[1].partition_index, 0);
-        const coprocessor::KeyRanges expect_ranges1{{"b", "c"}};
-        EXPECT_KEY_RANGES_EQ(batch_cop_task0->region_infos[1].ranges, expect_ranges1);
-        // region [b,d) with 2 key range [bz,d)
-        EXPECT_EQ(batch_cop_task0->region_infos[2].partition_index, 0);
-        const coprocessor::KeyRanges expect_ranges2{{"c", "d"}};
-        EXPECT_KEY_RANGES_EQ(batch_cop_task0->region_infos[2].ranges, expect_ranges2);
-        // region [d,z) with 2 key range [d,d2), [d5, d9)
-        EXPECT_EQ(batch_cop_task0->region_infos[3].partition_index, 0);
-        const coprocessor::KeyRanges expect_ranges3{{"d", "e"}};
-        EXPECT_KEY_RANGES_EQ(batch_cop_task0->region_infos[3].ranges, expect_ranges3);
-
-        auto * batch_cop_task1 = &batch_cop_tasks[1];
-        const coprocessor::KeyRanges expect_ranges4{{"e", "f"}};
-        EXPECT_KEY_RANGES_EQ(batch_cop_task1->region_infos[0].ranges, expect_ranges4);
-        const coprocessor::KeyRanges expect_ranges5{{"f", "g"}};
-        EXPECT_KEY_RANGES_EQ(batch_cop_task1->region_infos[1].ranges, expect_ranges5);
-        const coprocessor::KeyRanges expect_ranges6{{"g", "h"}};
-        EXPECT_KEY_RANGES_EQ(batch_cop_task1->region_infos[2].ranges, expect_ranges6);
-        const coprocessor::KeyRanges expect_ranges7{{"h", "z"}};
-        EXPECT_KEY_RANGES_EQ(batch_cop_task1->region_infos[3].ranges, expect_ranges7);
-    }
-
-    {
-        auto batch_cop_tasks = coprocessor::buildBatchCopTasks(
-            bo,
-            test_cluster.get(),
-            ranges_for_each_physical_table,
-            kv::StoreType::TiKV,
-            3,
-            log);
-
-        // Only 1 store, so only 1 batch cop task is generated
-        ASSERT_EQ(batch_cop_tasks.size(), 3);
-        auto * batch_cop_task0 = &batch_cop_tasks[0];
-        ASSERT_EQ(batch_cop_task0->region_infos.size(), 2);
-        // region [a,b) with 2 key range [aa,ab),[ac,b)
-        EXPECT_EQ(batch_cop_task0->region_infos[0].partition_index, 0);
-        const coprocessor::KeyRanges expect_ranges0{{"a", "b"}};
-        EXPECT_KEY_RANGES_EQ(batch_cop_task0->region_infos[0].ranges, expect_ranges0);
-        // region [b,d) with 2 key range [b,z)
-        EXPECT_EQ(batch_cop_task0->region_infos[1].partition_index, 0);
-        const coprocessor::KeyRanges expect_ranges1{{"b", "c"}};
-        EXPECT_KEY_RANGES_EQ(batch_cop_task0->region_infos[1].ranges, expect_ranges1);
-
-        auto * batch_cop_task1 = &batch_cop_tasks[1];
-        // region [b,d) with 2 key range [bz,d)
-        EXPECT_EQ(batch_cop_task1->region_infos[0].partition_index, 0);
-        const coprocessor::KeyRanges expect_ranges2{{"c", "d"}};
-        EXPECT_KEY_RANGES_EQ(batch_cop_task1->region_infos[0].ranges, expect_ranges2);
-        // region [d,z) with 2 key range [d,d2), [d5, d9)
-        EXPECT_EQ(batch_cop_task1->region_infos[1].partition_index, 0);
-        const coprocessor::KeyRanges expect_ranges3{{"d", "e"}};
-        EXPECT_KEY_RANGES_EQ(batch_cop_task1->region_infos[1].ranges, expect_ranges3);
-
-        auto * batch_cop_task2 = &batch_cop_tasks[2];
-        const coprocessor::KeyRanges expect_ranges4{{"e", "f"}};
-        EXPECT_KEY_RANGES_EQ(batch_cop_task2->region_infos[0].ranges, expect_ranges4);
-        const coprocessor::KeyRanges expect_ranges5{{"f", "g"}};
-        EXPECT_KEY_RANGES_EQ(batch_cop_task2->region_infos[1].ranges, expect_ranges5);
-        const coprocessor::KeyRanges expect_ranges6{{"g", "h"}};
-        EXPECT_KEY_RANGES_EQ(batch_cop_task2->region_infos[2].ranges, expect_ranges6);
-        const coprocessor::KeyRanges expect_ranges7{{"h", "z"}};
-        EXPECT_KEY_RANGES_EQ(batch_cop_task2->region_infos[3].ranges, expect_ranges7);
     }
 }
 

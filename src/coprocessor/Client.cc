@@ -103,7 +103,7 @@ std::vector<LocationKeyRanges> splitKeyRangesByLocations(
         }
         else
         {
-            // ranges[i] is not in the region.
+            // r is not in the region.
             KeyRanges task_ranges(ranges.begin(), r);
             res.emplace_back(LocationKeyRanges{loc, task_ranges});
             r = ranges.erase(ranges.begin(), r);
@@ -277,53 +277,21 @@ std::vector<BatchCopTask> balanceBatchCopTasks(std::vector<BatchCopTask> && orig
     }
     return ret;
 }
-
-std::vector<BatchCopTask> trySplitBatchCopTasksOnSameStore(std::vector<BatchCopTask> && original_tasks, size_t expect_concurrent_num, Poco::Logger * /*log*/)
-{
-    if (original_tasks.size() >= expect_concurrent_num)
-        return original_tasks;
-
-    // Expect that the number of key ranges in different task of `original_tasks` is roughly the same.
-    double further_split = 1.0 * expect_concurrent_num / original_tasks.size();
-    if (further_split < 2.0)
-        return original_tasks;
-
-    const auto num_further_split = static_cast<size_t>(further_split);
-    std::vector<BatchCopTask> ret;
-    ret.reserve(expect_concurrent_num);
-    for (const auto & task : original_tasks)
-    {
-        size_t origin_num_key_ranges = task.region_infos.size();
-        size_t num_key_ranges_per_task = origin_num_key_ranges / num_further_split;
-        for (size_t split_idx = 0; split_idx < num_further_split; ++split_idx)
-        {
-            BatchCopTask splitted_task;
-            splitted_task.store_addr = task.store_addr;
-            size_t start_offset = split_idx * num_key_ranges_per_task;
-            size_t end_offset = (split_idx + 1) * num_key_ranges_per_task;
-            if (split_idx == num_further_split - 1)
-                end_offset = task.region_infos.size();
-            splitted_task.region_infos.insert(
-                splitted_task.region_infos.end(),
-                task.region_infos.begin() + start_offset,
-                task.region_infos.begin() + end_offset);
-            ret.emplace_back(std::move(splitted_task));
-        }
-    }
-    return ret;
-}
-
 } // namespace details
 
+// The elements in the two `physical_table_ids` and `ranges_for_each_physical_table` should be in one-to-one mapping.
+// When build batch cop tasks for partition table, physical_table_ids.size() may be greater than 1.
 std::vector<BatchCopTask> buildBatchCopTasks(
     kv::Backoffer & bo,
     kv::Cluster * cluster,
-    std::vector<KeyRanges> ranges_for_each_physical_table,
+    bool is_partition_table_scan,
+    const std::vector<int64_t> & physical_table_ids,
+    const std::vector<KeyRanges> & ranges_for_each_physical_table,
     kv::StoreType store_type,
-    size_t expect_concurrent_num,
     Logger * log)
 {
     auto & cache = cluster->region_cache;
+    assert(physical_table_ids.size() == ranges_for_each_physical_table.size());
 
     while (true) // for `need_retry`
     {
@@ -410,13 +378,40 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         if (log->getLevel() >= Poco::Message::PRIO_DEBUG)
             log->debug(tasks_to_str("Before region balance:", batch_cop_tasks));
         batch_cop_tasks = details::balanceBatchCopTasks(std::move(batch_cop_tasks), log);
-        batch_cop_tasks = details::trySplitBatchCopTasksOnSameStore(std::move(batch_cop_tasks), expect_concurrent_num, log);
         if (log->getLevel() >= Poco::Message::PRIO_DEBUG)
             log->debug(tasks_to_str("After region balance:", batch_cop_tasks));
 
+        // For partition table, we need to move region info from task.region_infos to task.table_regions.
+        if (is_partition_table_scan) {
+            for (auto & task : batch_cop_tasks) {
+                std::vector<pingcap::coprocessor::TableRegions> partition_table_regions(physical_table_ids.size());
+                for (const auto & region_info : task.region_infos) {
+                    const auto partition_index = region_info.partition_index;
+                    partition_table_regions[partition_index].physical_table_id = physical_table_ids[partition_index];
+                    partition_table_regions[partition_index].region_infos.push_back(region_info);
+                }
+                for (const auto & partition_table_region : partition_table_regions) {
+                    if (partition_table_region.region_infos.empty()) {
+                        continue;
+                    }
+                    task.table_regions.push_back(partition_table_region);
+                }
+                task.region_infos.clear();
+            }
+        }
         return batch_cop_tasks;
     }
 }
+
+namespace details
+{
+inline uint64_t nanoseconds(clockid_t clock_type)
+{
+    struct timespec ts;
+    clock_gettime(clock_type, &ts);
+    return ts.tv_sec * 1000000000ULL + ts.tv_nsec;
+}
+} // namespace details
 
 std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopTask & task)
 {
