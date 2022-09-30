@@ -120,7 +120,7 @@ private:
     friend class TestTwoPhaseCommitter;
 
 public:
-    explicit TwoPhaseCommitter(Txn * txn, kvrpcpb::APIVersion api_version_, bool _use_async_commit = false);
+    explicit TwoPhaseCommitter(Txn * txn, kvrpcpb::APIVersion api_version_ = kvrpcpb::APIVersion::V1, bool _use_async_commit = false);
 
     void execute();
 
