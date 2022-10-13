@@ -241,7 +241,7 @@ std::vector<uint64_t> RegionCache::getAllValidTiFlashStores(Backoffer & bo, cons
     }
 
     // Get others tiflash store ids
-    // TODO: get store info without network request; check region cache TTL
+    // TODO: client-go also check region cache TTL.
     auto peers = selectTiFlashPeers(bo, cached_region->meta);
     for (const auto & peer : peers)
     {
