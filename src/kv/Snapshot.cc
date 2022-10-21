@@ -27,7 +27,6 @@ std::string Snapshot::Get(Backoffer & bo, const std::string & key)
         ::kvrpcpb::Context * context = request->mutable_context();
         context->set_priority(::kvrpcpb::Normal);
         context->set_not_fill_cache(false);
-        context->set_api_version(cluster->api_version);
         for (auto ts : min_commit_ts_pushed.getTimestamps())
         {
             context->add_resolved_locks(ts);

@@ -163,9 +163,6 @@ TxnStatus LockResolver::getTxnStatus(Backoffer & bo, uint64_t txn_id, const std:
     req->set_current_ts(current_ts);
     req->set_rollback_if_not_exist(rollback_if_not_exists);
     req->set_force_sync_commit(force_sync_commit);
-
-    auto * context = req->mutable_context();
-    context->set_api_version(api_version);
     for (;;)
     {
         auto loc = cluster->region_cache->locateKey(bo, primary);

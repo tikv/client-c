@@ -73,7 +73,6 @@ void Scanner::getData(Backoffer & bo)
         auto * context = request->mutable_context();
         context->set_priority(::kvrpcpb::Normal);
         context->set_not_fill_cache(false);
-        context->set_api_version(snap.cluster->api_version);
 
         std::shared_ptr<kvrpcpb::ScanResponse> response;
         try
