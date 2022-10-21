@@ -56,6 +56,9 @@ public:
 
     bool isMock() override;
 
+protected:
+    ClusterConfig config;
+
 private:
     void initClusterID();
 
@@ -120,9 +123,6 @@ private:
     std::atomic<bool> check_leader;
 
     Logger * log;
-
-protected:
-    ClusterConfig config;
 };
 
 
