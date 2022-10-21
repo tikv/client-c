@@ -39,6 +39,8 @@ struct RegionClient
     template <typename T>
     auto sendReqToRegion(Backoffer & bo, std::shared_ptr<T> req, int timeout = dailTimeout, StoreType store_type = StoreType::TiKV)
     {
+        // Set api version properly.
+        req->mutable_context()->set_api_version(cluster->api_version);
         RpcCall<T> rpc(req);
         for (;;)
         {
