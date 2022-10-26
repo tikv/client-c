@@ -106,8 +106,6 @@ private:
     // commited means primary key has been written to kv stores.
     bool commited;
 
-    kvrpcpb::APIVersion api_version;
-
     // Only for test now
     bool use_async_commit;
 
@@ -120,7 +118,7 @@ private:
     friend class TestTwoPhaseCommitter;
 
 public:
-    explicit TwoPhaseCommitter(Txn * txn, kvrpcpb::APIVersion api_version_ = kvrpcpb::APIVersion::V1, bool _use_async_commit = false);
+    explicit TwoPhaseCommitter(Txn * txn, bool _use_async_commit = false);
 
     void execute();
 

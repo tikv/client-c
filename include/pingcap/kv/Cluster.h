@@ -25,7 +25,8 @@ struct Cluster
 
     LockResolverPtr lock_resolver;
 
-    kvrpcpb::APIVersion api_version;
+    pd::KeyspaceID keyspace_id;
+    kvrpcpb::APIVersion api_version = kvrpcpb::APIVersion::V1;
 
     Cluster()
         : pd_client(std::make_shared<pd::MockPDClient>())
@@ -39,12 +40,12 @@ struct Cluster
         , oracle(std::make_unique<pd::Oracle>(pd_client, std::chrono::milliseconds(oracle_update_interval)))
         , lock_resolver(std::make_unique<LockResolver>(this))
     {
-        if (config.api_version == "v1")
-            api_version = kvrpcpb::APIVersion::V1;
-        else if (config.api_version == "v1ttl")
-            api_version = kvrpcpb::APIVersion::V1TTL;
-        else if (config.api_version == "v2")
-            api_version = kvrpcpb::APIVersion::V2;
+        if (config.keyspace_name.empty())
+        {
+            return;
+        }
+        keyspace_id = pd_client->getKeyspaceID(config.keyspace_name);
+        api_version = kvrpcpb::APIVersion::V2;
     }
 
     // TODO: When the cluster is closed, we should release all the resources

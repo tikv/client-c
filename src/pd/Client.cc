@@ -35,11 +35,11 @@ Client::Client(const std::vector<std::string> & addrs, const ClusterConfig & con
     , pd_timeout(3)
     , loop_interval(100)
     , update_leader_interval(60)
+    , config(config_)
     , urls(addrsToUrls(addrs, config_))
     , cluster_id(0)
     , work_threads_stop(false)
     , check_leader(false)
-    , config(config_)
     , log(&Logger::get("pingcap.pd"))
 {
     initClusterID();
@@ -376,7 +376,7 @@ metapb::Store Client::getStore(uint64_t store_id)
     return response.store();
 }
 
-uint32_t Client::getKeyspaceID(const std::string & keyspace_name)
+KeyspaceID Client::getKeyspaceID(const std::string & keyspace_name)
 {
     keyspacepb::LoadKeyspaceRequest request{};
     keyspacepb::LoadKeyspaceResponse response{};

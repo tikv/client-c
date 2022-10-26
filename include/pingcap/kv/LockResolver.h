@@ -288,7 +288,6 @@ private:
     std::shared_mutex mu;
     std::unordered_map<int64_t, TxnStatus> resolved;
     std::queue<int64_t> cached;
-    kvrpcpb::APIVersion api_version;
 
     Logger * log;
 };
