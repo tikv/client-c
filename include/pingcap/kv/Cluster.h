@@ -25,7 +25,7 @@ struct Cluster
 
     LockResolverPtr lock_resolver;
 
-    pd::KeyspaceID keyspace_id;
+    pd::KeyspaceID keyspace_id = pd::InvalidKeyspaceID;
     kvrpcpb::APIVersion api_version = kvrpcpb::APIVersion::V1;
 
     Cluster()
