@@ -57,6 +57,7 @@ struct copTask
     std::vector<KeyRange> ranges;
     RequestPtr req;
     kv::StoreType store_type;
+    kv::GRPCMetaData meta_data;
 };
 
 class ResponseIter
@@ -191,7 +192,8 @@ std::vector<copTask> buildCopTasks(
     std::vector<KeyRange> ranges,
     RequestPtr cop_req,
     kv::StoreType store_type,
-    Logger * log);
+    Logger * log,
+    kv::GRPCMetaData meta_data = {});
 
 } // namespace coprocessor
 } // namespace pingcap
