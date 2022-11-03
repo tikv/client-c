@@ -41,7 +41,6 @@ cmake-build*
 *.swp
 *.swo
 tags
-.clang-format
 .vscode
 
 # vscode clangd cache
