@@ -28,6 +28,10 @@ class Client : public IClient
 
     const std::chrono::seconds update_leader_interval;
 
+    void init(const std::vector<std::string> & addrs, const ClusterConfig & config_);
+
+    void uninit();
+
 public:
     Client(const std::vector<std::string> & addrs, const ClusterConfig & config);
 
