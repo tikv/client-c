@@ -33,7 +33,6 @@ inline std::vector<std::string> addrsToUrls(const std::vector<std::string> & add
 void Client::init(const std::vector<std::string> & addrs, const ClusterConfig & config_)
 {
     urls = addrsToUrls(addrs, config_);
-    check_leader = false;
     config = config_;
 
     initClusterID();
@@ -63,7 +62,6 @@ Client::Client(const std::vector<std::string> & addrs, const ClusterConfig & con
     , loop_interval(100)
     , update_leader_interval(60)
     , cluster_id(0)
-    , work_threads_stop(false)
     , check_leader(false)
     , log(&Logger::get("pingcap.pd"))
 {
