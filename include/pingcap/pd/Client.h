@@ -33,6 +33,8 @@ public:
 
     ~Client() override;
 
+    void update(const std::vector<std::string> & addrs, const ClusterConfig & config) override;
+
     //uint64_t getClusterID() override;
 
     // only implement a weak get ts.

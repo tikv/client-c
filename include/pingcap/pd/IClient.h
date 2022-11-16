@@ -35,6 +35,8 @@ public:
 
     virtual uint64_t getGCSafePoint() = 0;
 
+    virtual void update(const std::vector<std::string> & addrs, const ClusterConfig & config_) = 0;
+
     virtual bool isMock() = 0;
 };
 
