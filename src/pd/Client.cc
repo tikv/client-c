@@ -30,18 +30,11 @@ inline std::vector<std::string> addrsToUrls(const std::vector<std::string> & add
     return urls;
 }
 
-Client::Client(const std::vector<std::string> & addrs, const ClusterConfig & config_)
-    : max_init_cluster_retries(100)
-    , pd_timeout(3)
-    , loop_interval(100)
-    , update_leader_interval(60)
-    , urls(addrsToUrls(addrs, config_))
-    , cluster_id(0)
-    , work_threads_stop(false)
-    , check_leader(false)
-    , config(config_)
-    , log(&Logger::get("pingcap.pd"))
+void Client::init(const std::vector<std::string> & addrs, const ClusterConfig & config_)
 {
+    urls = addrsToUrls(addrs, config_);
+    config = config_;
+
     initClusterID();
 
     initLeader();
@@ -53,7 +46,7 @@ Client::Client(const std::vector<std::string> & addrs, const ClusterConfig & con
     check_leader.store(false);
 }
 
-Client::~Client()
+void Client::uninit()
 {
     work_threads_stop = true;
 
@@ -61,6 +54,30 @@ Client::~Client()
     {
         work_thread.join();
     }
+}
+
+Client::Client(const std::vector<std::string> & addrs, const ClusterConfig & config_)
+    : max_init_cluster_retries(100)
+    , pd_timeout(3)
+    , loop_interval(100)
+    , update_leader_interval(60)
+    , cluster_id(0)
+    , check_leader(false)
+    , log(&Logger::get("pingcap.pd"))
+{
+    init(addrs, config_);
+}
+
+Client::~Client()
+{
+    uninit();
+}
+
+void Client::update(const std::vector<std::string> & addrs, const ClusterConfig & config_)
+{
+    uninit();
+
+    init(addrs, config_);
 }
 
 bool Client::isMock()
