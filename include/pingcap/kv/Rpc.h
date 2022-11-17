@@ -29,6 +29,7 @@ struct ConnArray
 };
 
 using ConnArrayPtr = std::shared_ptr<ConnArray>;
+using GRPCMetaData = std::multimap<std::string, std::string>;
 
 // RpcCall holds the request and response, and delegates RPC calls.
 template <class T>
@@ -58,10 +59,12 @@ public:
 
     std::shared_ptr<S> getResp() { return resp; }
 
-    void call(std::shared_ptr<KvConnClient> client, int timeout)
+    void call(std::shared_ptr<KvConnClient> client, int timeout, GRPCMetaData meta_data = {})
     {
         grpc::ClientContext context;
         context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(timeout));
+        for (auto & it : meta_data)
+            context.AddMetadata(it.first, it.second);
         auto status = Trait::doRPCCall(&context, client, *req, resp.get());
         if (!status.ok())
         {
@@ -93,16 +96,21 @@ struct RpcClient
         : config(config_)
     {}
 
+    void update(const ClusterConfig & config_)
+    {
+        config = config_;
+    }
+
     ConnArrayPtr getConnArray(const std::string & addr);
 
     ConnArrayPtr createConnArray(const std::string & addr);
 
     template <class T>
-    void sendRequest(std::string addr, RpcCall<T> & rpc, int timeout)
+    void sendRequest(std::string addr, RpcCall<T> & rpc, int timeout, GRPCMetaData meta_data = {})
     {
         ConnArrayPtr conn_array = getConnArray(addr);
         auto conn_client = conn_array->get();
-        rpc.call(conn_client, timeout);
+        rpc.call(conn_client, timeout, meta_data);
     }
 
     template <class T>

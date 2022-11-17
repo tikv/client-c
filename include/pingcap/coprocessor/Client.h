@@ -89,6 +89,7 @@ struct BatchCopTask
     std::vector<pingcap::coprocessor::TableRegions> table_regions;
     RequestPtr req;
     kv::StoreType store_type;
+    kv::GRPCMetaData meta_data;
 };
 
 class ResponseIter
@@ -222,7 +223,8 @@ std::vector<CopTask> buildCopTasks(
     KeyRanges ranges,
     RequestPtr cop_req,
     kv::StoreType store_type,
-    Logger * log);
+    Logger * log,
+    kv::GRPCMetaData meta_data = {});
 
 std::vector<BatchCopTask> buildBatchCopTasks(
     kv::Backoffer & bo,

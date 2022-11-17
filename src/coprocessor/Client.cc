@@ -24,7 +24,8 @@ std::vector<CopTask> buildCopTasks(
     KeyRanges ranges,
     RequestPtr cop_req,
     kv::StoreType store_type,
-    Logger * log)
+    Logger * log,
+    kv::GRPCMetaData meta_data)
 {
     log->debug("build " + std::to_string(ranges.size()) + " ranges.");
     std::vector<CopTask> tasks;
@@ -42,7 +43,7 @@ std::vector<CopTask> buildCopTasks(
         // all ranges belong to same region.
         if (i == ranges.size())
         {
-            tasks.push_back(CopTask{loc.region, ranges, cop_req, store_type});
+            tasks.push_back(CopTask{loc.region, ranges, cop_req, store_type, meta_data});
             break;
         }
 
@@ -54,8 +55,7 @@ std::vector<CopTask> buildCopTasks(
             task_ranges.push_back(KeyRange{bound.start_key, loc.end_key});
             bound.start_key = loc.end_key; // update the last range start key after splitted
         }
-        tasks.push_back(CopTask{loc.region, task_ranges, cop_req, store_type});
-
+        tasks.push_back(CopTask{loc.region, task_ranges, cop_req, store_type, meta_data});
         ranges.erase(ranges.begin(), ranges.begin() + i);
     }
     log->debug("has " + std::to_string(tasks.size()) + " tasks.");
@@ -435,12 +435,12 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
     std::shared_ptr<::coprocessor::Response> resp;
     try
     {
-        resp = client.sendReqToRegion(bo, req, kv::copTimeout, task.store_type);
+        resp = client.sendReqToRegion(bo, req, kv::copTimeout, task.store_type, task.meta_data);
     }
     catch (Exception & e)
     {
         bo.backoff(kv::boRegionMiss, e);
-        return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, log);
+        return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, log, task.meta_data);
     }
     if (resp->has_locked())
     {
@@ -458,7 +458,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
             log->information("get lock and sleep for a while, sleep time is " + std::to_string(before_expired) + "ms.");
             bo.backoffWithMaxSleep(kv::boTxnLockFast, before_expired, Exception(resp->locked().DebugString(), ErrorCodes::LockError));
         }
-        return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, log);
+        return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, log, task.meta_data);
     }
 
     const std::string & err_msg = resp->other_error();
