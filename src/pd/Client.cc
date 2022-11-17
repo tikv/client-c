@@ -376,7 +376,7 @@ metapb::Store Client::getStore(uint64_t store_id)
     return response.store();
 }
 
-KeyspaceID Client::getKeyspaceID(const std::string & keyspace_name)
+uint32_t Client::getKeyspaceID(const std::string & keyspace_name)
 {
     keyspacepb::LoadKeyspaceRequest request{};
     keyspacepb::LoadKeyspaceResponse response{};

@@ -25,9 +25,6 @@ struct Cluster
 
     LockResolverPtr lock_resolver;
 
-    pd::KeyspaceID keyspace_id;
-    kvrpcpb::APIVersion api_version = kvrpcpb::APIVersion::V1;
-
     Cluster()
         : pd_client(std::make_shared<pd::MockPDClient>())
         , rpc_client(std::make_unique<RpcClient>())
@@ -39,14 +36,7 @@ struct Cluster
         , rpc_client(std::make_unique<RpcClient>(config))
         , oracle(std::make_unique<pd::Oracle>(pd_client, std::chrono::milliseconds(oracle_update_interval)))
         , lock_resolver(std::make_unique<LockResolver>(this))
-    {
-        if (config.keyspace_name.empty())
-        {
-            return;
-        }
-        keyspace_id = pd_client->getKeyspaceID(config.keyspace_name);
-        api_version = kvrpcpb::APIVersion::V2;
-    }
+    {}
 
     // TODO: When the cluster is closed, we should release all the resources
     // (e.g. background threads) that cluster object holds so as to exit elegantly.

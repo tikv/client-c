@@ -52,7 +52,7 @@ public:
 
     uint64_t getGCSafePoint() override;
 
-    KeyspaceID getKeyspaceID(const std::string & keyspace_name) override;
+    uint32_t getKeyspaceID(const std::string & keyspace_name) override;
 
     bool isMock() override;
 
@@ -119,10 +119,9 @@ private:
 
     std::atomic<bool> check_leader;
 
-    Logger * log;
-
-protected:
     ClusterConfig config;
+
+    Logger * log;
 };
 
 
