@@ -63,6 +63,7 @@ struct CopTask
     RequestPtr req;
     kv::StoreType store_type;
     size_t partition_index;
+    kv::GRPCMetaData meta_data;
 };
 
 struct RegionInfo
