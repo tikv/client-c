@@ -35,11 +35,11 @@ Client::Client(const std::vector<std::string> & addrs, const ClusterConfig & con
     , pd_timeout(3)
     , loop_interval(100)
     , update_leader_interval(60)
-    , config(config_)
     , urls(addrsToUrls(addrs, config_))
     , cluster_id(0)
     , work_threads_stop(false)
     , check_leader(false)
+    , config(config_)
     , log(&Logger::get("pingcap.pd"))
 {
     initClusterID();
