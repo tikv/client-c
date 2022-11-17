@@ -45,7 +45,7 @@ PINGCAP_DEFINE_TRAITS(kvrpcpb, TxnHeartBeat, KvTxnHeartBeat)
 PINGCAP_DEFINE_TRAITS(kvrpcpb, CheckSecondaryLocks, KvCheckSecondaryLocks)
 PINGCAP_DEFINE_TRAITS(coprocessor, , Coprocessor)
 PINGCAP_DEFINE_TRAITS(mpp, DispatchTask, DispatchMPPTask)
-
+PINGCAP_DEFINE_TRAITS(mpp, CancelTask, CancelMPPTask)
 
 // streaming trait for BatchRequest
 template <>
