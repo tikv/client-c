@@ -96,6 +96,11 @@ struct RpcClient
         : config(config_)
     {}
 
+    void update(const ClusterConfig & config_)
+    {
+        config = config_;
+    }
+
     ConnArrayPtr getConnArray(const std::string & addr);
 
     ConnArrayPtr createConnArray(const std::string & addr);
