@@ -16,7 +16,8 @@ std::vector<copTask> buildCopTasks(
     RequestPtr cop_req,
     kv::StoreType store_type,
     Logger * log,
-    kv::GRPCMetaData meta_data)
+    kv::GRPCMetaData meta_data,
+    std::function<void()> before_send)
 {
     log->debug("build " + std::to_string(ranges.size()) + " ranges.");
     std::vector<copTask> tasks;
@@ -34,7 +35,7 @@ std::vector<copTask> buildCopTasks(
         // all ranges belong to same region.
         if (i == ranges.size())
         {
-            tasks.push_back(copTask{loc.region, ranges, cop_req, store_type, meta_data});
+            tasks.push_back(copTask{loc.region, ranges, cop_req, store_type, meta_data, before_send});
             break;
         }
         std::vector<KeyRange> task_ranges(ranges.begin(), ranges.begin() + i);
@@ -44,7 +45,7 @@ std::vector<copTask> buildCopTasks(
             task_ranges.push_back(KeyRange{bound.start_key, loc.end_key});
             bound.start_key = loc.end_key;
         }
-        tasks.push_back(copTask{loc.region, task_ranges, cop_req, store_type, meta_data});
+        tasks.push_back(copTask{loc.region, task_ranges, cop_req, store_type, meta_data, before_send});
         ranges.erase(ranges.begin(), ranges.begin() + i);
     }
     log->debug("has " + std::to_string(tasks.size()) + " tasks.");
@@ -69,6 +70,8 @@ std::vector<copTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const copT
         range.setKeyRange(pb_range);
     }
 
+    if (task.before_send)
+        task.before_send();
     kv::RegionClient client(cluster, task.region_id);
     std::shared_ptr<::coprocessor::Response> resp;
     try
@@ -78,7 +81,7 @@ std::vector<copTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const copT
     catch (Exception & e)
     {
         bo.backoff(kv::boRegionMiss, e);
-        return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, log, task.meta_data);
+        return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, log, task.meta_data, task.before_send);
     }
     if (resp->has_locked())
     {
@@ -96,7 +99,7 @@ std::vector<copTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const copT
             log->information("get lock and sleep for a while, sleep time is " + std::to_string(before_expired) + "ms.");
             bo.backoffWithMaxSleep(kv::boTxnLockFast, before_expired, Exception(resp->locked().DebugString(), ErrorCodes::LockError));
         }
-        return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, log, task.meta_data);
+        return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, log, task.meta_data, task.before_send);
     }
 
     const std::string & err_msg = resp->other_error();
@@ -125,8 +128,8 @@ void ResponseIter::handleTask(const copTask & task)
         try
         {
             auto & current_task = remain_tasks[idx];
-            auto new_tasks
-                = handleTaskImpl(bo_maps.try_emplace(current_task.region_id.id, kv::copNextMaxBackoff).first->second, current_task);
+            auto & bo = bo_maps.try_emplace(current_task.region_id.id, kv::copNextMaxBackoff).first->second;
+            auto new_tasks = handleTaskImpl(bo, current_task);
             if (!new_tasks.empty())
             {
                 remain_tasks.insert(remain_tasks.end(), new_tasks.begin(), new_tasks.end());
