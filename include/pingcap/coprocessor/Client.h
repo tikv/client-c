@@ -64,6 +64,8 @@ struct CopTask
     kv::StoreType store_type;
     int64_t partition_index;
     kv::GRPCMetaData meta_data;
+    // call before send request, can be used to collect TiFlash metrics.
+    std::function<void()> before_send;
 };
 
 struct RegionInfo
@@ -91,6 +93,8 @@ struct BatchCopTask
     RequestPtr req;
     kv::StoreType store_type;
     kv::GRPCMetaData meta_data;
+    // call before send request, can be used to collect TiFlash metrics.
+    std::function<void()> before_send;
 };
 
 class ResponseIter
@@ -225,7 +229,8 @@ std::vector<CopTask> buildCopTasks(
     RequestPtr cop_req,
     kv::StoreType store_type,
     Logger * log,
-    kv::GRPCMetaData meta_data = {});
+    kv::GRPCMetaData meta_data = {},
+    std::function<void()> before_send = {});
 
 std::vector<BatchCopTask> buildBatchCopTasks(
     kv::Backoffer & bo,
