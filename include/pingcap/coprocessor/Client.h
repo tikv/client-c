@@ -92,9 +92,6 @@ struct BatchCopTask
     std::vector<pingcap::coprocessor::TableRegions> table_regions;
     RequestPtr req;
     kv::StoreType store_type;
-    kv::GRPCMetaData meta_data;
-    // call before send request, can be used to collect TiFlash metrics.
-    std::function<void()> before_send;
 };
 
 class ResponseIter
