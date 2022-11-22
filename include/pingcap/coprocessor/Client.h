@@ -62,7 +62,7 @@ struct CopTask
     KeyRanges ranges;
     RequestPtr req;
     kv::StoreType store_type;
-    size_t partition_index;
+    int64_t partition_index;
     kv::GRPCMetaData meta_data;
 };
 

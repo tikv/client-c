@@ -43,7 +43,7 @@ std::vector<CopTask> buildCopTasks(
         // all ranges belong to same region.
         if (i == ranges.size())
         {
-            tasks.push_back(CopTask{loc.region, ranges, cop_req, store_type, meta_data});
+            tasks.push_back(CopTask{loc.region, ranges, cop_req, store_type, /*partition_index=*/0, meta_data});
             break;
         }
 
@@ -55,7 +55,7 @@ std::vector<CopTask> buildCopTasks(
             task_ranges.push_back(KeyRange{bound.start_key, loc.end_key});
             bound.start_key = loc.end_key; // update the last range start key after splitted
         }
-        tasks.push_back(CopTask{loc.region, task_ranges, cop_req, store_type, meta_data});
+        tasks.push_back(CopTask{loc.region, task_ranges, cop_req, store_type, /*partition_index=*/0, meta_data});
         ranges.erase(ranges.begin(), ranges.begin() + i);
     }
     log->debug("has " + std::to_string(tasks.size()) + " tasks.");
@@ -302,7 +302,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
             const auto locations = details::splitKeyRangesByLocations(cache, bo, ranges);
             for (const auto & loc : locations)
             {
-                cop_tasks.emplace_back(CopTask{loc.location.region, loc.ranges, nullptr, store_type, idx});
+                cop_tasks.emplace_back(CopTask{loc.location.region, loc.ranges, nullptr, store_type, idx, kv::GRPCMetaData{}});
             }
         }
 
