@@ -79,7 +79,7 @@ void Client::update(const std::vector<std::string> & addrs, const ClusterConfig 
     config = config_;
     std::lock_guard<std::mutex> lk(channel_map_mutex);
     channel_map.clear();
-    log->information("pd client updated");
+    log->debug("pd client updated");
 }
 
 bool Client::isMock()
