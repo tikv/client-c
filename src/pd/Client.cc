@@ -131,7 +131,7 @@ std::shared_ptr<Client::PDConnClient> Client::leaderClient()
 
 void Client::initClusterID()
 {
-    for (int i = 0; i < max_init_cluster_retries; i++)
+    for (int i = 0; i < max_init_cluster_retries; ++i)
     {
         for (const auto & url : urls)
         {
