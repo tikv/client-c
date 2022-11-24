@@ -38,12 +38,6 @@ void Client::init(const std::vector<std::string> & addrs, const ClusterConfig & 
     initClusterID();
 
     initLeader();
-
-    work_threads_stop = false;
-
-    work_thread = std::thread([&]() { leaderLoop(); });
-
-    check_leader.store(false);
 }
 
 void Client::uninit()
@@ -66,6 +60,10 @@ Client::Client(const std::vector<std::string> & addrs, const ClusterConfig & con
     , log(&Logger::get("pingcap.pd"))
 {
     init(addrs, config_);
+
+    work_threads_stop = false;
+    work_thread = std::thread([&]() { leaderLoop(); });
+    check_leader.store(false);
 }
 
 Client::~Client()
@@ -78,6 +76,11 @@ void Client::update(const std::vector<std::string> & addrs, const ClusterConfig 
     uninit();
 
     init(addrs, config_);
+    
+    std::lock_guard<std::mutex> lk(channel_map_mutex);
+    channel_map.clear();
+
+    log->information("pd client updated");
 }
 
 bool Client::isMock()
