@@ -12,6 +12,15 @@ namespace pingcap
 {
 namespace pd
 {
+using KeyspaceID = uint32_t;
+
+enum : KeyspaceID
+{
+    // The size of KeyspaceID allocated for PD is 3 bytes.
+    // The InvalidKeyspaceID is preserved for TiDB API V1 compatibility.
+    InvalidKeyspaceID = 0xffffffff,
+};
+
 class IClient
 {
 public:
@@ -35,7 +44,7 @@ public:
 
     virtual uint64_t getGCSafePoint() = 0;
 
-    virtual uint32_t getKeyspaceID(const std::string & keyspace_name) = 0;
+    virtual KeyspaceID getKeyspaceID(const std::string & keyspace_name) = 0;
 
     virtual bool isMock() = 0;
 };
