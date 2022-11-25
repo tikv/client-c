@@ -312,6 +312,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         bool need_retry = false;
         for (const auto & cop_task : cop_tasks)
         {
+            // In order to avoid send copTask to unavailable TiFlash node, disable load_balance here.
             auto rpc_context = cluster->region_cache->getRPCContext(bo, cop_task.region_id, store_type, false);
             // When rpcCtx is nil, it's not only attributed to the miss region, but also
             // some TiFlash stores crash and can't be recovered.
