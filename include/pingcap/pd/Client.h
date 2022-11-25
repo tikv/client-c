@@ -91,7 +91,7 @@ private:
 
     std::shared_ptr<PDConnClient> leaderClient();
 
-    pdpb::GetMembersResponse getMembers(std::string);
+    pdpb::GetMembersResponse getMembers(const std::string &);
 
     pdpb::RequestHeader * requestHeader() const;
 
@@ -102,6 +102,8 @@ private:
     std::mutex channel_map_mutex;
 
     std::mutex update_leader_mutex;
+
+    std::mutex url_mutex;
 
     std::unordered_map<std::string, std::shared_ptr<PDConnClient>> channel_map;
 

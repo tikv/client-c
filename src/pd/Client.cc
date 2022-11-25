@@ -30,7 +30,14 @@ inline std::vector<std::string> addrsToUrls(const std::vector<std::string> & add
     return urls;
 }
 
-void Client::init(const std::vector<std::string> & addrs, const ClusterConfig & config_)
+Client::Client(const std::vector<std::string> & addrs, const ClusterConfig & config_)
+    : max_init_cluster_retries(100)
+    , pd_timeout(3)
+    , loop_interval(100)
+    , update_leader_interval(60)
+    , cluster_id(0)
+    , check_leader(false)
+    , log(&Logger::get("pingcap.pd"))
 {
     urls = addrsToUrls(addrs, config_);
     config = config_;
@@ -46,7 +53,7 @@ void Client::init(const std::vector<std::string> & addrs, const ClusterConfig & 
     check_leader.store(false);
 }
 
-void Client::uninit()
+Client::~Client()
 {
     work_threads_stop = true;
 
@@ -56,28 +63,12 @@ void Client::uninit()
     }
 }
 
-Client::Client(const std::vector<std::string> & addrs, const ClusterConfig & config_)
-    : max_init_cluster_retries(100)
-    , pd_timeout(3)
-    , loop_interval(100)
-    , update_leader_interval(60)
-    , cluster_id(0)
-    , check_leader(false)
-    , log(&Logger::get("pingcap.pd"))
-{
-    init(addrs, config_);
-}
-
-Client::~Client()
-{
-    uninit();
-}
-
 void Client::update(const std::vector<std::string> & addrs, const ClusterConfig & config_)
 {
+    std::lock_guard<std::mutex> lk(channel_map_mutex);
+    std::lock_guard<std::mutex> url_lk(url_mutex);
     urls = addrsToUrls(addrs, config_);
     config = config_;
-    std::lock_guard<std::mutex> lk(channel_map_mutex);
     channel_map.clear();
     log->debug("pd client updated");
 }
@@ -103,7 +94,7 @@ std::shared_ptr<Client::PDConnClient> Client::getOrCreateGRPCConn(const std::str
     return client_ptr;
 }
 
-pdpb::GetMembersResponse Client::getMembers(std::string url)
+pdpb::GetMembersResponse Client::getMembers(const std::string & url)
 {
     auto client = getOrCreateGRPCConn(url);
     auto resp = pdpb::GetMembersResponse{};
@@ -177,6 +168,7 @@ void Client::initLeader()
 void Client::updateLeader()
 {
     std::unique_lock lk(leader_mutex);
+    url_mutex.lock();
     for (const auto & url : urls)
     {
         auto resp = getMembers(url);
@@ -185,10 +177,14 @@ void Client::updateLeader()
             log->warning("failed to get cluster id by :" + url);
             continue;
         }
+        url_mutex.unlock();
         updateURLs(resp.members());
+        url_mutex.lock();
         switchLeader(resp.leader().client_urls());
+        url_mutex.unlock();
         return;
     }
+    url_mutex.unlock();
     throw Exception("failed to update leader", UpdatePDLeaderFailed);
 }
 
@@ -206,6 +202,7 @@ void Client::switchLeader(const ::google::protobuf::RepeatedPtrField<std::string
 
 void Client::updateURLs(const ::google::protobuf::RepeatedPtrField<::pdpb::Member> & members)
 {
+    std::unique_lock lk(url_mutex);
     std::vector<std::string> tmp_urls;
     for (const auto & member : members)
     {
