@@ -66,7 +66,6 @@ Client::~Client()
 void Client::update(const std::vector<std::string> & addrs, const ClusterConfig & config_)
 {
     std::lock_guard<std::mutex> lk(channel_map_mutex);
-    std::lock_guard<std::mutex> url_lk(url_mutex);
     urls = addrsToUrls(addrs, config_);
     config = config_;
     channel_map.clear();
@@ -168,7 +167,6 @@ void Client::initLeader()
 void Client::updateLeader()
 {
     std::unique_lock lk(leader_mutex);
-    url_mutex.lock();
     for (const auto & url : urls)
     {
         auto resp = getMembers(url);
@@ -177,14 +175,10 @@ void Client::updateLeader()
             log->warning("failed to get cluster id by :" + url);
             continue;
         }
-        url_mutex.unlock();
         updateURLs(resp.members());
-        url_mutex.lock();
         switchLeader(resp.leader().client_urls());
-        url_mutex.unlock();
         return;
     }
-    url_mutex.unlock();
     throw Exception("failed to update leader", UpdatePDLeaderFailed);
 }
 
@@ -202,7 +196,6 @@ void Client::switchLeader(const ::google::protobuf::RepeatedPtrField<std::string
 
 void Client::updateURLs(const ::google::protobuf::RepeatedPtrField<::pdpb::Member> & members)
 {
-    std::unique_lock lk(url_mutex);
     std::vector<std::string> tmp_urls;
     for (const auto & member : members)
     {

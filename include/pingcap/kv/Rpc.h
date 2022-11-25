@@ -98,8 +98,8 @@ struct RpcClient
 
     void update(const ClusterConfig & config_)
     {
-        config = config_;
         std::unique_lock lk(mutex);
+        config = config_;
         conns.clear();
     }
 
