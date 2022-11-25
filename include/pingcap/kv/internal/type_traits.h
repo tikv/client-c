@@ -14,7 +14,7 @@ struct RpcTypeTraits
 {
 };
 
-// Note that this macro do not applicable for grpc streaming call
+// Note that this macro is only applicable for grpc unary call
 #define PINGCAP_DEFINE_TRAITS(NAMESPACE, NAME, METHOD)            \
     template <>                                                   \
     struct RpcTypeTraits<::NAMESPACE::NAME##Request>              \
