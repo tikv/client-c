@@ -66,8 +66,8 @@ Client::~Client()
 
 void Client::update(const std::vector<std::string> & addrs, const ClusterConfig & config_)
 {
-    std::lock_guard lk(channel_map_mutex);
     std::lock_guard leader_lk(leader_mutex);
+    std::lock_guard lk(channel_map_mutex);
     urls = addrsToUrls(addrs, config_);
     config = config_;
     channel_map.clear();
