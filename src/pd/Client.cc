@@ -1,6 +1,7 @@
 #include <Poco/URI.h>
 #include <pingcap/SetThreadName.h>
 #include <pingcap/pd/Client.h>
+#include <mutex>
 
 namespace pingcap
 {
@@ -65,7 +66,8 @@ Client::~Client()
 
 void Client::update(const std::vector<std::string> & addrs, const ClusterConfig & config_)
 {
-    std::lock_guard<std::mutex> lk(channel_map_mutex);
+    std::lock_guard lk(channel_map_mutex);
+    std::lock_guard leader_lk(leader_mutex);
     urls = addrsToUrls(addrs, config_);
     config = config_;
     channel_map.clear();
