@@ -46,6 +46,8 @@ public:
 
     virtual KeyspaceID getKeyspaceID(const std::string & keyspace_name) = 0;
 
+    virtual bool isClusterBootstrapped() = 0;
+
     virtual bool isMock() = 0;
 };
 

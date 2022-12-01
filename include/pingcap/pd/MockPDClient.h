@@ -30,6 +30,8 @@ public:
 
     uint32_t getKeyspaceID(const std::string & keyspace_name) override { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
 
+    bool isClusterBootstrapped() override { return true; }
+
     bool isMock() override { return true; }
 };
 
