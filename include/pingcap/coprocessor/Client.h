@@ -92,6 +92,8 @@ struct BatchCopTask
     std::vector<pingcap::coprocessor::TableRegions> table_regions;
     RequestPtr req;
     kv::StoreType store_type;
+
+    uint64_t store_id;
 };
 
 class ResponseIter

@@ -340,6 +340,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                     .all_stores = all_stores,
                     .partition_index = cop_task.partition_index,
                 });
+                batch_cop_task.store_id = rpc_context->store.id;
                 store_task_map[rpc_context->addr] = std::move(batch_cop_task);
             }
             else
@@ -358,8 +359,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
             // As mentioned above, null rpc_context is always attributed to failed stores.
             // It's equal to long pool the store but get no response. Here we'd better use
             // TiFlash error to trigger the TiKV fallback mechanism.
-            // TODO: Do we need to add `boTiFlashRPC`?
-            bo.backoff(kv::boRegionMiss, Exception("Cannot find region with TiFlash peer"));
+            bo.backoff(kv::boTiFlashRPC, Exception("Cannot find region with TiFlash peer"));
             continue;
         }
 

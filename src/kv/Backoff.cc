@@ -33,6 +33,8 @@ BackoffPtr newBackoff(BackoffType tp)
         return std::make_shared<Backoff>(100, 2000, NoJitter);
     case boMaxRegionNotInitialized:
         return std::make_shared<Backoff>(2, 1000, NoJitter);
+    case boTiFlashRPC:
+        return std::make_shared<Backoff>(100, 2000, EqualJitter);
     }
     return nullptr;
 }

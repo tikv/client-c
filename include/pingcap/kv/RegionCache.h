@@ -184,6 +184,8 @@ public:
 
     void onSendReqFail(RPCContextPtr & ctx, const Exception & exc);
 
+    void onSendReqFailForBatchRegions(const std::vector<RegionVerID> & region_ids, uint64_t store_id);
+
     void onRegionStale(Backoffer & bo, RPCContextPtr ctx, const errorpb::EpochNotMatch & stale_epoch);
 
     RegionPtr getRegionByID(Backoffer & bo, const RegionVerID & id);

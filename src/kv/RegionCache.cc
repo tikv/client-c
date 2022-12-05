@@ -316,6 +316,15 @@ void RegionCache::onSendReqFail(RPCContextPtr & ctx, const Exception & exc)
     dropStore(failed_store_id);
 }
 
+void RegionCache::onSendReqFailForBatchRegions(const std::vector<RegionVerID> & region_ids, uint64_t store_id)
+{
+    dropStore(store_id);
+    for (const auto & region_id : region_ids)
+    {
+        dropRegion(region_id);
+    }
+}
+
 bool RegionCache::updateLeader(const RegionVerID & region_id, const metapb::Peer & leader)
 {
     std::unique_lock<std::shared_mutex> lock(region_mutex);
