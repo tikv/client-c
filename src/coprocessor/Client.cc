@@ -114,6 +114,161 @@ std::vector<LocationKeyRanges> splitKeyRangesByLocations(
     return res;
 }
 
+std::vector<RegionInfo> selectRegion(uint64_t store_id, const std::vector<RegionInfo> & candidate_region_infos,
+        std::vector<bool> & selected, std::unordered_map<uint64_t, std::vector<uint64_t>> & store_id_to_region_index,
+        int32_t balance_continuous_region_count)
+{
+    std::vector<RegionInfo> result;
+    auto iter = store_id_to_region_index.find(store_id);
+    if (iter == store_id_to_region_index.end())
+        return result;
+
+    size_t i = 0;
+    const auto & region_indexs = iter->second;
+    for (; i < region_indexs.size() && result.size() < balance_continuous_region_count; ++i)
+    {
+        auto idx = region_indexs[i];
+        if (selected[idx])
+            continue;
+        selected[idx] = true;
+        result.push_back(candidate_region_infos[idx]);
+    }
+    store_id_to_region_index[store_id] = std::vector<uint64_t>(region_indexs.begin() + i, region_indexs.end());
+    return result;
+}
+
+static constexpr int32_t MAX_BALANCE_SCORE = 100;
+static constexpr int32_t BALANCE_SCORE_THRESHOLD = 85;
+
+bool isBalance(int32_t score)
+{
+    return score >= BALANCE_SCORE_THRESHOLD;
+}
+
+int32_t getBalanceScore(const std::unordered_map<uint64_t, BatchCopTask> & store_tasks, int32_t balance_continuous_region_count)
+{
+    if (store_tasks.empty())
+        return 0;
+
+    int32_t max_region_count = 0;
+    int32_t min_region_count = std::numeric_limits<int32_t>::max();
+    for (const auto & ele : store_tasks)
+    {
+        auto count = ele.second.region_infos.size();
+        if (count > max_region_count)
+            max_region_count = count;
+        if (count < min_region_count)
+            min_region_count = count;
+    }
+
+    int32_t score = 0;
+    if (min_region_count <= 0) {
+        score = std::numeric_limits<int32_t>::min();
+    } else {
+        int32_t unbalance_score = max_region_count - min_region_count;
+        if (unbalance_score <= balance_continuous_region_count)
+        {
+            score = MAX_BALANCE_SCORE;
+        }
+        else
+        {
+            score = MAX_BALANCE_SCORE - unbalance_score * 100 / min_region_count;
+        }
+    }
+    return score;
+}
+
+std::pair<std::vector<BatchCopTask>, int32_t> balanceBatchCopTasksWithContinuity(
+        const std::unordered_map<uint64_t, BatchCopTask> & store_task_map,
+        std::vector<RegionInfo> & candidate_region_infos,
+        int32_t balance_continuous_region_count)
+{
+    // 0. Setup all data.
+    uint64_t total_region_count = candidate_region_infos.size();
+    std::unordered_map<uint64_t, BatchCopTask> store_tasks;
+    for (const auto & [store_id, task] : store_task_map)
+    {
+        // Deep copy.
+        total_region_count += task.region_infos.size();
+        auto new_task = task;
+        if (task.req != nullptr)
+            new_task.req = std::make_shared<Request>(*task.req);
+        store_tasks[store_id] = new_task;
+    }
+
+    // 1. Sort candidate_region_infos by StartKey
+    std::sort(candidate_region_infos.begin(), candidate_region_infos.end(), [](const RegionInfo & lhs, const RegionInfo & rhs) {
+            if (lhs.ranges.empty() || rhs.ranges.empty())
+            {
+                return lhs.ranges.size() > rhs.ranges.size();
+            }
+            return lhs.ranges[0].start_key.compare(rhs.ranges[0].start_key) == -1;
+    });
+
+    // 2. Build storeID2RegionIndex to help locate regions of a store.
+    std::unordered_map<uint64_t, std::vector<uint64_t>> store_id_to_region_index;
+    for (size_t region_info_index = 0; region_info_index < candidate_region_infos.size(); ++region_info_index)
+    {
+        const auto & region_info = candidate_region_infos[region_info_index];
+        for (const auto & store : region_info.all_stores)
+        {
+            auto iter = store_id_to_region_index.find(store);
+            if (iter== store_id_to_region_index.end())
+            {
+                store_id_to_region_index.emplace(store, std::vector<uint64_t>{region_info_index});
+            }
+            else
+            {
+                iter->second.push_back(region_info_index);
+            }
+        }
+    }
+
+    // 3. Each store takes balance_continuous_region_count regions.
+    std::vector<bool> selected(candidate_region_infos.size(), false);
+    for (;;)
+    {
+        uint64_t current_region_count = 0;
+        uint64_t select_region_count_this_round = 0;
+        for (auto & [store_id, task] : store_tasks)
+        {
+            auto region_infos = selectRegion(store_id, candidate_region_infos, selected, store_id_to_region_index, balance_continuous_region_count);
+            task.region_infos.insert(task.region_infos.end(), region_infos.begin(), region_infos.end());
+            current_region_count += task.region_infos.size();
+            select_region_count_this_round += region_infos.size();
+        }
+        if (current_region_count >= total_region_count)
+        {
+            break;
+        }
+        if (select_region_count_this_round == 0)
+        {
+            return std::pair<std::vector<BatchCopTask>, int32_t>{};
+        }
+    }
+
+    // 4. Get balance score.
+    std::vector<BatchCopTask> result;
+    result.reserve(store_tasks.size());
+    int32_t score = getBalanceScore(store_tasks, balance_continuous_region_count);
+    uint64_t balanced_region_count = 0;
+    for (const auto & ele : store_tasks)
+    {
+        const auto & region_infos = ele.second.region_infos;
+        if (!region_infos.empty())
+        {
+            balanced_region_count += region_infos.size();
+            result.emplace_back(ele.second);
+        }
+    }
+
+    if (balanced_region_count != total_region_count)
+    {
+        return std::pair<std::vector<BatchCopTask>, int32_t>{};
+    }
+    return std::pair<std::vector<BatchCopTask>, int32_t>{result, score};
+}
+
 std::vector<BatchCopTask> balanceBatchCopTasks(std::vector<BatchCopTask> && original_tasks, Poco::Logger * log)
 {
     if (original_tasks.empty())
@@ -128,7 +283,7 @@ std::vector<BatchCopTask> balanceBatchCopTasks(std::vector<BatchCopTask> && orig
         return std::move(original_tasks);
     }
 
-    std::map<uint64_t, BatchCopTask> store_task_map;
+    std::unordered_map<uint64_t, BatchCopTask> store_task_map;
     for (const auto & task : original_tasks)
     {
         auto task_store_id = task.region_infos[0].all_stores[0];
@@ -193,6 +348,13 @@ std::vector<BatchCopTask> balanceBatchCopTasks(std::vector<BatchCopTask> && orig
             }
         }
     }
+
+    std::vector<BatchCopTask> continuous_tasks;
+    int32_t score = 0;
+    static constexpr int32_t balance_continuous_region_count = 20;
+    std::tie(continuous_tasks, score) = details::balanceBatchCopTasksWithContinuity(store_task_map, candidate_region_infos, balance_continuous_region_count);
+    if (details::isBalance(score) && !continuous_tasks.empty())
+        return continuous_tasks;
 
     if (total_remaining_region_num > 0)
     {
@@ -266,6 +428,13 @@ std::vector<BatchCopTask> balanceBatchCopTasks(std::vector<BatchCopTask> && orig
         }
     }
 
+    if (!continuous_tasks.empty())
+    {
+        auto score = details::getBalanceScore(store_task_map, balance_continuous_region_count);
+        if (!details::isBalance(score))
+            return continuous_tasks;
+    }
+
     std::vector<BatchCopTask> ret;
     ret.reserve(store_task_map.size());
     for (const auto & [store_id, task] : store_task_map)
@@ -278,6 +447,7 @@ std::vector<BatchCopTask> balanceBatchCopTasks(std::vector<BatchCopTask> && orig
     }
     return ret;
 }
+
 } // namespace details
 
 // The elements in the two `physical_table_ids` and `ranges_for_each_physical_table` should be in one-to-one mapping.
@@ -308,7 +478,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         }
 
         // store_addr -> BatchCopTask
-        std::map<std::string, BatchCopTask> store_task_map;
+        std::map<uint64_t, BatchCopTask> store_task_map;
         bool need_retry = false;
         for (const auto & cop_task : cop_tasks)
         {
@@ -327,7 +497,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                 continue;
             }
             auto all_stores = cluster->region_cache->getAllValidTiFlashStores(bo, cop_task.region_id, rpc_context->store);
-            if (auto iter = store_task_map.find(rpc_context->addr); iter == store_task_map.end())
+            if (auto iter = store_task_map.find(rpc_context->store.id); iter == store_task_map.end())
             {
                 BatchCopTask batch_cop_task;
                 batch_cop_task.store_addr = rpc_context->addr;
@@ -341,7 +511,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                     .partition_index = cop_task.partition_index,
                 });
                 batch_cop_task.store_id = rpc_context->store.id;
-                store_task_map[rpc_context->addr] = std::move(batch_cop_task);
+                store_task_map[rpc_context->store.id] = std::move(batch_cop_task);
             }
             else
             {
