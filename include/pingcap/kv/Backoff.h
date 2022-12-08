@@ -34,6 +34,7 @@ enum BackoffType
     boMaxTsNotSynced,
     boMaxDataNotReady,
     boMaxRegionNotInitialized,
+    boTiFlashRPC,
 };
 
 inline int expo(int base, int cap, int n)

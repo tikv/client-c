@@ -7,25 +7,34 @@ namespace pingcap
 {
 namespace kv
 {
-RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id, const StoreType store_type)
+// load_balance is an option, becase if store fail, it may cause batchCop fail.
+RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id, const StoreType store_type, bool load_balance)
 {
     for (;;)
     {
         auto region = getRegionByIDFromCache(id);
         if (region == nullptr)
             return nullptr;
+
         const auto & meta = region->meta;
         std::vector<metapb::Peer> peers;
         size_t start_index = 0;
         if (store_type == StoreType::TiKV)
+        {
+            // only access to the leader
             peers.push_back(region->leader_peer);
+        }
         else
         {
+            // can access to all tiflash peers
             peers = selectTiFlashPeers(bo, meta);
-            start_index = ++region->work_tiflash_peer_idx;
+            if (load_balance)
+                start_index = ++region->work_tiflash_peer_idx;
+            else
+                start_index = region->work_tiflash_peer_idx;
         }
 
-        size_t peer_size = peers.size();
+        const size_t peer_size = peers.size();
         for (size_t i = 0; i < peer_size; i++)
         {
             size_t peer_index = (i + start_index) % peer_size;
@@ -45,8 +54,11 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
                 continue;
             }
             if (store_type == StoreType::TiFlash)
+            {
+                // set the index for next access in order to balance the workload among all tiflash peers
                 region->work_tiflash_peer_idx.store(peer_index);
-            return std::make_shared<RPCContext>(id, meta, peer, store.addr);
+            }
+            return std::make_shared<RPCContext>(id, meta, peer, store, store.addr);
         }
         dropRegion(id);
         bo.backoff(boRegionMiss, Exception("region miss, region id is: " + std::to_string(id.id), RegionUnavailable));
@@ -219,6 +231,26 @@ Store RegionCache::getStore(Backoffer & bo, uint64_t id)
     return reloadStore(bo, id);
 }
 
+std::vector<uint64_t> RegionCache::getAllValidTiFlashStores(Backoffer & bo, const RegionVerID & region_id, const Store & current_store)
+{
+    std::vector<uint64_t> all_stores;
+    RegionPtr cached_region = getRegionByIDFromCache(region_id);
+    if (cached_region == nullptr)
+    {
+        all_stores.emplace_back(current_store.id);
+        return all_stores;
+    }
+
+    // Get others tiflash store ids
+    // TODO: client-go also check region cache TTL.
+    auto peers = selectTiFlashPeers(bo, cached_region->meta);
+    for (const auto & peer : peers)
+    {
+        all_stores.emplace_back(peer.store_id());
+    }
+    return all_stores;
+}
+
 RegionPtr RegionCache::searchCachedRegion(const std::string & key)
 {
     std::shared_lock<std::shared_mutex> lock(region_mutex);
@@ -283,6 +315,15 @@ void RegionCache::onSendReqFail(RPCContextPtr & ctx, const Exception & exc)
     uint64_t failed_store_id = ctx->peer.store_id();
     dropRegion(failed_region_id);
     dropStore(failed_store_id);
+}
+
+void RegionCache::onSendReqFailForBatchRegions(const std::vector<RegionVerID> & region_ids, uint64_t store_id)
+{
+    dropStore(store_id);
+    for (const auto & region_id : region_ids)
+    {
+        dropRegion(region_id);
+    }
 }
 
 bool RegionCache::updateLeader(const RegionVerID & region_id, const metapb::Peer & leader)

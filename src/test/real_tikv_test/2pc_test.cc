@@ -33,7 +33,7 @@ public:
 } // namespace kv
 } // namespace pingcap
 
-namespace
+namespace pingcap::tests
 {
 
 using namespace pingcap;

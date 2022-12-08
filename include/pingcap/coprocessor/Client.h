@@ -1,5 +1,6 @@
 #pragma once
 #include <pingcap/kv/Cluster.h>
+#include <pingcap/kv/RegionCache.h>
 #include <pingcap/kv/RegionClient.h>
 
 #include <atomic>
@@ -43,6 +44,7 @@ struct KeyRange
 
     bool operator<(const KeyRange & rhs) const { return start_key < rhs.start_key; }
 };
+using KeyRanges = std::vector<KeyRange>;
 
 struct Request
 {
@@ -54,15 +56,44 @@ struct Request
 
 using RequestPtr = std::shared_ptr<Request>;
 
-struct copTask
+struct CopTask
 {
     kv::RegionVerID region_id;
-    std::vector<KeyRange> ranges;
+    KeyRanges ranges;
     RequestPtr req;
     kv::StoreType store_type;
+    int64_t partition_index;
     kv::GRPCMetaData meta_data;
     // call before send request, can be used to collect TiFlash metrics.
     std::function<void()> before_send;
+};
+
+struct RegionInfo
+{
+    kv::RegionVerID region_id;
+    // meta;
+    KeyRanges ranges;
+    std::vector<uint64_t> all_stores;
+    // Used by PartitionTableScan, indicates the n-th partition of the partition table.
+    int64_t partition_index;
+};
+
+struct TableRegions
+{
+    int64_t physical_table_id;
+    std::vector<pingcap::coprocessor::RegionInfo> region_infos;
+};
+
+struct BatchCopTask
+{
+    std::string store_addr;
+    std::vector<pingcap::coprocessor::RegionInfo> region_infos;
+    // Used by PartitionTableScan, indicates region infos for each partition.
+    std::vector<pingcap::coprocessor::TableRegions> table_regions;
+    RequestPtr req;
+    kv::StoreType store_type;
+
+    uint64_t store_id;
 };
 
 class ResponseIter
@@ -84,7 +115,7 @@ public:
         const std::string & data() const { return resp->data(); }
     };
 
-    ResponseIter(std::vector<copTask> && tasks_, kv::Cluster * cluster_, int concurrency_, Logger * log_)
+    ResponseIter(std::vector<CopTask> && tasks_, kv::Cluster * cluster_, int concurrency_, Logger * log_)
         : tasks(std::move(tasks_))
         , cluster(cluster_)
         , concurrency(concurrency_)
@@ -161,18 +192,18 @@ private:
                 cond_var.notify_one();
                 return;
             }
-            const copTask & task = tasks[task_index];
+            const CopTask & task = tasks[task_index];
             task_index++;
             lk.unlock();
             handleTask(task);
         }
     }
 
-    std::vector<copTask> handleTaskImpl(kv::Backoffer & bo, const copTask & task);
-    void handleTask(const copTask & task);
+    std::vector<CopTask> handleTaskImpl(kv::Backoffer & bo, const CopTask & task);
+    void handleTask(const CopTask & task);
 
     size_t task_index = 0;
-    std::vector<copTask> tasks;
+    const std::vector<CopTask> tasks;
     std::vector<std::thread> worker_threads;
 
     kv::Cluster * cluster;
@@ -182,7 +213,6 @@ private:
     std::mutex results_mutex;
 
     std::queue<Result> results;
-    Exception cop_error;
 
     std::atomic_int unfinished_thread;
     std::atomic_bool cancelled;
@@ -191,15 +221,41 @@ private:
     Logger * log;
 };
 
-std::vector<copTask> buildCopTasks(
+std::vector<CopTask> buildCopTasks(
     kv::Backoffer & bo,
     kv::Cluster * cluster,
-    std::vector<KeyRange> ranges,
+    KeyRanges ranges,
     RequestPtr cop_req,
     kv::StoreType store_type,
     Logger * log,
     kv::GRPCMetaData meta_data = {},
     std::function<void()> before_send = {});
+
+std::vector<BatchCopTask> buildBatchCopTasks(
+    kv::Backoffer & bo,
+    kv::Cluster * cluster,
+    bool is_partition_table_scan,
+    const std::vector<int64_t> & physical_table_ids,
+    const std::vector<KeyRanges> & ranges_for_each_physical_table,
+    kv::StoreType store_type,
+    Logger * log);
+
+namespace details
+{
+// LocationKeyRanges wraps a real Location in PD and its logical ranges info.
+struct LocationKeyRanges
+{
+    // The read location in PD.
+    kv::KeyLocation location;
+    // The logic ranges the current Location contains.
+    KeyRanges ranges;
+};
+
+std::vector<LocationKeyRanges> splitKeyRangesByLocations(
+    const kv::RegionCachePtr & cache,
+    kv::Backoffer & bo,
+    std::vector<::pingcap::coprocessor::KeyRange> ranges);
+} // namespace details
 
 } // namespace coprocessor
 } // namespace pingcap

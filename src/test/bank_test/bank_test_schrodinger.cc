@@ -7,6 +7,8 @@
 
 #include <unistd.h>
 
+using namespace pingcap::tests;
+
 void RunBankCaseOnline(int account, int con, int run_time)
 {
     ::sleep(10);
