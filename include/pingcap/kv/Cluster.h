@@ -38,11 +38,11 @@ struct Cluster
         , lock_resolver(std::make_unique<LockResolver>(this))
     {}
 
-    void update(const std::vector<std::string> & pd_addrs, const ClusterConfig & config)
+    void update(const std::vector<std::string> & pd_addrs, const ClusterConfig & config) const
     {
         pd_client->update(pd_addrs, config);
         rpc_client->update(config);
-        lock_resolver->update(this);
+        
     }
 
     // TODO: When the cluster is closed, we should release all the resources
