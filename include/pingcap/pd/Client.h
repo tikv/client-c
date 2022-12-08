@@ -91,7 +91,7 @@ private:
 
     std::shared_ptr<PDConnClient> leaderClient();
 
-    pdpb::GetMembersResponse getMembers(std::string);
+    pdpb::GetMembersResponse getMembers(const std::string &);
 
     pdpb::RequestHeader * requestHeader() const;
 

@@ -98,7 +98,9 @@ struct RpcClient
 
     void update(const ClusterConfig & config_)
     {
+        std::unique_lock lk(mutex);
         config = config_;
+        conns.clear();
     }
 
     ConnArrayPtr getConnArray(const std::string & addr);
