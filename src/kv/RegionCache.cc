@@ -7,6 +7,7 @@ namespace pingcap
 {
 namespace kv
 {
+// load_balance is an option, becase if store fail, it may cause batchCop fail.
 RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id, const StoreType store_type, bool load_balance)
 {
     for (;;)

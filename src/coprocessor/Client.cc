@@ -216,6 +216,8 @@ std::vector<BatchCopTask> balanceBatchCopTasks(std::vector<BatchCopTask> && orig
                         }
                     }
                 }
+                if (store_id == INVALID_STORE_ID)
+                    return store_id;
             }
             for (const auto & store_task : store_task_map)
             {

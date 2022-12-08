@@ -227,7 +227,7 @@ TEST_F(TestBatchCoprocessor, BuildTask3)
 {
     Backoffer bo(copBuildTaskMaxBackoff);
 
-    // Region ["", a), [a,b), [b,d), [d,z), [z,+∞)
+    // Region ["",a), [a,b), [b,c), [c,d), [d, e), [e, f), [f, g), [g, h), [h, z), [z,+∞)
     control_cluster->splitRegion("a");
     control_cluster->splitRegion("b");
     control_cluster->splitRegion("c");
