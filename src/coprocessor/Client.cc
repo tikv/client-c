@@ -307,6 +307,10 @@ std::vector<BatchCopTask> buildBatchCopTasks(
             }
         }
 
+        std::vector<BatchCopTask> batch_cop_tasks;
+        if (cop_tasks.empty())
+            return batch_cop_tasks;
+
         // store_addr -> BatchCopTask
         std::map<std::string, BatchCopTask> store_task_map;
         bool need_retry = false;
@@ -363,7 +367,6 @@ std::vector<BatchCopTask> buildBatchCopTasks(
             continue;
         }
 
-        std::vector<BatchCopTask> batch_cop_tasks;
         batch_cop_tasks.reserve(store_task_map.size());
         for (const auto & iter : store_task_map)
         {
