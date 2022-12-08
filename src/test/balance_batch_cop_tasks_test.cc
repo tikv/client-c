@@ -51,7 +51,7 @@ std::vector<RegionInfo> buildRegionInfos(int store_count, int region_count, int 
             stores.push_back(id);
         }
         return stores;
-    }
+    };
 
     std::string start_key;
     std::vector<RegionInfo> region_infos;
@@ -61,9 +61,7 @@ std::vector<RegionInfo> buildRegionInfos(int store_count, int region_count, int 
         ri.region_id = kv::RegionVerID{i, 1, 1};
         ri.all_stores = random_stores(store_count, replica_num);
 
-        KeyRange key_range;
-        key_range.start_key = start_key;
-        key_range.end_key = sorted_strs[i];
+        KeyRange key_range(start_key, sorted_strs[i]);
         start_key = sorted_strs[i];
 
         ri.ranges.push_back(key_range);
@@ -76,7 +74,7 @@ std::vector<RegionInfo> buildRegionInfos(int store_count, int region_count, int 
 int64_t getRegionCount(const std::vector<BatchCopTask> & tasks)
 {
     int64_t count = 0;
-    for (const auto & task := tasks)
+    for (const auto & task : tasks)
     {
         count += task.region_infos.size();
     }
@@ -93,7 +91,7 @@ TEST_F(TestBalanceBatchCopTasks, BasicTest)
         auto region_infos = buildRegionInfos(store_count, region_count, replica_num);
         std::vector<BatchCopTask> tasks;
         int32_t score = 0;
-        std::tie(tasks, score) = balanceBatchCopTasksWithContinuity(cop_tasks, region_infos, 20);
+        std::tie(tasks, score) = pingcap::coprocessor::details::balanceBatchCopTasksWithContinuity(cop_tasks, region_infos, 20);
         ASSERT_EQ(region_count, getRegionCount(tasks));
     }
     {
@@ -104,7 +102,7 @@ TEST_F(TestBalanceBatchCopTasks, BasicTest)
         auto region_infos = buildRegionInfos(store_count, region_count, replica_num);
         std::vector<BatchCopTask> tasks;
         int32_t score = 0;
-        std::tie(tasks, std::ignore) = balanceBatchCopTasksWithContinuity(cop_tasks, region_infos, 20);
+        std::tie(tasks, std::ignore) = pingcap::coprocessor::details::balanceBatchCopTasksWithContinuity(cop_tasks, region_infos, 20);
         ASSERT_EQ(0, getRegionCount(tasks));
     }
 }

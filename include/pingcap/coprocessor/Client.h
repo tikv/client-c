@@ -255,6 +255,11 @@ std::vector<LocationKeyRanges> splitKeyRangesByLocations(
     const kv::RegionCachePtr & cache,
     kv::Backoffer & bo,
     std::vector<::pingcap::coprocessor::KeyRange> ranges);
+
+std::pair<std::vector<BatchCopTask>, int32_t> balanceBatchCopTasksWithContinuity(
+        const std::unordered_map<uint64_t, BatchCopTask> & store_task_map,
+        std::vector<RegionInfo> & candidate_region_infos,
+        int32_t balance_continuous_region_count);
 } // namespace details
 
 } // namespace coprocessor

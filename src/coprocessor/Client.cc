@@ -575,16 +575,6 @@ std::vector<BatchCopTask> buildBatchCopTasks(
     }
 }
 
-namespace details
-{
-inline uint64_t nanoseconds(clockid_t clock_type)
-{
-    struct timespec ts;
-    clock_gettime(clock_type, &ts);
-    return ts.tv_sec * 1000000000ULL + ts.tv_nsec;
-}
-} // namespace details
-
 std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopTask & task)
 {
     auto req = std::make_shared<::coprocessor::Request>();
