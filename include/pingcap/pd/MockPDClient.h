@@ -28,7 +28,7 @@ public:
 
     metapb::Store getStore(uint64_t) override { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
 
-    uint32_t getKeyspaceID(const std::string & keyspace_name) override { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
+    KeyspaceID getKeyspaceID(const std::string & keyspace_name) override { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
 
     bool isClusterBootstrapped() override { return true; }
 
