@@ -54,10 +54,9 @@ public:
 
     KeyspaceID getKeyspaceID(const std::string & keyspace_name) override;
 
-    bool isMock() override;
+    bool isClusterBootstrapped() override;
 
-protected:
-    ClusterConfig config;
+    bool isMock() override;
 
 private:
     void initClusterID();
@@ -121,6 +120,8 @@ private:
     std::condition_variable update_leader_cv;
 
     std::atomic<bool> check_leader;
+
+    ClusterConfig config;
 
     Logger * log;
 };

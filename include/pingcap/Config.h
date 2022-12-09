@@ -1,5 +1,6 @@
 #pragma once
 #include <grpcpp/security/credentials.h>
+#include <kvproto/tikvpb.pb.h>
 
 #include <fstream>
 #include <streambuf>
@@ -14,9 +15,7 @@ struct ClusterConfig
     std::string ca_path;
     std::string cert_path;
     std::string key_path;
-    std::string keyspace_name;
-
-    int get_keyspace_id_maxtime = 180000; // 3 min
+    kvrpcpb::APIVersion api_version;
 
     ClusterConfig() = default;
 
@@ -25,15 +24,13 @@ struct ClusterConfig
                   const std::string & ca_path_,
                   const std::string & cert_path_,
                   const std::string & key_path_,
-                  const std::string & keyspace_name_,
-                  int get_keyspace_id_maxtime_)
+                  const kvrpcpb::APIVersion api_version_)
         : tiflash_engine_key(engine_key_)
         , tiflash_engine_value(engine_value_)
         , ca_path(ca_path_)
         , cert_path(cert_path_)
         , key_path(key_path_)
-        , keyspace_name(keyspace_name_)
-        , get_keyspace_id_maxtime(get_keyspace_id_maxtime_)
+        , api_version(api_version_)
     {}
 
     bool hasTlsConfig() const { return !ca_path.empty(); }

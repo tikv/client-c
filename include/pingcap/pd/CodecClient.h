@@ -35,23 +35,6 @@ struct CodecClient : public Client
         return region;
     }
 
-    KeyspaceID getKeyspaceID(const std::string & keyspace_name) override
-    {
-        kv::Backoffer bo(config.get_keyspace_id_maxtime);
-        for (;;)
-        {
-            try
-            {
-                auto keyspace_id = Client::getKeyspaceID(keyspace_name);
-                return keyspace_id;
-            }
-            catch (pingcap::Exception & e)
-            {
-                bo.backoff(kv::boPDRPC, e);
-            }
-        }
-    }
-
 private:
     static constexpr uint8_t ENC_MARKER = 0xff;
     static constexpr uint8_t ENC_GROUP_SIZE = 8;

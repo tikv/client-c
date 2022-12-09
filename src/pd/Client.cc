@@ -35,11 +35,11 @@ Client::Client(const std::vector<std::string> & addrs, const ClusterConfig & con
     , pd_timeout(3)
     , loop_interval(100)
     , update_leader_interval(60)
-    , config(config_)
     , urls(addrsToUrls(addrs, config_))
     , cluster_id(0)
     , work_threads_stop(false)
     , check_leader(false)
+    , config(config_)
     , log(&Logger::get("pingcap.pd"))
 {
     initClusterID();
@@ -411,6 +411,36 @@ KeyspaceID Client::getKeyspaceID(const std::string & keyspace_name)
         throw Exception(err_msg, KeyspaceNotEnabled);
     }
     return response.keyspace().id();
+}
+
+bool Client::isClusterBootstrapped()
+{
+    pdpb::IsBootstrappedRequest request{};
+    pdpb::IsBootstrappedResponse response{};
+
+    request.set_allocated_header(requestHeader());
+
+    grpc::ClientContext context;
+
+    context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
+
+    auto status = leaderClient()->stub->IsBootstrapped(&context, request, &response);
+    if (!status.ok())
+    {
+        std::string msg = ("check cluster bootstrapped failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
+        log->warning(msg);
+        check_leader.store(true);
+        return false;
+    }
+
+    if (response.header().has_error())
+    {
+        std::string err_msg = ("check cluster bootstrapped failed: " + response.header().error().message());
+        log->warning(err_msg);
+        return false;
+    }
+
+    return response.bootstrapped();
 }
 
 } // namespace pd
