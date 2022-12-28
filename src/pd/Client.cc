@@ -387,5 +387,35 @@ metapb::Store Client::getStore(uint64_t store_id)
     return response.store();
 }
 
+bool Client::isClusterBootstrapped()
+{
+    pdpb::IsBootstrappedRequest request{};
+    pdpb::IsBootstrappedResponse response{};
+
+    request.set_allocated_header(requestHeader());
+
+    grpc::ClientContext context;
+
+    context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
+
+    auto status = leaderClient()->stub->IsBootstrapped(&context, request, &response);
+    if (!status.ok())
+    {
+        std::string msg = ("check cluster bootstrapped failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
+        log->warning(msg);
+        check_leader.store(true);
+        return false;
+    }
+
+    if (response.header().has_error())
+    {
+        std::string err_msg = ("check cluster bootstrapped failed: " + response.header().error().message());
+        log->warning(err_msg);
+        return false;
+    }
+
+    return response.bootstrapped();
+}
+
 } // namespace pd
 } // namespace pingcap
