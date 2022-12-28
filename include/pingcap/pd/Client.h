@@ -58,6 +58,8 @@ public:
 
     bool isMock() override;
 
+    bool isClusterBootstrapped() override;
+
 private:
     void initClusterID();
 

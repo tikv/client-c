@@ -31,6 +31,8 @@ public:
     void update(const std::vector<std::string> & addrs, const ClusterConfig & config_) override { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
 
     bool isMock() override { return true; }
+
+    bool isClusterBootstrapped() override { return false; }
 };
 
 } // namespace pd

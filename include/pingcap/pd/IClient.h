@@ -38,6 +38,8 @@ public:
     virtual void update(const std::vector<std::string> & addrs, const ClusterConfig & config_) = 0;
 
     virtual bool isMock() = 0;
+
+    virtual bool isClusterBootstrapped() = 0;
 };
 
 using ClientPtr = std::shared_ptr<IClient>;
