@@ -52,6 +52,8 @@ public:
 
     metapb::Store getStore(uint64_t store_id) override;
 
+    bool isClusterBootstrapped() override;
+
     //std::vector<metapb::Store> getAllStores() override;
 
     uint64_t getGCSafePoint() override;
