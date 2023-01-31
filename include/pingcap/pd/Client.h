@@ -3,6 +3,8 @@
 #include <grpcpp/channel.h>
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
+#include <kvproto/keyspacepb.grpc.pb.h>
+#include <kvproto/keyspacepb.pb.h>
 #include <kvproto/pdpb.grpc.pb.h>
 #include <pingcap/Config.h>
 #include <pingcap/Log.h>
@@ -28,10 +30,16 @@ class Client : public IClient
 
     const std::chrono::seconds update_leader_interval;
 
+    void init(const std::vector<std::string> & addrs, const ClusterConfig & config_);
+
+    void uninit();
+
 public:
     Client(const std::vector<std::string> & addrs, const ClusterConfig & config);
 
     ~Client() override;
+
+    void update(const std::vector<std::string> & addrs, const ClusterConfig & config) override;
 
     //uint64_t getClusterID() override;
 
@@ -46,9 +54,15 @@ public:
 
     metapb::Store getStore(uint64_t store_id) override;
 
+    bool isClusterBootstrapped() override;
+
     //std::vector<metapb::Store> getAllStores() override;
 
     uint64_t getGCSafePoint() override;
+
+    KeyspaceID getKeyspaceID(const std::string & keyspace_name) override;
+
+    bool isClusterBootstrapped() override;
 
     bool isMock() override;
 
@@ -69,6 +83,7 @@ private:
     {
         std::shared_ptr<grpc::Channel> channel;
         std::unique_ptr<pdpb::PD::Stub> stub;
+        std::unique_ptr<keyspacepb::Keyspace::Stub> keyspace_stub;
         PDConnClient(std::string addr, const ClusterConfig & config)
         {
             if (config.hasTlsConfig())
@@ -80,12 +95,13 @@ private:
                 channel = grpc::CreateChannel(addr, grpc::InsecureChannelCredentials());
             }
             stub = pdpb::PD::NewStub(channel);
+            keyspace_stub = keyspacepb::Keyspace::NewStub(channel);
         }
     };
 
     std::shared_ptr<PDConnClient> leaderClient();
 
-    pdpb::GetMembersResponse getMembers(std::string);
+    pdpb::GetMembersResponse getMembers(const std::string &);
 
     pdpb::RequestHeader * requestHeader() const;
 

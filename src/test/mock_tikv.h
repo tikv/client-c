@@ -34,7 +34,7 @@ struct Cluster
 
     // See https://github.com/pingcap/failpoint
     // Mock tikv use go failpoint to inject faults.
-    void updateFailPoint(int store_id, std::string fail_point, std::string term)
+    void updateFailPoint(int store_id, std::string fail_point, std::string term) const
     {
         HTTPClientSession sess("127.0.0.1", 2378);
         HTTPRequest req(HTTPRequest::HTTP_POST,

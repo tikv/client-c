@@ -53,7 +53,7 @@ void RegionClient::onRegionError(Backoffer & bo, RPCContextPtr rpc_ctx, const er
 
     if (err.has_server_is_busy())
     {
-        bo.backoff(boServerBusy, Exception("server is busy", ServerIsBusy));
+        bo.backoff(boServerBusy, Exception("server is busy: " + err.server_is_busy().reason(), ServerIsBusy));
         return;
     }
 

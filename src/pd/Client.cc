@@ -1,6 +1,7 @@
 #include <Poco/URI.h>
 #include <pingcap/SetThreadName.h>
 #include <pingcap/pd/Client.h>
+#include <mutex>
 
 namespace pingcap
 {
@@ -35,13 +36,13 @@ Client::Client(const std::vector<std::string> & addrs, const ClusterConfig & con
     , pd_timeout(3)
     , loop_interval(100)
     , update_leader_interval(60)
-    , urls(addrsToUrls(addrs, config_))
     , cluster_id(0)
-    , work_threads_stop(false)
     , check_leader(false)
-    , config(config_)
     , log(&Logger::get("pingcap.pd"))
 {
+    urls = addrsToUrls(addrs, config_);
+    config = config_;
+
     initClusterID();
 
     initLeader();
@@ -61,6 +62,16 @@ Client::~Client()
     {
         work_thread.join();
     }
+}
+
+void Client::update(const std::vector<std::string> & addrs, const ClusterConfig & config_)
+{
+    std::lock_guard leader_lk(leader_mutex);
+    std::lock_guard lk(channel_map_mutex);
+    urls = addrsToUrls(addrs, config_);
+    config = config_;
+    channel_map.clear();
+    log->debug("pd client updated");
 }
 
 bool Client::isMock()
@@ -84,7 +95,7 @@ std::shared_ptr<Client::PDConnClient> Client::getOrCreateGRPCConn(const std::str
     return client_ptr;
 }
 
-pdpb::GetMembersResponse Client::getMembers(std::string url)
+pdpb::GetMembersResponse Client::getMembers(const std::string & url)
 {
     auto client = getOrCreateGRPCConn(url);
     auto resp = pdpb::GetMembersResponse{};
@@ -112,7 +123,7 @@ std::shared_ptr<Client::PDConnClient> Client::leaderClient()
 
 void Client::initClusterID()
 {
-    for (int i = 0; i < max_init_cluster_retries; i++)
+    for (int i = 0; i < max_init_cluster_retries; ++i)
     {
         for (const auto & url : urls)
         {
@@ -374,6 +385,73 @@ metapb::Store Client::getStore(uint64_t store_id)
         throw Exception(err_msg, GRPCErrorCode);
     }
     return response.store();
+}
+
+KeyspaceID Client::getKeyspaceID(const std::string & keyspace_name)
+{
+    keyspacepb::LoadKeyspaceRequest request{};
+    keyspacepb::LoadKeyspaceResponse response{};
+
+    request.set_allocated_header(requestHeader());
+    request.set_name(keyspace_name);
+
+    grpc::ClientContext context;
+
+    context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
+
+    auto status = leaderClient()->keyspace_stub->LoadKeyspace(&context, request, &response);
+    if (!status.ok())
+    {
+        std::string err_msg = ("get keyspace id failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
+        log->error(err_msg);
+        check_leader.store(true);
+        throw Exception(err_msg, GRPCErrorCode);
+    }
+
+    if (response.header().has_error())
+    {
+        std::string err_msg = ("get keyspace id failed: " + response.header().error().message());
+        log->error(err_msg);
+        throw Exception(err_msg, InternalError);
+    }
+
+    if (response.keyspace().state() != keyspacepb::KeyspaceState::ENABLED)
+    {
+        std::string err_msg = ("keyspace " + keyspace_name + " is not enabled");
+        log->error(err_msg);
+        throw Exception(err_msg, KeyspaceNotEnabled);
+    }
+    return response.keyspace().id();
+}
+
+bool Client::isClusterBootstrapped()
+{
+    pdpb::IsBootstrappedRequest request{};
+    pdpb::IsBootstrappedResponse response{};
+
+    request.set_allocated_header(requestHeader());
+
+    grpc::ClientContext context;
+
+    context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
+
+    auto status = leaderClient()->stub->IsBootstrapped(&context, request, &response);
+    if (!status.ok())
+    {
+        std::string msg = ("check cluster bootstrapped failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
+        log->warning(msg);
+        check_leader.store(true);
+        return false;
+    }
+
+    if (response.header().has_error())
+    {
+        std::string err_msg = ("check cluster bootstrapped failed: " + response.header().error().message());
+        log->warning(err_msg);
+        return false;
+    }
+
+    return response.bootstrapped();
 }
 
 } // namespace pd

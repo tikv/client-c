@@ -206,6 +206,11 @@ public:
         , log(&Logger::get("pingcap/resolve_lock"))
     {}
 
+    void update(Cluster * cluster_)
+    {
+        cluster = cluster_;
+    }
+
     // resolveLocks tries to resolve Locks. The resolving process is in 3 steps:
     // 1) Use the `lockTTL` to pick up all expired locks. Only locks that are too
     //    old are considered orphan locks and will be handled later. If all locks

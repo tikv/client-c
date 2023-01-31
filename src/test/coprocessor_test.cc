@@ -5,15 +5,7 @@
 #include "mock_tikv.h"
 #include "test_helper.h"
 
-namespace pingcap
-{
-namespace coprocessor
-{
-std::vector<copTask> buildCopTasks(kv::Backoffer & bo, kv::Cluster * cluster, std::vector<KeyRange> ranges, Request * cop_req, kv::StoreType, Logger * log = &Logger::get("pingcap/coprocessor"));
-}
-} // namespace pingcap
-
-namespace
+namespace pingcap::tests
 {
 using namespace pingcap;
 using namespace pingcap::kv;
@@ -47,8 +39,7 @@ TEST_F(TestCoprocessor, testBuildTask1)
     control_cluster->splitRegion("b");
     control_cluster->splitRegion("z");
 
-    std::vector<pingcap::coprocessor::KeyRange> ranges;
-    ranges.emplace_back("a", "z");
+    pingcap::coprocessor::KeyRanges ranges{{"a", "z"}};
 
     std::shared_ptr<pingcap::coprocessor::Request> req = std::make_shared<pingcap::coprocessor::Request>();
     req->tp = pingcap::coprocessor::DAG;
@@ -72,7 +63,7 @@ TEST_F(TestCoprocessor, testBuildTask1)
     control_cluster->splitRegion("d");
     control_cluster->splitRegion("e");
 
-    fiu_enable("sleep_before_push_result", 1, NULL, 0);
+    fiu_enable("sleep_before_push_result", 1, nullptr, 0);
     pingcap::coprocessor::ResponseIter iter(std::move(tasks), test_cluster.get(), 8, &Logger::get("pingcap/coprocessor"));
     iter.open();
 
@@ -85,4 +76,4 @@ TEST_F(TestCoprocessor, testBuildTask1)
     ASSERT_EQ(has_next, false);
 }
 
-} // namespace
+} // namespace pingcap
