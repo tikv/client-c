@@ -1,6 +1,7 @@
 #include <Poco/URI.h>
 #include <pingcap/SetThreadName.h>
 #include <pingcap/pd/Client.h>
+#include <mutex>
 
 namespace pingcap
 {
@@ -35,13 +36,13 @@ Client::Client(const std::vector<std::string> & addrs, const ClusterConfig & con
     , pd_timeout(3)
     , loop_interval(100)
     , update_leader_interval(60)
-    , urls(addrsToUrls(addrs, config_))
     , cluster_id(0)
-    , work_threads_stop(false)
     , check_leader(false)
-    , config(config_)
     , log(&Logger::get("pingcap.pd"))
 {
+    urls = addrsToUrls(addrs, config_);
+    config = config_;
+
     initClusterID();
 
     initLeader();
@@ -61,6 +62,16 @@ Client::~Client()
     {
         work_thread.join();
     }
+}
+
+void Client::update(const std::vector<std::string> & addrs, const ClusterConfig & config_)
+{
+    std::lock_guard leader_lk(leader_mutex);
+    std::lock_guard lk(channel_map_mutex);
+    urls = addrsToUrls(addrs, config_);
+    config = config_;
+    channel_map.clear();
+    log->debug("pd client updated");
 }
 
 bool Client::isMock()
@@ -84,7 +95,7 @@ std::shared_ptr<Client::PDConnClient> Client::getOrCreateGRPCConn(const std::str
     return client_ptr;
 }
 
-pdpb::GetMembersResponse Client::getMembers(std::string url)
+pdpb::GetMembersResponse Client::getMembers(const std::string & url)
 {
     auto client = getOrCreateGRPCConn(url);
     auto resp = pdpb::GetMembersResponse{};
@@ -112,7 +123,7 @@ std::shared_ptr<Client::PDConnClient> Client::leaderClient()
 
 void Client::initClusterID()
 {
-    for (int i = 0; i < max_init_cluster_retries; i++)
+    for (int i = 0; i < max_init_cluster_retries; ++i)
     {
         for (const auto & url : urls)
         {

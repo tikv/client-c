@@ -37,14 +37,14 @@ struct RegionClient
 
     // This method send a request to region, but is NOT Thread-Safe !!
     template <typename T>
-    auto sendReqToRegion(Backoffer & bo, std::shared_ptr<T> req, int timeout = dailTimeout, StoreType store_type = StoreType::TiKV)
+    auto sendReqToRegion(Backoffer & bo, std::shared_ptr<T> req, int timeout = dailTimeout, StoreType store_type = StoreType::TiKV, kv::GRPCMetaData meta_data = {})
     {
         // Set api version properly.
         req->mutable_context()->set_api_version(cluster->api_version);
         RpcCall<T> rpc(req);
         for (;;)
         {
-            RPCContextPtr ctx = cluster->region_cache->getRPCContext(bo, region_id, store_type);
+            RPCContextPtr ctx = cluster->region_cache->getRPCContext(bo, region_id, store_type, true);
             if (ctx == nullptr)
             {
                 // If the region is not found in cache, it must be out
@@ -57,7 +57,7 @@ struct RegionClient
             rpc.setCtx(ctx);
             try
             {
-                cluster->rpc_client->sendRequest(store_addr, rpc, timeout);
+                cluster->rpc_client->sendRequest(store_addr, rpc, timeout, meta_data);
             }
             catch (const Exception & e)
             {

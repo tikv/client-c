@@ -30,10 +30,16 @@ class Client : public IClient
 
     const std::chrono::seconds update_leader_interval;
 
+    void init(const std::vector<std::string> & addrs, const ClusterConfig & config_);
+
+    void uninit();
+
 public:
     Client(const std::vector<std::string> & addrs, const ClusterConfig & config);
 
     ~Client() override;
+
+    void update(const std::vector<std::string> & addrs, const ClusterConfig & config) override;
 
     //uint64_t getClusterID() override;
 
@@ -47,6 +53,8 @@ public:
     std::pair<metapb::Region, metapb::Peer> getRegionByID(uint64_t region_id) override;
 
     metapb::Store getStore(uint64_t store_id) override;
+
+    bool isClusterBootstrapped() override;
 
     //std::vector<metapb::Store> getAllStores() override;
 
@@ -93,7 +101,7 @@ private:
 
     std::shared_ptr<PDConnClient> leaderClient();
 
-    pdpb::GetMembersResponse getMembers(std::string);
+    pdpb::GetMembersResponse getMembers(const std::string &);
 
     pdpb::RequestHeader * requestHeader() const;
 

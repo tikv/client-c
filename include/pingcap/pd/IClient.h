@@ -40,13 +40,15 @@ public:
 
     virtual metapb::Store getStore(uint64_t store_id) = 0;
 
+    virtual bool isClusterBootstrapped() = 0;
+
     //    virtual std::vector<metapb::Store> getAllStores() = 0;
 
     virtual uint64_t getGCSafePoint() = 0;
 
     virtual KeyspaceID getKeyspaceID(const std::string & keyspace_name) = 0;
 
-    virtual bool isClusterBootstrapped() = 0;
+    virtual void update(const std::vector<std::string> & addrs, const ClusterConfig & config_) = 0;
 
     virtual bool isMock() = 0;
 };
