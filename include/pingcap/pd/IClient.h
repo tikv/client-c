@@ -7,6 +7,7 @@
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <kvproto/enginepb.pb.h>
 #pragma GCC diagnostic pop
+#include <pingcap/Config.h>
 
 namespace pingcap
 {
