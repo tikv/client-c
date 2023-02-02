@@ -62,8 +62,6 @@ public:
 
     KeyspaceID getKeyspaceID(const std::string & keyspace_name) override;
 
-    bool isClusterBootstrapped() override;
-
     bool isMock() override;
 
 private:
