@@ -59,7 +59,7 @@ struct Scanner
 
     void next();
 
-    virtual std::string key()
+    std::string key()
     {
         if (valid)
             return cache[idx].key();
@@ -73,7 +73,6 @@ struct Scanner
         return "";
     }
 
-    virtual ~Scanner() = default;
 private:
     void resolveCurrentLock(Backoffer & bo, kvrpcpb::KvPair &);
     void getData(Backoffer & bo);

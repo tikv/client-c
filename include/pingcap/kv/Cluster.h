@@ -25,8 +25,6 @@ struct Cluster
 
     LockResolverPtr lock_resolver;
 
-    kvrpcpb::APIVersion api_version = kvrpcpb::APIVersion::V1;
-
     Cluster()
         : pd_client(std::make_shared<pd::MockPDClient>())
         , rpc_client(std::make_unique<RpcClient>())
@@ -38,7 +36,6 @@ struct Cluster
         , rpc_client(std::make_unique<RpcClient>(config))
         , oracle(std::make_unique<pd::Oracle>(pd_client, std::chrono::milliseconds(oracle_update_interval)))
         , lock_resolver(std::make_unique<LockResolver>(this))
-        , api_version(config.api_version)
     {}
 
     void update(const std::vector<std::string> & pd_addrs, const ClusterConfig & config) const
