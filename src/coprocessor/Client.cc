@@ -293,11 +293,18 @@ std::vector<BatchCopTask> buildBatchCopTasks(
     kv::StoreType store_type,
     Logger * log)
 {
+    int retry_num = 0;
+    auto start = std::chrono::steady_clock::now();
+    int64_t cop_task_elapsed = 0;
+    int64_t batch_cop_task_elapsed = 0;
+    int64_t balance_elapsed = 0;
     auto & cache = cluster->region_cache;
     assert(physical_table_ids.size() == ranges_for_each_physical_table.size());
 
     while (true) // for `need_retry`
     {
+        retry_num++;
+        auto cop_task_start = std::chrono::steady_clock::now();
         std::vector<CopTask> cop_tasks;
         for (size_t idx = 0; idx < ranges_for_each_physical_table.size(); ++idx)
         {
@@ -308,11 +315,14 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                 cop_tasks.emplace_back(CopTask{loc.location.region, loc.ranges, nullptr, store_type, idx, kv::GRPCMetaData{}});
             }
         }
+        auto cop_task_end = std::chrono::steady_clock::now();
+        cop_task_elapsed += std::chrono::duration_cast<std::chrono::milliseconds>(cop_task_end - cop_task_start).count();
 
         std::vector<BatchCopTask> batch_cop_tasks;
         if (cop_tasks.empty())
             return batch_cop_tasks;
 
+        auto batch_cop_task_start = std::chrono::steady_clock::now();
         // store_addr -> BatchCopTask
         std::map<std::string, BatchCopTask> store_task_map;
         bool need_retry = false;
@@ -360,6 +370,8 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                 });
             }
         }
+        auto batch_cop_task_end = std::chrono::steady_clock::now();
+        batch_cop_task_elapsed += std::chrono::duration_cast<std::chrono::milliseconds>(batch_cop_task_end - batch_cop_task_start).count();
         if (need_retry)
         {
             // As mentioned above, null rpc_context is always attributed to failed stores.
@@ -369,6 +381,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
             continue;
         }
 
+        auto balance_start = std::chrono::steady_clock::now();
         batch_cop_tasks.reserve(store_task_map.size());
         for (const auto & iter : store_task_map)
         {
@@ -382,11 +395,13 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                 msg += " store " + task.store_addr + ": " + std::to_string(task.region_infos.size()) + " regions,";
             return msg;
         };
-        if (log->getLevel() >= Poco::Message::PRIO_DEBUG)
-            log->debug(tasks_to_str("Before region balance:", batch_cop_tasks));
+        if (log->getLevel() >= Poco::Message::PRIO_INFORMATION)
+            log->information(tasks_to_str("Before region balance:", batch_cop_tasks));
         batch_cop_tasks = details::balanceBatchCopTasks(std::move(batch_cop_tasks), log);
-        if (log->getLevel() >= Poco::Message::PRIO_DEBUG)
-            log->debug(tasks_to_str("After region balance:", batch_cop_tasks));
+        if (log->getLevel() >= Poco::Message::PRIO_INFORMATION)
+            log->information(tasks_to_str("After region balance:", batch_cop_tasks));
+        auto balance_end = std::chrono::steady_clock::now();
+        balance_elapsed += std::chrono::duration_cast<std::chrono::milliseconds>(balance_end - balance_start).count();
 
         // For partition table, we need to move region info from task.region_infos to task.table_regions.
         if (is_partition_table_scan) {
@@ -405,6 +420,17 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                 }
                 task.region_infos.clear();
             }
+        }
+        auto end = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+        if (elapsed >= 500) {
+            log->warning("buildBatchCopTasks takes too long. total elapsed: " + std::to_string(elapsed) + "ms" +
+                    ", build cop_task elapsed: " + std::to_string(cop_task_elapsed) + "ms" +
+                    ", build batch_cop_task elapsed: " + std::to_string(batch_cop_task_elapsed) + "ms" +
+                    ", balance elapsed: " + std::to_string(balance_elapsed) + "ms" +
+                    ", cop_task num: " + std::to_string(cop_tasks.size()) +
+                    ", batch_cop_task num: " + std::to_string(batch_cop_tasks.size()) +
+                    ", retry_num: " + std::to_string(retry_num));
         }
         return batch_cop_tasks;
     }
