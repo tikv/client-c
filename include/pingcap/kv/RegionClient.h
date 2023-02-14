@@ -52,7 +52,7 @@ struct RegionClient
                 throw Exception("Region epoch not match after retries: Region " + region_id.toString() + " not in region cache.", RegionEpochNotMatch);
             }
             const auto & store_addr = ctx->addr;
-            rpc.setCtx(ctx);
+            rpc.setCtx(ctx, cluster->api_version);
             try
             {
                 cluster->rpc_client->sendRequest(store_addr, rpc, timeout, meta_data);
