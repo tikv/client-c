@@ -51,6 +51,7 @@ TEST_F(TestCoprocessor, testBuildTask1)
         ranges,
         req,
         kv::StoreType::TiKV,
+        pd::NullspaceID,
         &Logger::get("pingcap/coprocessor"));
 
     ASSERT_EQ(tasks.size(), 2);

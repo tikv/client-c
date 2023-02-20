@@ -66,6 +66,7 @@ struct CopTask
     kv::GRPCMetaData meta_data;
     // call before send request, can be used to collect TiFlash metrics.
     std::function<void()> before_send;
+    pd::KeyspaceID keyspace_id;
 };
 
 struct RegionInfo
@@ -227,6 +228,7 @@ std::vector<CopTask> buildCopTasks(
     KeyRanges ranges,
     RequestPtr cop_req,
     kv::StoreType store_type,
+    pd::KeyspaceID keyspace_id,
     Logger * log,
     kv::GRPCMetaData meta_data = {},
     std::function<void()> before_send = {});
