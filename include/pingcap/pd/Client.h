@@ -60,6 +60,10 @@ public:
 
     bool isMock() override;
 
+    pdpb::GetMembersResponse getMembers() override;
+
+    std::string getLeaderUrl() override;
+
 private:
     void initClusterID();
 
@@ -93,7 +97,7 @@ private:
 
     std::shared_ptr<PDConnClient> leaderClient();
 
-    pdpb::GetMembersResponse getMembers(const std::string &);
+    pdpb::GetMembersResponse getMembersFrom(const std::string &);
 
     pdpb::RequestHeader * requestHeader() const;
 

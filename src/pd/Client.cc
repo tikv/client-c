@@ -1,6 +1,7 @@
 #include <Poco/URI.h>
 #include <pingcap/SetThreadName.h>
 #include <pingcap/pd/Client.h>
+
 #include <mutex>
 
 namespace pingcap
@@ -95,7 +96,26 @@ std::shared_ptr<Client::PDConnClient> Client::getOrCreateGRPCConn(const std::str
     return client_ptr;
 }
 
-pdpb::GetMembersResponse Client::getMembers(const std::string & url)
+std::string Client::getLeaderUrl()
+{
+    std::shared_lock lk(leader_mutex);
+    return leader;
+}
+
+pdpb::GetMembersResponse Client::getMembers()
+{
+    for (const auto & url : urls)
+    {
+        auto resp = getMembersFrom(url);
+        if (resp.has_header())
+            return resp;
+        log->warning("failed to get cluster id by: " + url + " retrying");
+    }
+    log->warning("failed to get cluster members from all addrs");
+    return {};
+}
+
+pdpb::GetMembersResponse Client::getMembersFrom(const std::string & url)
 {
     auto client = getOrCreateGRPCConn(url);
     auto resp = pdpb::GetMembersResponse{};
@@ -127,7 +147,7 @@ void Client::initClusterID()
     {
         for (const auto & url : urls)
         {
-            auto resp = getMembers(url);
+            auto resp = getMembersFrom(url);
             if (!resp.has_header())
             {
                 log->warning("failed to get cluster id by :" + url + " retrying");
@@ -135,7 +155,7 @@ void Client::initClusterID()
             }
             cluster_id = resp.header().cluster_id();
             return;
-        };
+        }
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
     throw Exception("failed to init cluster id", InitClusterIDFailed);
@@ -171,7 +191,7 @@ void Client::updateLeader()
     std::unique_lock lk(leader_mutex);
     for (const auto & url : urls)
     {
-        auto resp = getMembers(url);
+        auto resp = getMembersFrom(url);
         if (!resp.has_header() || resp.leader().client_urls_size() == 0)
         {
             log->warning("failed to get cluster id by :" + url);
