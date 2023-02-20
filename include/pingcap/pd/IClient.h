@@ -44,8 +44,6 @@ public:
 
     virtual bool isMock() = 0;
 
-    virtual pdpb::GetMembersResponse getMembers() = 0;
-
     virtual std::string getLeaderUrl() = 0;
 };
 

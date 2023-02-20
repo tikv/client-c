@@ -35,8 +35,6 @@ public:
 
     bool isMock() override { return true; }
 
-    pdpb::GetMembersResponse getMembers() override { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
-
     std::string getLeaderUrl() override { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
 };
 

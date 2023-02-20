@@ -102,20 +102,7 @@ std::string Client::getLeaderUrl()
     return leader;
 }
 
-pdpb::GetMembersResponse Client::getMembers()
-{
-    for (const auto & url : urls)
-    {
-        auto resp = getMembersFrom(url);
-        if (resp.has_header())
-            return resp;
-        log->warning("failed to get cluster id by: " + url + " retrying");
-    }
-    log->warning("failed to get cluster members from all addrs");
-    return {};
-}
-
-pdpb::GetMembersResponse Client::getMembersFrom(const std::string & url)
+pdpb::GetMembersResponse Client::getMembers(const std::string & url)
 {
     auto client = getOrCreateGRPCConn(url);
     auto resp = pdpb::GetMembersResponse{};
@@ -147,7 +134,7 @@ void Client::initClusterID()
     {
         for (const auto & url : urls)
         {
-            auto resp = getMembersFrom(url);
+            auto resp = getMembers(url);
             if (!resp.has_header())
             {
                 log->warning("failed to get cluster id by :" + url + " retrying");
@@ -191,7 +178,7 @@ void Client::updateLeader()
     std::unique_lock lk(leader_mutex);
     for (const auto & url : urls)
     {
-        auto resp = getMembersFrom(url);
+        auto resp = getMembers(url);
         if (!resp.has_header() || resp.leader().client_urls_size() == 0)
         {
             log->warning("failed to get cluster id by :" + url);
