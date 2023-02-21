@@ -1,11 +1,14 @@
 #pragma once
 
+#include <pingcap/Config.h>
+
 #include <string>
 #include <vector>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <kvproto/enginepb.pb.h>
+#include <kvproto/pdpb.pb.h>
 #pragma GCC diagnostic pop
 
 namespace pingcap
@@ -40,6 +43,8 @@ public:
     virtual void update(const std::vector<std::string> & addrs, const ClusterConfig & config_) = 0;
 
     virtual bool isMock() = 0;
+
+    virtual std::string getLeaderUrl() = 0;
 };
 
 using ClientPtr = std::shared_ptr<IClient>;

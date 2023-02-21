@@ -1,5 +1,6 @@
 #pragma once
 
+#include <pingcap/Config.h>
 #include <pingcap/Exception.h>
 #include <pingcap/pd/IClient.h>
 
@@ -30,9 +31,11 @@ public:
 
     bool isClusterBootstrapped() override { return true; }
 
-    void update(const std::vector<std::string> & addrs, const ClusterConfig & config_) override { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
+    void update(const std::vector<std::string> & /*addrs*/, const ClusterConfig & /*config_*/) override { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
 
     bool isMock() override { return true; }
+
+    std::string getLeaderUrl() override { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
 };
 
 } // namespace pd
