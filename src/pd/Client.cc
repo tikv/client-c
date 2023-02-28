@@ -1,7 +1,10 @@
 #include <Poco/URI.h>
+#include <grpcpp/client_context.h>
+#include <kvproto/pdpb.pb.h>
 #include <pingcap/SetThreadName.h>
 #include <pingcap/pd/Client.h>
 
+#include <chrono>
 #include <mutex>
 
 namespace pingcap
@@ -38,6 +41,7 @@ Client::Client(const std::vector<std::string> & addrs, const ClusterConfig & con
     , loop_interval(100)
     , update_leader_interval(60)
     , cluster_id(0)
+    , work_threads_stop(false)
     , check_leader(false)
     , log(&Logger::get("pingcap.pd"))
 {
@@ -47,8 +51,6 @@ Client::Client(const std::vector<std::string> & addrs, const ClusterConfig & con
     initClusterID();
 
     initLeader();
-
-    work_threads_stop = false;
 
     work_thread = std::thread([&]() { leaderLoop(); });
 
@@ -369,6 +371,33 @@ std::pair<metapb::Region, metapb::Peer> Client::getRegionByID(uint64_t region_id
         return {};
 
     return std::make_pair(response.region(), response.leader());
+}
+
+std::vector<metapb::Store> Client::getAllStores(bool exclude_tombstone)
+{
+    pdpb::GetAllStoresRequest req;
+    pdpb::GetAllStoresResponse resp;
+
+    req.set_allocated_header(requestHeader());
+    req.set_exclude_tombstone_stores(exclude_tombstone);
+
+    grpc::ClientContext context;
+    context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
+
+    auto status = leaderClient()->stub->GetAllStores(&context, req, &resp);
+    if (!status.ok())
+    {
+        std::string err_msg = ("get all stores failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
+        log->error(err_msg);
+        check_leader.store(true);
+        throw Exception(err_msg, GRPCErrorCode);
+    }
+
+    std::vector<metapb::Store> all_stores;
+    all_stores.reserve(resp.stores_size());
+    for (const auto & s : resp.stores())
+        all_stores.emplace_back(s);
+    return all_stores;
 }
 
 metapb::Store Client::getStore(uint64_t store_id)
