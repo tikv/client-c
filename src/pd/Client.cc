@@ -1,6 +1,7 @@
 #include <Poco/URI.h>
 #include <pingcap/SetThreadName.h>
 #include <pingcap/pd/Client.h>
+
 #include <mutex>
 
 namespace pingcap
@@ -95,6 +96,12 @@ std::shared_ptr<Client::PDConnClient> Client::getOrCreateGRPCConn(const std::str
     return client_ptr;
 }
 
+std::string Client::getLeaderUrl()
+{
+    std::shared_lock lk(leader_mutex);
+    return leader;
+}
+
 pdpb::GetMembersResponse Client::getMembers(const std::string & url)
 {
     auto client = getOrCreateGRPCConn(url);
@@ -135,7 +142,7 @@ void Client::initClusterID()
             }
             cluster_id = resp.header().cluster_id();
             return;
-        };
+        }
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
     throw Exception("failed to init cluster id", InitClusterIDFailed);

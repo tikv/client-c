@@ -60,6 +60,8 @@ public:
 
     bool isMock() override;
 
+    std::string getLeaderUrl() override;
+
 private:
     void initClusterID();
 
