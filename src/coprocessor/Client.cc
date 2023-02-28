@@ -161,9 +161,10 @@ std::vector<BatchCopTask> balanceBatchCopTasks(kv::RegionCachePtr & cache, std::
     std::vector<RegionInfo> candidate_region_infos;
     for (const auto & task : original_tasks)
     {
-        // ignore index == 0
-        for (size_t index = 1; index < task.region_infos.size(); ++index)
+        for (size_t index = 0; index < task.region_infos.size(); ++index)
         {
+            if (index == 0 && !is_mpp)
+                continue;
             const auto & region_info = task.region_infos[index];
             // figure out the valid store num for each region
             size_t valid_store_num = 0;
