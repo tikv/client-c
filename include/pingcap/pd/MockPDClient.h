@@ -28,6 +28,7 @@ public:
     std::pair<metapb::Region, metapb::Peer> getRegionByID(uint64_t) override { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
 
     metapb::Store getStore(uint64_t) override { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
+    std::vector<metapb::Store> getAllStores(bool) override { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
 
     bool isClusterBootstrapped() override { return true; }
 

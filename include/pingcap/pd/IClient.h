@@ -18,16 +18,12 @@ namespace pd
 class IClient
 {
 public:
-    //    virtual uint64_t getClusterID() = 0;
-
     virtual ~IClient() = default;
 
     virtual uint64_t getTS() = 0;
 
     // return region meta and leader peer.
     virtual std::pair<metapb::Region, metapb::Peer> getRegionByKey(const std::string & key) = 0;
-
-    //    virtual std::pair<metapb::Region, metapb::Peer> getPrevRegion(std::string key) = 0;
 
     // return region meta and leader peer.
     virtual std::pair<metapb::Region, metapb::Peer> getRegionByID(uint64_t region_id) = 0;
@@ -36,7 +32,7 @@ public:
 
     virtual bool isClusterBootstrapped() = 0;
 
-    //    virtual std::vector<metapb::Store> getAllStores() = 0;
+    virtual std::vector<metapb::Store> getAllStores(bool exclude_tombstone) = 0;
 
     virtual uint64_t getGCSafePoint() = 0;
 
