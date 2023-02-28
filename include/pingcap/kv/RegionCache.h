@@ -26,13 +26,15 @@ struct Store
     const std::string peer_addr;
     const std::map<std::string, std::string> labels;
     const StoreType store_type;
+    const ::metapb::StoreState state;
 
-    Store(uint64_t id_, const std::string & addr_, const std::string & peer_addr_, const std::map<std::string, std::string> & labels_, StoreType store_type_)
+    Store(uint64_t id_, const std::string & addr_, const std::string & peer_addr_, const std::map<std::string, std::string> & labels_, StoreType store_type_, const ::metapb::StoreState state_)
         : id(id_)
         , addr(addr_)
         , peer_addr(peer_addr_)
         , labels(labels_)
         , store_type(store_type_)
+        , state(state_)
     {}
 };
 
@@ -198,7 +200,6 @@ public:
     groupKeysByRegion(Backoffer & bo,
                       const std::vector<std::string> & keys);
 
-    std::map<uint64_t, Store> getAllStores(bool exclude_tombstone);
     std::map<uint64_t, Store> getAllTiFlashStores(bool exclude_tombstone);
 
 private:

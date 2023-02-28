@@ -52,7 +52,7 @@ public:
 
     metapb::Store getStore(uint64_t store_id) override;
 
-    std::vector<metapb::Store> getAllStores(bool exclude_tombstone) override;
+    // std::vector<metapb::Store> getAllStores() override;
 
     bool isClusterBootstrapped() override;
 

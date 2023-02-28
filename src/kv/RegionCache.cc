@@ -216,7 +216,7 @@ Store RegionCache::reloadStore(const metapb::Store & store)
             store_type = StoreType::TiFlash;
         }
     }
-    auto it = stores.emplace(id, Store(id, store.address(), store.peer_address(), labels, store_type));
+    auto it = stores.emplace(id, Store(id, store.address(), store.peer_address(), labels, store_type, store.state()));
     return it.first->second;
 }
 
@@ -389,32 +389,19 @@ RegionCache::groupKeysByRegion(Backoffer & bo,
     return std::make_pair(result_map, first);
 }
 
-std::map<uint64_t, Store> RegionCache::getAllStores(bool exclude_tombstone)
-{
-    const auto & new_all_stores = pd_client->getAllStores(exclude_tombstone);
-    std::map<uint64_t, Store> ret_stores;
-    {
-        std::lock_guard<std::mutex> lock(store_mutex);
-        for (const auto & pb_store : new_all_stores)
-        {
-            auto it = stores.find(pb_store.id());
-            if (it != stores.end())
-            {
-                continue;
-            }
-            reloadStore(pb_store);
-        }
-        ret_stores = std::map<uint64_t, Store>(stores);
-    }
-    return ret_stores;
-}
-
 std::map<uint64_t, Store> RegionCache::getAllTiFlashStores(bool exclude_tombstone)
 {
-    const auto & all_stores = getAllStores(exclude_tombstone);
-    std::map<uint64_t, Store> ret_stores;
-    for (const auto & s : all_stores)
+    std::map<uint64_t, Store> copy_stores;
     {
+        std::lock_guard<std::mutex> lock(store_mutex);
+        copy_stores = std::map<uint64_t, Store>(stores);
+    }
+    std::map<uint64_t, Store> ret_stores;
+    for (const auto & s : copy_stores)
+    {
+        if (exclude_tombstone && s.second.state == ::metapb::StoreState::Tombstone)
+            continue;
+
         for (const auto & l : s.second.labels)
         {
             if (l.first == EngineLabelKey && l.second == EngineLabelTiFlash)
