@@ -28,6 +28,8 @@ public:
 
     metapb::Store getStore(uint64_t) override { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
 
+    std::vector<metapb::Store> getAllStores(bool exclude_tombstone) override { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
+
     bool isClusterBootstrapped() override { return true; }
 
     void update(const std::vector<std::string> & addrs, const ClusterConfig & config_) override { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }

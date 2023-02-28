@@ -33,7 +33,7 @@ public:
 
     virtual bool isClusterBootstrapped() = 0;
 
-    //    virtual std::vector<metapb::Store> getAllStores() = 0;
+    virtual std::vector<metapb::Store> getAllStores(bool exclude_tombstone) = 0;
 
     virtual uint64_t getGCSafePoint() = 0;
 

@@ -201,9 +201,9 @@ metapb::Store RegionCache::loadStore(Backoffer & bo, uint64_t id)
     }
 }
 
-Store RegionCache::reloadStore(Backoffer & bo, uint64_t id)
+Store RegionCache::reloadStore(const metapb::Store & store)
 {
-    auto store = loadStore(bo, id);
+    auto id = store.id();
     std::map<std::string, std::string> labels;
     for (int i = 0; i < store.labels_size(); i++)
     {
@@ -228,7 +228,8 @@ Store RegionCache::getStore(Backoffer & bo, uint64_t id)
     {
         return (it->second);
     }
-    return reloadStore(bo, id);
+    auto store = loadStore(bo, id);
+    return reloadStore(store);
 }
 
 std::vector<uint64_t> RegionCache::getAllValidTiFlashStores(Backoffer & bo, const RegionVerID & region_id, const Store & current_store)
@@ -386,6 +387,41 @@ RegionCache::groupKeysByRegion(Backoffer & bo,
         result_map[loc.region].push_back(key);
     }
     return std::make_pair(result_map, first);
+}
+
+std::map<uint64_t, Store> RegionCache::getAllStores(bool exclude_tombstone)
+{
+    const auto & new_all_stores = pd_client->getAllStores(exclude_tombstone);
+    std::map<uint64_t, Store> ret_stores;
+    {
+        std::lock_guard<std::mutex> lock(store_mutex);
+        for (const auto & pb_store : new_all_stores)
+        {
+            auto it = stores.find(pb_store.id());
+            if (it != stores.end())
+            {
+                continue;
+            }
+            reloadStore(pb_store);
+        }
+        ret_stores = std::map<uint64_t, Store>(stores);
+    }
+    return ret_stores;
+}
+
+std::map<uint64_t, Store> RegionCache::getAllTiFlashStores(bool exclude_tombstone)
+{
+    const auto & all_stores = getAllStores(exclude_tombstone);
+    std::map<uint64_t, Store> ret_stores;
+    for (const auto & s : all_stores)
+    {
+        for (const auto & l : s.second.labels)
+        {
+            if (l.first == EngineLabelKey && l.second == EngineLabelTiFlash)
+                ret_stores.emplace(s.first, s.second);
+        }
+    }
+    return ret_stores;
 }
 
 } // namespace kv

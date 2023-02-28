@@ -139,6 +139,7 @@ TEST_F(TestBatchCoprocessor, BuildTask1)
         auto batch_cop_tasks = coprocessor::buildBatchCopTasks(
             bo,
             test_cluster.get(),
+            true,
             is_partition_table,
             table_ids,
             ranges_for_each_physical_table,
@@ -184,6 +185,7 @@ TEST_F(TestBatchCoprocessor, BuildTaskPartitionTable)
     auto batch_cop_tasks = coprocessor::buildBatchCopTasks(
         bo,
         test_cluster.get(),
+        true,
         is_partition_table,
         table_ids,
         ranges_for_each_physical_table,
@@ -253,6 +255,7 @@ TEST_F(TestBatchCoprocessor, BuildTask3)
         auto batch_cop_tasks = coprocessor::buildBatchCopTasks(
             bo,
             test_cluster.get(),
+            true,
             is_partition_table,
             table_ids,
             ranges_for_each_physical_table,

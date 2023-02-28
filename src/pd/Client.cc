@@ -387,6 +387,36 @@ metapb::Store Client::getStore(uint64_t store_id)
     return response.store();
 }
 
+std::vector<metapb::Store> Client::getAllStores(bool exclude_tombstone)
+{
+    pdpb::GetAllStoresRequest request{};
+    pdpb::GetAllStoresResponse response{};
+
+    request.set_allocated_header(requestHeader());
+    request.set_exclude_tombstone_stores(exclude_tombstone);
+
+    grpc::ClientContext context;
+
+    context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
+
+    auto status = leaderClient()->stub->GetAllStores(&context, request, &response);
+    if (!status.ok())
+    {
+        std::string err_msg = ("get all stores failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
+        log->error(err_msg);
+        check_leader.store(true);
+        throw Exception(err_msg, GRPCErrorCode);
+    }
+    const auto & pb_all_stores = response.stores();
+    std::vector<metapb::Store> vec_all_stores;
+    vec_all_stores.reserve(pb_all_stores.size());
+    for (const auto & s : pb_all_stores)
+    {
+        vec_all_stores.push_back(s);
+    }
+    return vec_all_stores;
+}
+
 bool Client::isClusterBootstrapped()
 {
     pdpb::IsBootstrappedRequest request{};

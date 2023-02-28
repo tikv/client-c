@@ -198,6 +198,9 @@ public:
     groupKeysByRegion(Backoffer & bo,
                       const std::vector<std::string> & keys);
 
+    std::map<uint64_t, Store> getAllStores(bool exclude_tombstone);
+    std::map<uint64_t, Store> getAllTiFlashStores(bool exclude_tombstone);
+
 private:
     RegionPtr loadRegionByKey(Backoffer & bo, const std::string & key);
 
@@ -207,7 +210,7 @@ private:
 
     metapb::Store loadStore(Backoffer & bo, uint64_t id);
 
-    Store reloadStore(Backoffer & bo, uint64_t id);
+    Store reloadStore(const metapb::Store & store);
 
     RegionPtr searchCachedRegion(const std::string & key);
 
@@ -240,6 +243,8 @@ private:
 };
 
 using RegionCachePtr = std::unique_ptr<RegionCache>;
+static const std::string EngineLabelKey = "engine";
+static const std::string EngineLabelTiFlash = "tiflash";
 
 } // namespace kv
 } // namespace pingcap
