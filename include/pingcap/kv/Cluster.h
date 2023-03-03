@@ -1,5 +1,7 @@
 #pragma once
 
+#include <pingcap/common/FixedThreadPool.h>
+#include <pingcap/common/MPPProber.h>
 #include <pingcap/Config.h>
 #include <pingcap/kv/LockResolver.h>
 #include <pingcap/kv/Rpc.h>
@@ -24,11 +26,17 @@ struct Cluster
     pd::OraclePtr oracle;
 
     LockResolverPtr lock_resolver;
+    std::unique_ptr<common::ThreadPool> thread_pool;
+    std::unique_ptr<common::MPPProber> mpp_prober;
 
     Cluster()
         : pd_client(std::make_shared<pd::MockPDClient>())
         , rpc_client(std::make_unique<RpcClient>())
-    {}
+        , thread_pool(std::make_unique<common::ThreadPool>(1))
+        , mpp_prober(std::make_unique<common::MPPProber>())
+    {
+        startBackgourndTasks();
+    }
 
     Cluster(const std::vector<std::string> & pd_addrs, const ClusterConfig & config)
         : pd_client(std::make_shared<pd::CodecClient>(pd_addrs, config))
@@ -36,21 +44,29 @@ struct Cluster
         , rpc_client(std::make_unique<RpcClient>(config))
         , oracle(std::make_unique<pd::Oracle>(pd_client, std::chrono::milliseconds(oracle_update_interval)))
         , lock_resolver(std::make_unique<LockResolver>(this))
-    {}
+        , thread_pool(std::make_unique<common::ThreadPool>(1))
+        , mpp_prober(std::make_unique<common::MPPProber>())
+    {
+        startBackgourndTasks();
+    }
 
     void update(const std::vector<std::string> & pd_addrs, const ClusterConfig & config) const
     {
         pd_client->update(pd_addrs, config);
         rpc_client->update(config);
-        
     }
 
     // TODO: When the cluster is closed, we should release all the resources
     // (e.g. background threads) that cluster object holds so as to exit elegantly.
-    ~Cluster() = default;
+    ~Cluster()
+    {
+        thread_pool->stop();
+    }
 
     // Only used by Test and this is not safe !
     void splitRegion(const std::string & split_key);
+
+    void startBackgourndTasks();
 };
 
 struct MinCommitTSPushed

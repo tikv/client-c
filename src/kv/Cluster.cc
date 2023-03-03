@@ -26,5 +26,13 @@ void Cluster::splitRegion(const std::string & split_key)
     region_cache->getRegionByID(bo, RegionVerID(rr.id(), rr.region_epoch().conf_ver(), rr.region_epoch().version()));
 }
 
+void Cluster::startBackgourndTasks()
+{
+    thread_pool->start();
+    thread_pool->enqueue([this] {
+            this->mpp_prober->run();
+    });
+}
+
 } // namespace kv
 } // namespace pingcap
