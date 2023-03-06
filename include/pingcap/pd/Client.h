@@ -41,28 +41,26 @@ public:
 
     void update(const std::vector<std::string> & addrs, const ClusterConfig & config) override;
 
-    //uint64_t getClusterID() override;
-
     // only implement a weak get ts.
     uint64_t getTS() override;
 
     std::pair<metapb::Region, metapb::Peer> getRegionByKey(const std::string & key) override;
 
-    //std::pair<metapb::Region, metapb::Peer> getPrevRegion(std::string key) override;
-
     std::pair<metapb::Region, metapb::Peer> getRegionByID(uint64_t region_id) override;
 
     metapb::Store getStore(uint64_t store_id) override;
 
-    bool isClusterBootstrapped() override;
+    std::vector<metapb::Store> getAllStores(bool exclude_tombstone) override;
 
-    //std::vector<metapb::Store> getAllStores() override;
+    bool isClusterBootstrapped() override;
 
     uint64_t getGCSafePoint() override;
 
     KeyspaceID getKeyspaceID(const std::string & keyspace_name) override;
 
     bool isMock() override;
+
+    std::string getLeaderUrl() override;
 
 private:
     void initClusterID();
@@ -105,6 +103,7 @@ private:
 
     std::shared_ptr<PDConnClient> getOrCreateGRPCConn(const std::string &);
 
+private:
     std::shared_mutex leader_mutex;
 
     std::mutex channel_map_mutex;

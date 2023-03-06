@@ -236,6 +236,7 @@ std::vector<CopTask> buildCopTasks(
 std::vector<BatchCopTask> buildBatchCopTasks(
     kv::Backoffer & bo,
     kv::Cluster * cluster,
+    bool is_mpp,
     bool is_partition_table_scan,
     const std::vector<int64_t> & physical_table_ids,
     const std::vector<KeyRanges> & ranges_for_each_physical_table,

@@ -115,7 +115,7 @@ std::vector<LocationKeyRanges> splitKeyRangesByLocations(
     return res;
 }
 
-std::vector<BatchCopTask> balanceBatchCopTasks(std::vector<BatchCopTask> && original_tasks, Poco::Logger * log)
+std::vector<BatchCopTask> balanceBatchCopTasks(kv::RegionCachePtr & cache, std::vector<BatchCopTask> && original_tasks, bool is_mpp, Poco::Logger * log)
 {
     if (original_tasks.empty())
     {
@@ -124,19 +124,36 @@ std::vector<BatchCopTask> balanceBatchCopTasks(std::vector<BatchCopTask> && orig
     }
 
     // Only one tiflash store
-    if (original_tasks.size() <= 1)
+    if (original_tasks.size() <= 1 && !is_mpp)
     {
         return std::move(original_tasks);
     }
 
     std::map<uint64_t, BatchCopTask> store_task_map;
-    for (const auto & task : original_tasks)
+    if (!is_mpp)
     {
-        auto task_store_id = task.region_infos[0].all_stores[0];
-        BatchCopTask new_batch_task;
-        new_batch_task.store_addr = task.store_addr;
-        new_batch_task.region_infos.emplace_back(task.region_infos[0]);
-        store_task_map[task_store_id] = new_batch_task;
+        for (const auto & task : original_tasks)
+        {
+            auto task_store_id = task.region_infos[0].all_stores[0];
+            BatchCopTask new_batch_task;
+            new_batch_task.store_addr = task.store_addr;
+            new_batch_task.store_id = task_store_id;
+            new_batch_task.region_infos.emplace_back(task.region_infos[0]);
+            store_task_map[task_store_id] = new_batch_task;
+        }
+    }
+    else
+    {
+        // todo: 1. filter alive stores. 2. background get all stores.
+        auto tiflash_stores = cache->getAllTiFlashStores(/*exclude_tombstone =*/true);
+        for (const auto & store : tiflash_stores)
+        {
+            auto store_id = store.first;
+            BatchCopTask new_batch_task;
+            new_batch_task.store_addr = store.second.addr;
+            new_batch_task.store_id = store_id;
+            store_task_map[store_id] = new_batch_task;
+        }
     }
 
     std::map<uint64_t, std::map<std::string, RegionInfo>> store_candidate_region_map;
@@ -145,9 +162,10 @@ std::vector<BatchCopTask> balanceBatchCopTasks(std::vector<BatchCopTask> && orig
     std::vector<RegionInfo> candidate_region_infos;
     for (const auto & task : original_tasks)
     {
-        // ignore index == 0
-        for (size_t index = 1; index < task.region_infos.size(); ++index)
+        for (size_t index = 0; index < task.region_infos.size(); ++index)
         {
+            if (index == 0 && !is_mpp)
+                continue;
             const auto & region_info = task.region_infos[index];
             // figure out the valid store num for each region
             size_t valid_store_num = 0;
@@ -288,6 +306,7 @@ std::vector<BatchCopTask> balanceBatchCopTasks(std::vector<BatchCopTask> && orig
 std::vector<BatchCopTask> buildBatchCopTasks(
     kv::Backoffer & bo,
     kv::Cluster * cluster,
+    bool is_mpp,
     bool is_partition_table_scan,
     const std::vector<int64_t> & physical_table_ids,
     const std::vector<KeyRanges> & ranges_for_each_physical_table,
@@ -398,7 +417,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         };
         if (log->getLevel() >= Poco::Message::PRIO_INFORMATION)
             log->information(tasks_to_str("Before region balance:", batch_cop_tasks));
-        batch_cop_tasks = details::balanceBatchCopTasks(std::move(batch_cop_tasks), log);
+        batch_cop_tasks = details::balanceBatchCopTasks(cache, std::move(batch_cop_tasks), is_mpp, log);
         if (log->getLevel() >= Poco::Message::PRIO_INFORMATION)
             log->information(tasks_to_str("After region balance:", batch_cop_tasks));
         auto balance_end = std::chrono::steady_clock::now();

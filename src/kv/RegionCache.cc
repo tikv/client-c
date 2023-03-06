@@ -201,9 +201,9 @@ metapb::Store RegionCache::loadStore(Backoffer & bo, uint64_t id)
     }
 }
 
-Store RegionCache::reloadStore(Backoffer & bo, uint64_t id)
+Store RegionCache::reloadStore(const metapb::Store & store)
 {
-    auto store = loadStore(bo, id);
+    auto id = store.id();
     std::map<std::string, std::string> labels;
     for (int i = 0; i < store.labels_size(); i++)
     {
@@ -216,7 +216,7 @@ Store RegionCache::reloadStore(Backoffer & bo, uint64_t id)
             store_type = StoreType::TiFlash;
         }
     }
-    auto it = stores.emplace(id, Store(id, store.address(), store.peer_address(), labels, store_type));
+    auto it = stores.emplace(id, Store(id, store.address(), store.peer_address(), labels, store_type, store.state()));
     return it.first->second;
 }
 
@@ -228,7 +228,8 @@ Store RegionCache::getStore(Backoffer & bo, uint64_t id)
     {
         return (it->second);
     }
-    return reloadStore(bo, id);
+    auto store = loadStore(bo, id);
+    return reloadStore(store);
 }
 
 std::vector<uint64_t> RegionCache::getAllValidTiFlashStores(Backoffer & bo, const RegionVerID & region_id, const Store & current_store)
@@ -386,6 +387,28 @@ RegionCache::groupKeysByRegion(Backoffer & bo,
         result_map[loc.region].push_back(key);
     }
     return std::make_pair(result_map, first);
+}
+
+std::map<uint64_t, Store> RegionCache::getAllTiFlashStores(bool exclude_tombstone)
+{
+    std::map<uint64_t, Store> copy_stores;
+    {
+        std::lock_guard<std::mutex> lock(store_mutex);
+        copy_stores = std::map<uint64_t, Store>(stores);
+    }
+    std::map<uint64_t, Store> ret_stores;
+    for (const auto & s : copy_stores)
+    {
+        if (exclude_tombstone && s.second.state == ::metapb::StoreState::Tombstone)
+            continue;
+
+        for (const auto & l : s.second.labels)
+        {
+            if (l.first == EngineLabelKey && l.second == EngineLabelTiFlash)
+                ret_stores.emplace(s.first, s.second);
+        }
+    }
+    return ret_stores;
 }
 
 } // namespace kv
