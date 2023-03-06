@@ -239,6 +239,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
     const std::vector<int64_t> & physical_table_ids,
     const std::vector<KeyRanges> & ranges_for_each_physical_table,
     kv::StoreType store_type,
+    const kv::LabelFilter & label_filter,
     Logger * log);
 
 namespace details

@@ -8,7 +8,7 @@ namespace pingcap
 namespace kv
 {
 // load_balance is an option, becase if store fail, it may cause batchCop fail.
-RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id, const StoreType store_type, bool load_balance)
+RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id, const StoreType store_type, bool load_balance, const LabelFilter & label_filter)
 {
     for (;;)
     {
@@ -27,7 +27,7 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
         else
         {
             // can access to all tiflash peers
-            peers = selectTiFlashPeers(bo, meta);
+            peers = selectTiFlashPeers(bo, meta, label_filter);
             if (load_balance)
                 start_index = ++region->work_tiflash_peer_idx;
             else
@@ -107,12 +107,13 @@ KeyLocation RegionCache::locateKey(Backoffer & bo, const std::string & key)
 }
 
 // select all tiflash peers
-std::vector<metapb::Peer> RegionCache::selectTiFlashPeers(Backoffer & bo, const metapb::Region & meta)
+std::vector<metapb::Peer> RegionCache::selectTiFlashPeers(Backoffer & bo, const metapb::Region & meta, const LabelFilter & label_filter)
 {
     std::vector<metapb::Peer> tiflash_peers;
     for (const auto & peer : meta.peers())
     {
-        if (getStore(bo, peer.store_id()).store_type == StoreType::TiFlash)
+        const Store & store = getStore(bo, peer.store_id());
+        if (store.store_type == StoreType::TiFlash && label_filter(store.labels))
         {
             tiflash_peers.push_back(peer);
         }
@@ -232,7 +233,7 @@ Store RegionCache::getStore(Backoffer & bo, uint64_t id)
     return reloadStore(store);
 }
 
-std::vector<uint64_t> RegionCache::getAllValidTiFlashStores(Backoffer & bo, const RegionVerID & region_id, const Store & current_store)
+std::vector<uint64_t> RegionCache::getAllValidTiFlashStores(Backoffer & bo, const RegionVerID & region_id, const Store & current_store, const LabelFilter & label_filter)
 {
     std::vector<uint64_t> all_stores;
     RegionPtr cached_region = getRegionByIDFromCache(region_id);
@@ -244,7 +245,7 @@ std::vector<uint64_t> RegionCache::getAllValidTiFlashStores(Backoffer & bo, cons
 
     // Get others tiflash store ids
     // TODO: client-go also check region cache TTL.
-    auto peers = selectTiFlashPeers(bo, cached_region->meta);
+    auto peers = selectTiFlashPeers(bo, cached_region->meta, label_filter);
     for (const auto & peer : peers)
     {
         all_stores.emplace_back(peer.store_id());
@@ -389,7 +390,7 @@ RegionCache::groupKeysByRegion(Backoffer & bo,
     return std::make_pair(result_map, first);
 }
 
-std::map<uint64_t, Store> RegionCache::getAllTiFlashStores(bool exclude_tombstone)
+std::map<uint64_t, Store> RegionCache::getAllTiFlashStores(const LabelFilter & label_filter, bool exclude_tombstone)
 {
     std::map<uint64_t, Store> copy_stores;
     {
@@ -397,19 +398,47 @@ std::map<uint64_t, Store> RegionCache::getAllTiFlashStores(bool exclude_tombston
         copy_stores = std::map<uint64_t, Store>(stores);
     }
     std::map<uint64_t, Store> ret_stores;
-    for (const auto & s : copy_stores)
+    for (const auto & store : copy_stores)
     {
-        if (exclude_tombstone && s.second.state == ::metapb::StoreState::Tombstone)
+        if (exclude_tombstone && store.second.state == ::metapb::StoreState::Tombstone)
             continue;
 
-        for (const auto & l : s.second.labels)
-        {
-            if (l.first == EngineLabelKey && l.second == EngineLabelTiFlash)
-                ret_stores.emplace(s.first, s.second);
-        }
+        if (label_filter(store.second.labels))
+            ret_stores.emplace(store.first, store.second);
     }
     return ret_stores;
 }
 
+bool hasLabel(const std::map<std::string, std::string> & labels, const std::string & key, const std::string & val)
+{
+    for (const auto & label : labels)
+    {
+        if (label.first ==  key && label.second == val)
+            return true;
+    }
+    return false;
+}
+
+bool labelFilterOnlyTiFlashWriteNode(const std::map<std::string, std::string> & labels)
+{
+    return hasLabel(labels, EngineLabelKey, EngineLabelTiFlash) &&
+        hasLabel(labels, EngineRoleLabelKey, EngineRoleWrite);
+}
+
+bool labelFilterNoTiFlashWriteNode(const std::map<std::string, std::string> & labels)
+{
+    return hasLabel(labels, EngineLabelKey, EngineLabelTiFlash) &&
+        !hasLabel(labels, EngineRoleLabelKey, EngineRoleWrite);
+}
+
+bool labelFilterAllTiFlashNode(const std::map<std::string, std::string> & labels)
+{
+    return hasLabel(labels, EngineLabelKey, EngineLabelTiFlash);
+}
+
+bool labelFilterAllNode(const std::map<std::string, std::string> &)
+{
+    return true;
+}
 } // namespace kv
 } // namespace pingcap

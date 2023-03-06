@@ -122,6 +122,7 @@ struct Region
 };
 
 using RegionPtr = std::shared_ptr<Region>;
+using LabelFilter = std::function<bool(const std::map<std::string, std::string> &)>;
 
 struct KeyLocation
 {
@@ -174,7 +175,7 @@ public:
         , log(&Logger::get("pingcap.tikv"))
     {}
 
-    RPCContextPtr getRPCContext(Backoffer & bo, const RegionVerID & id, StoreType store_type, bool load_balance);
+    RPCContextPtr getRPCContext(Backoffer & bo, const RegionVerID & id, StoreType store_type, bool load_balance, const LabelFilter & label_filter);
 
     bool updateLeader(const RegionVerID & region_id, const metapb::Peer & leader);
 
@@ -194,13 +195,13 @@ public:
 
     Store getStore(Backoffer & bo, uint64_t id);
 
-    std::vector<uint64_t> getAllValidTiFlashStores(Backoffer & bo, const RegionVerID & region_id, const Store & current_store);
+    std::vector<uint64_t> getAllValidTiFlashStores(Backoffer & bo, const RegionVerID & region_id, const Store & current_store, const LabelFilter & label_filter);
 
     std::pair<std::unordered_map<RegionVerID, std::vector<std::string>>, RegionVerID>
     groupKeysByRegion(Backoffer & bo,
                       const std::vector<std::string> & keys);
 
-    std::map<uint64_t, Store> getAllTiFlashStores(bool exclude_tombstone);
+    std::map<uint64_t, Store> getAllTiFlashStores(const LabelFilter & label_filter, bool exclude_tombstone);
 
 private:
     RegionPtr loadRegionByKey(Backoffer & bo, const std::string & key);
@@ -215,7 +216,7 @@ private:
 
     RegionPtr searchCachedRegion(const std::string & key);
 
-    std::vector<metapb::Peer> selectTiFlashPeers(Backoffer & bo, const metapb::Region & meta);
+    std::vector<metapb::Peer> selectTiFlashPeers(Backoffer & bo, const metapb::Region & meta, const LabelFilter & label_filter);
 
     void insertRegionToCache(RegionPtr region);
 
@@ -246,6 +247,14 @@ private:
 using RegionCachePtr = std::unique_ptr<RegionCache>;
 static const std::string EngineLabelKey = "engine";
 static const std::string EngineLabelTiFlash = "tiflash";
+static const std::string EngineRoleLabelKey = "engine_role";
+static const std::string EngineRoleWrite = "write";
+
+bool hasLabel(const std::map<std::string, std::string> & labels, const std::string & key, const std::string & val);
+bool labelFilterOnlyTiFlashWriteNode(const std::map<std::string, std::string> & labels);
+bool labelFilterNoTiFlashWriteNode(const std::map<std::string, std::string> & labels);
+bool labelFilterAllTiFlashNode(const std::map<std::string, std::string> & labels);
+bool labelFilterAllNode(const std::map<std::string, std::string> &);
 
 } // namespace kv
 } // namespace pingcap

@@ -42,7 +42,7 @@ struct RegionClient
         RpcCall<T> rpc(req);
         for (;;)
         {
-            RPCContextPtr ctx = cluster->region_cache->getRPCContext(bo, region_id, store_type, true);
+            RPCContextPtr ctx = cluster->region_cache->getRPCContext(bo, region_id, store_type, /*load_balance=*/true, kv::labelFilterNoTiFlashWriteNode);
             if (ctx == nullptr)
             {
                 // If the region is not found in cache, it must be out
