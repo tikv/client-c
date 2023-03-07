@@ -42,7 +42,6 @@ struct Cluster
     {
         pd_client->update(pd_addrs, config);
         rpc_client->update(config);
-        
     }
 
     // TODO: When the cluster is closed, we should release all the resources
