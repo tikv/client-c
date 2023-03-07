@@ -122,7 +122,7 @@ struct Region
 };
 
 using RegionPtr = std::shared_ptr<Region>;
-using LabelFilter = bool(*)(const std::map<std::string, std::string> &);
+using LabelFilter = bool (*)(const std::map<std::string, std::string> &);
 
 struct KeyLocation
 {

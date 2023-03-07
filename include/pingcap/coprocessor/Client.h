@@ -116,10 +116,10 @@ public:
     };
 
     ResponseIter(std::vector<CopTask> && tasks_,
-            kv::Cluster * cluster_,
-            int concurrency_,
-            Logger * log_,
-            const kv::LabelFilter & tiflash_label_filter_ = kv::labelFilterInvalid)
+                 kv::Cluster * cluster_,
+                 int concurrency_,
+                 Logger * log_,
+                 const kv::LabelFilter & tiflash_label_filter_ = kv::labelFilterInvalid)
         : tasks(std::move(tasks_))
         , cluster(cluster_)
         , concurrency(concurrency_)

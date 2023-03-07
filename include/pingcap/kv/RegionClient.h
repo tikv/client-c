@@ -38,11 +38,11 @@ struct RegionClient
     // This method send a request to region, but is NOT Thread-Safe !!
     template <typename T>
     auto sendReqToRegion(Backoffer & bo,
-            std::shared_ptr<T> req,
-            const LabelFilter & tiflash_label_filter = kv::labelFilterInvalid,
-            int timeout = dailTimeout,
-            StoreType store_type = StoreType::TiKV,
-            kv::GRPCMetaData meta_data = {})
+                         std::shared_ptr<T> req,
+                         const LabelFilter & tiflash_label_filter = kv::labelFilterInvalid,
+                         int timeout = dailTimeout,
+                         StoreType store_type = StoreType::TiKV,
+                         kv::GRPCMetaData meta_data = {})
     {
         RpcCall<T> rpc(req);
         if (store_type == kv::StoreType::TiFlash && tiflash_label_filter == kv::labelFilterInvalid)

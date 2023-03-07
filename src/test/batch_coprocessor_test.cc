@@ -226,7 +226,7 @@ TEST_F(TestBatchCoprocessor, BuildTaskPartitionTable)
     EXPECT_EQ(batch_cop_task->table_regions[1].region_infos[1].partition_index, 1);
     EXPECT_KEY_RANGES_EQ(batch_cop_task->table_regions[1].region_infos[1].ranges, expect_ranges3);
 }
- 
+
 TEST_F(TestBatchCoprocessor, BuildTask3)
 {
     Backoffer bo(copBuildTaskMaxBackoff);

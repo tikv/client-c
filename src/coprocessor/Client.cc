@@ -427,16 +427,21 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         balance_elapsed += std::chrono::duration_cast<std::chrono::milliseconds>(balance_end - balance_start).count();
 
         // For partition table, we need to move region info from task.region_infos to task.table_regions.
-        if (is_partition_table_scan) {
-            for (auto & task : batch_cop_tasks) {
+        if (is_partition_table_scan)
+        {
+            for (auto & task : batch_cop_tasks)
+            {
                 std::vector<pingcap::coprocessor::TableRegions> partition_table_regions(physical_table_ids.size());
-                for (const auto & region_info : task.region_infos) {
+                for (const auto & region_info : task.region_infos)
+                {
                     const auto partition_index = region_info.partition_index;
                     partition_table_regions[partition_index].physical_table_id = physical_table_ids[partition_index];
                     partition_table_regions[partition_index].region_infos.push_back(region_info);
                 }
-                for (const auto & partition_table_region : partition_table_regions) {
-                    if (partition_table_region.region_infos.empty()) {
+                for (const auto & partition_table_region : partition_table_regions)
+                {
+                    if (partition_table_region.region_infos.empty())
+                    {
                         continue;
                     }
                     task.table_regions.push_back(partition_table_region);
@@ -446,14 +451,9 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         }
         auto end = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-        if (elapsed >= 500) {
-            log->warning("buildBatchCopTasks takes too long. total elapsed: " + std::to_string(elapsed) + "ms" +
-                    ", build cop_task elapsed: " + std::to_string(cop_task_elapsed) + "ms" +
-                    ", build batch_cop_task elapsed: " + std::to_string(batch_cop_task_elapsed) + "ms" +
-                    ", balance elapsed: " + std::to_string(balance_elapsed) + "ms" +
-                    ", cop_task num: " + std::to_string(cop_tasks.size()) +
-                    ", batch_cop_task num: " + std::to_string(batch_cop_tasks.size()) +
-                    ", retry_num: " + std::to_string(retry_num));
+        if (elapsed >= 500)
+        {
+            log->warning("buildBatchCopTasks takes too long. total elapsed: " + std::to_string(elapsed) + "ms" + ", build cop_task elapsed: " + std::to_string(cop_task_elapsed) + "ms" + ", build batch_cop_task elapsed: " + std::to_string(batch_cop_task_elapsed) + "ms" + ", balance elapsed: " + std::to_string(balance_elapsed) + "ms" + ", cop_task num: " + std::to_string(cop_tasks.size()) + ", batch_cop_task num: " + std::to_string(batch_cop_tasks.size()) + ", retry_num: " + std::to_string(retry_num));
         }
         return batch_cop_tasks;
     }

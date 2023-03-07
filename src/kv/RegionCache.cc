@@ -414,7 +414,7 @@ bool hasLabel(const std::map<std::string, std::string> & labels, const std::stri
 {
     for (const auto & label : labels)
     {
-        if (label.first ==  key && label.second == val)
+        if (label.first == key && label.second == val)
             return true;
     }
     return false;
@@ -422,14 +422,12 @@ bool hasLabel(const std::map<std::string, std::string> & labels, const std::stri
 
 bool labelFilterOnlyTiFlashWriteNode(const std::map<std::string, std::string> & labels)
 {
-    return hasLabel(labels, EngineLabelKey, EngineLabelTiFlash) &&
-        hasLabel(labels, EngineRoleLabelKey, EngineRoleWrite);
+    return hasLabel(labels, EngineLabelKey, EngineLabelTiFlash) && hasLabel(labels, EngineRoleLabelKey, EngineRoleWrite);
 }
 
 bool labelFilterNoTiFlashWriteNode(const std::map<std::string, std::string> & labels)
 {
-    return hasLabel(labels, EngineLabelKey, EngineLabelTiFlash) &&
-        !hasLabel(labels, EngineRoleLabelKey, EngineRoleWrite);
+    return hasLabel(labels, EngineLabelKey, EngineLabelTiFlash) && !hasLabel(labels, EngineRoleLabelKey, EngineRoleWrite);
 }
 
 bool labelFilterAllTiFlashNode(const std::map<std::string, std::string> & labels)
