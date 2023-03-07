@@ -444,7 +444,7 @@ bool labelFilterAllNode(const std::map<std::string, std::string> &)
 
 bool labelFilterInvalid(const std::map<std::string, std::string> &)
 {
-    return false;
+    throw Exception("invalid label_filter", ErrorCodes::LogicalError);
 }
 } // namespace kv
 } // namespace pingcap
