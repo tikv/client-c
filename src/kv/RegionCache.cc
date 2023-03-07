@@ -8,7 +8,8 @@ namespace pingcap
 namespace kv
 {
 // load_balance is an option, becase if store fail, it may cause batchCop fail.
-RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id, const StoreType store_type, bool load_balance, const LabelFilter & label_filter)
+// For now, label_filter only works for tiflash.
+RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id, const StoreType store_type, bool load_balance, const LabelFilter & tiflash_label_filter)
 {
     for (;;)
     {
@@ -27,7 +28,7 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
         else
         {
             // can access to all tiflash peers
-            peers = selectTiFlashPeers(bo, meta, label_filter);
+            peers = selectTiFlashPeers(bo, meta, tiflash_label_filter);
             if (load_balance)
                 start_index = ++region->work_tiflash_peer_idx;
             else
@@ -439,6 +440,11 @@ bool labelFilterAllTiFlashNode(const std::map<std::string, std::string> & labels
 bool labelFilterAllNode(const std::map<std::string, std::string> &)
 {
     return true;
+}
+
+bool labelFilterInvalid(const std::map<std::string, std::string> &)
+{
+    return false;
 }
 } // namespace kv
 } // namespace pingcap

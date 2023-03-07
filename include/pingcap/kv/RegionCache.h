@@ -122,7 +122,7 @@ struct Region
 };
 
 using RegionPtr = std::shared_ptr<Region>;
-using LabelFilter = std::function<bool(const std::map<std::string, std::string> &)>;
+using LabelFilter = bool(*)(const std::map<std::string, std::string> &);
 
 struct KeyLocation
 {
@@ -175,7 +175,7 @@ public:
         , log(&Logger::get("pingcap.tikv"))
     {}
 
-    RPCContextPtr getRPCContext(Backoffer & bo, const RegionVerID & id, StoreType store_type, bool load_balance, const LabelFilter & label_filter);
+    RPCContextPtr getRPCContext(Backoffer & bo, const RegionVerID & id, StoreType store_type, bool load_balance, const LabelFilter & tiflash_label_filter);
 
     bool updateLeader(const RegionVerID & region_id, const metapb::Peer & leader);
 
@@ -251,10 +251,12 @@ static const std::string EngineRoleLabelKey = "engine_role";
 static const std::string EngineRoleWrite = "write";
 
 bool hasLabel(const std::map<std::string, std::string> & labels, const std::string & key, const std::string & val);
+// Returns false means label doesn't match, and will ignore this store.
 bool labelFilterOnlyTiFlashWriteNode(const std::map<std::string, std::string> & labels);
 bool labelFilterNoTiFlashWriteNode(const std::map<std::string, std::string> & labels);
 bool labelFilterAllTiFlashNode(const std::map<std::string, std::string> & labels);
 bool labelFilterAllNode(const std::map<std::string, std::string> &);
+bool labelFilterInvalid(const std::map<std::string, std::string> &);
 
 } // namespace kv
 } // namespace pingcap

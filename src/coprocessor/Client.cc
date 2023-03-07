@@ -483,7 +483,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
     std::shared_ptr<::coprocessor::Response> resp;
     try
     {
-        resp = client.sendReqToRegion(bo, req, kv::copTimeout, task.store_type, task.meta_data);
+        resp = client.sendReqToRegion(bo, req, tiflash_label_filter, kv::copTimeout, task.store_type, task.meta_data);
     }
     catch (Exception & e)
     {
