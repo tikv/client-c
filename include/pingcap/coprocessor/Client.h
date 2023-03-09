@@ -116,12 +116,17 @@ public:
         const std::string & data() const { return resp->data(); }
     };
 
-    ResponseIter(std::vector<CopTask> && tasks_, kv::Cluster * cluster_, int concurrency_, Logger * log_)
+    ResponseIter(std::vector<CopTask> && tasks_,
+                 kv::Cluster * cluster_,
+                 int concurrency_,
+                 Logger * log_,
+                 const kv::LabelFilter & tiflash_label_filter_ = kv::labelFilterInvalid)
         : tasks(std::move(tasks_))
         , cluster(cluster_)
         , concurrency(concurrency_)
         , unfinished_thread(0)
         , cancelled(false)
+        , tiflash_label_filter(tiflash_label_filter_)
         , log(log_)
     {}
 
@@ -218,6 +223,7 @@ private:
     std::atomic_int unfinished_thread;
     std::atomic_bool cancelled;
     std::condition_variable cond_var;
+    kv::LabelFilter tiflash_label_filter;
 
     Logger * log;
 };
@@ -241,6 +247,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
     const std::vector<int64_t> & physical_table_ids,
     const std::vector<KeyRanges> & ranges_for_each_physical_table,
     kv::StoreType store_type,
+    const kv::LabelFilter & label_filter,
     Logger * log);
 
 namespace details

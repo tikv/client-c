@@ -55,4 +55,4 @@ INSTANTIATE_TEST_SUITE_P(RunGetWithInjectedErr,
                          testing::Values(std::make_tuple("server-is-busy", "2*return()"),
                                          std::make_tuple("io-timeout", "8*return()")));
 
-} // namespace
+} // namespace pingcap::tests

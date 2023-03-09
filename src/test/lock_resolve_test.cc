@@ -120,4 +120,4 @@ TEST_F(TestWithLockResolve, testResolveLockGet)
     }
 }
 
-} // namespace
+} // namespace pingcap::tests

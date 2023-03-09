@@ -77,4 +77,4 @@ TEST_F(TestCoprocessor, testBuildTask1)
     ASSERT_EQ(has_next, false);
 }
 
-} // namespace pingcap
+} // namespace pingcap::tests
