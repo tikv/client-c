@@ -1,6 +1,3 @@
-if (NOT ABSL_ROOT_DIR)
-    include (cmake/find_abseil-cpp.cmake)
-endif ()
 
 if (NOT KVPROTO_FOUND)
     add_subdirectory (kvproto/cpp)

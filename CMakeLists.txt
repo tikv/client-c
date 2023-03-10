@@ -10,6 +10,10 @@ if (NOT Protobuf_INCLUDE_DIR)
     include (cmake/find_protobuf.cmake)
 endif ()
 
+if (NOT ABSL_ROOT_DIR)
+    include (cmake/find_abseil-cpp.cmake)
+endif ()
+
 if (NOT gRPC_FOUND)
     include (cmake/find_grpc.cmake)
 endif ()
