@@ -21,3 +21,5 @@ target_include_directories (abseil_swiss_tables SYSTEM BEFORE INTERFACE ${FLAT_H
 
 get_target_property(FLAT_HASH_SET_INCLUDE_DIR absl::flat_hash_set INTERFACE_INCLUDE_DIRECTORIES)
 target_include_directories (abseil_swiss_tables SYSTEM BEFORE INTERFACE ${FLAT_HASH_SET_INCLUDE_DIR})
+
+message(STATUS "Using absl: dir=${ABSL_ROOT_DIR}")
