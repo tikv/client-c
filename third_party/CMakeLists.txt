@@ -1,3 +1,7 @@
+if (NOT ABSL_ROOT_DIR)
+    include (cmake/find_abseil-cpp.cmake)
+endif ()
+
 if (NOT KVPROTO_FOUND)
     add_subdirectory (kvproto/cpp)
 endif()
@@ -6,10 +10,6 @@ if (USE_INTERNAL_GTEST_LIBRARY AND ENABLE_TESTS)
     set(GTEST_INSTALL OFF)
     add_subdirectory (googletest)
 endif()
-
-if (NOT ABSL_ROOT_DIR)
-    include (cmake/find_abseil-cpp.cmake)
-endif ()
 
 set(fiu_include_dirs libfiu/libfiu)
 list(APPEND fiu_sources libfiu/libfiu/fiu.c)
