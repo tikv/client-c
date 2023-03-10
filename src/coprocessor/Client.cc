@@ -306,6 +306,8 @@ std::vector<BatchCopTask> balanceBatchCopTasks(kv::RegionCachePtr & cache, std::
 
 // The elements in the two `physical_table_ids` and `ranges_for_each_physical_table` should be in one-to-one mapping.
 // When build batch cop tasks for partition table, physical_table_ids.size() may be greater than 1.
+// NOTE: `buildBatchCopTasks` do not need keyspace_id parameter yet since the batch tasks will be wrapped into MPP tasks
+// and the keyspace_id attachment is finished before the MPP tasks are sent.
 std::vector<BatchCopTask> buildBatchCopTasks(
     kv::Backoffer & bo,
     kv::Cluster * cluster,
@@ -463,8 +465,9 @@ std::vector<BatchCopTask> buildBatchCopTasks(
 std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopTask & task)
 {
     auto req = std::make_shared<::coprocessor::Request>();
-    auto *ctx = req->mutable_context();
-    if (task.keyspace_id != pd::NullspaceID) {
+    auto * ctx = req->mutable_context();
+    if (task.keyspace_id != pd::NullspaceID)
+    {
         ctx->set_api_version(kvrpcpb::APIVersion::V2);
         ctx->set_keyspace_id(task.keyspace_id);
     }
