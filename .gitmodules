@@ -7,6 +7,6 @@
 [submodule "third_party/libfiu"]
 	path = third_party/libfiu
 	url = https://github.com/albertito/libfiu.git
-[submodule "contrib/abseil-cpp"]
+[submodule "third_party/abseil-cpp"]
 	path = third_party/abseil-cpp
 	url = https://github.com/abseil/abseil-cpp.git
