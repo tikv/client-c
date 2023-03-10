@@ -26,7 +26,9 @@ enum ErrorCodes : int
     CoprocessorError = 15,
     TxnNotFound = 16,
     NonAsyncCommit = 17,
-    UnknownError = 18
+    KeyspaceNotEnabled = 18,
+    InternalError = 19,
+    UnknownError = 20
 };
 
 class Exception : public Poco::Exception

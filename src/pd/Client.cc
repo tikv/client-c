@@ -423,6 +423,43 @@ metapb::Store Client::getStore(uint64_t store_id)
     return response.store();
 }
 
+KeyspaceID Client::getKeyspaceID(const std::string & keyspace_name)
+{
+    keyspacepb::LoadKeyspaceRequest request{};
+    keyspacepb::LoadKeyspaceResponse response{};
+
+    request.set_allocated_header(requestHeader());
+    request.set_name(keyspace_name);
+
+    grpc::ClientContext context;
+
+    context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
+
+    auto status = leaderClient()->keyspace_stub->LoadKeyspace(&context, request, &response);
+    if (!status.ok())
+    {
+        std::string err_msg = ("get keyspace id failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
+        log->error(err_msg);
+        check_leader.store(true);
+        throw Exception(err_msg, GRPCErrorCode);
+    }
+
+    if (response.header().has_error())
+    {
+        std::string err_msg = ("get keyspace id failed: " + response.header().error().message());
+        log->error(err_msg);
+        throw Exception(err_msg, InternalError);
+    }
+
+    if (response.keyspace().state() != keyspacepb::KeyspaceState::ENABLED)
+    {
+        std::string err_msg = ("keyspace " + keyspace_name + " is not enabled");
+        log->error(err_msg);
+        throw Exception(err_msg, KeyspaceNotEnabled);
+    }
+    return response.keyspace().id();
+}
+
 bool Client::isClusterBootstrapped()
 {
     pdpb::IsBootstrappedRequest request{};
