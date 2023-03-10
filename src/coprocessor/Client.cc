@@ -114,7 +114,7 @@ std::vector<LocationKeyRanges> splitKeyRangesByLocations(
     return res;
 }
 
-std::vector<BatchCopTask> balanceBatchCopTasks(std::vector<BatchCopTask> && original_tasks, Poco::Logger * log)
+std::vector<BatchCopTask> balanceBatchCopTasks(kv::RegionCachePtr & cache, std::vector<BatchCopTask> && original_tasks, bool is_mpp, const kv::LabelFilter & label_filter, Poco::Logger * log)
 {
     if (original_tasks.empty())
     {
@@ -123,19 +123,39 @@ std::vector<BatchCopTask> balanceBatchCopTasks(std::vector<BatchCopTask> && orig
     }
 
     // Only one tiflash store
-    if (original_tasks.size() <= 1)
+    if (original_tasks.size() <= 1 && !is_mpp)
     {
         return std::move(original_tasks);
     }
 
     std::map<uint64_t, BatchCopTask> store_task_map;
-    for (const auto & task : original_tasks)
+    if (!is_mpp)
     {
-        auto task_store_id = task.region_infos[0].all_stores[0];
-        BatchCopTask new_batch_task;
-        new_batch_task.store_addr = task.store_addr;
-        new_batch_task.region_infos.emplace_back(task.region_infos[0]);
-        store_task_map[task_store_id] = new_batch_task;
+        for (const auto & task : original_tasks)
+        {
+            auto task_store_id = task.region_infos[0].all_stores[0];
+            BatchCopTask new_batch_task;
+            new_batch_task.store_addr = task.store_addr;
+            new_batch_task.store_id = task_store_id;
+            new_batch_task.region_infos.emplace_back(task.region_infos[0]);
+            store_task_map[task_store_id] = new_batch_task;
+        }
+    }
+    else
+    {
+        // todo: 1. filter alive stores. 2. background get all stores.
+        auto tiflash_stores = cache->getAllTiFlashStores(label_filter, /*exclude_tombstone =*/true);
+        std::string log_msg = "all tiflash stores: ";
+        for (const auto & store : tiflash_stores)
+        {
+            auto store_id = store.first;
+            BatchCopTask new_batch_task;
+            new_batch_task.store_addr = store.second.addr;
+            new_batch_task.store_id = store_id;
+            store_task_map[store_id] = new_batch_task;
+            log_msg += store.second.addr + "; ";
+        }
+        log->information(log_msg);
     }
 
     std::map<uint64_t, std::map<std::string, RegionInfo>> store_candidate_region_map;
@@ -144,9 +164,10 @@ std::vector<BatchCopTask> balanceBatchCopTasks(std::vector<BatchCopTask> && orig
     std::vector<RegionInfo> candidate_region_infos;
     for (const auto & task : original_tasks)
     {
-        // ignore index == 0
-        for (size_t index = 1; index < task.region_infos.size(); ++index)
+        for (size_t index = 0; index < task.region_infos.size(); ++index)
         {
+            if (index == 0 && !is_mpp)
+                continue;
             const auto & region_info = task.region_infos[index];
             // figure out the valid store num for each region
             size_t valid_store_num = 0;
@@ -287,10 +308,12 @@ std::vector<BatchCopTask> balanceBatchCopTasks(std::vector<BatchCopTask> && orig
 std::vector<BatchCopTask> buildBatchCopTasks(
     kv::Backoffer & bo,
     kv::Cluster * cluster,
+    bool is_mpp,
     bool is_partition_table_scan,
     const std::vector<int64_t> & physical_table_ids,
     const std::vector<KeyRanges> & ranges_for_each_physical_table,
     kv::StoreType store_type,
+    const kv::LabelFilter & label_filter,
     Logger * log)
 {
     int retry_num = 0;
@@ -329,7 +352,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         for (const auto & cop_task : cop_tasks)
         {
             // In order to avoid send copTask to unavailable TiFlash node, disable load_balance here.
-            auto rpc_context = cluster->region_cache->getRPCContext(bo, cop_task.region_id, store_type, false);
+            auto rpc_context = cluster->region_cache->getRPCContext(bo, cop_task.region_id, store_type, /*load_balance=*/false, label_filter);
             // When rpcCtx is nil, it's not only attributed to the miss region, but also
             // some TiFlash stores crash and can't be recovered.
             // That is not an error that can be easily recovered, so we regard this error
@@ -342,7 +365,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                 // Then `splitRegion` will reloads these regions.
                 continue;
             }
-            auto all_stores = cluster->region_cache->getAllValidTiFlashStores(bo, cop_task.region_id, rpc_context->store);
+            auto all_stores = cluster->region_cache->getAllValidTiFlashStores(bo, cop_task.region_id, rpc_context->store, label_filter);
             if (auto iter = store_task_map.find(rpc_context->addr); iter == store_task_map.end())
             {
                 BatchCopTask batch_cop_task;
@@ -397,23 +420,28 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         };
         if (log->getLevel() >= Poco::Message::PRIO_INFORMATION)
             log->information(tasks_to_str("Before region balance:", batch_cop_tasks));
-        batch_cop_tasks = details::balanceBatchCopTasks(std::move(batch_cop_tasks), log);
+        batch_cop_tasks = details::balanceBatchCopTasks(cache, std::move(batch_cop_tasks), is_mpp, label_filter, log);
         if (log->getLevel() >= Poco::Message::PRIO_INFORMATION)
             log->information(tasks_to_str("After region balance:", batch_cop_tasks));
         auto balance_end = std::chrono::steady_clock::now();
         balance_elapsed += std::chrono::duration_cast<std::chrono::milliseconds>(balance_end - balance_start).count();
 
         // For partition table, we need to move region info from task.region_infos to task.table_regions.
-        if (is_partition_table_scan) {
-            for (auto & task : batch_cop_tasks) {
+        if (is_partition_table_scan)
+        {
+            for (auto & task : batch_cop_tasks)
+            {
                 std::vector<pingcap::coprocessor::TableRegions> partition_table_regions(physical_table_ids.size());
-                for (const auto & region_info : task.region_infos) {
+                for (const auto & region_info : task.region_infos)
+                {
                     const auto partition_index = region_info.partition_index;
                     partition_table_regions[partition_index].physical_table_id = physical_table_ids[partition_index];
                     partition_table_regions[partition_index].region_infos.push_back(region_info);
                 }
-                for (const auto & partition_table_region : partition_table_regions) {
-                    if (partition_table_region.region_infos.empty()) {
+                for (const auto & partition_table_region : partition_table_regions)
+                {
+                    if (partition_table_region.region_infos.empty())
+                    {
                         continue;
                     }
                     task.table_regions.push_back(partition_table_region);
@@ -423,14 +451,9 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         }
         auto end = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-        if (elapsed >= 500) {
-            log->warning("buildBatchCopTasks takes too long. total elapsed: " + std::to_string(elapsed) + "ms" +
-                    ", build cop_task elapsed: " + std::to_string(cop_task_elapsed) + "ms" +
-                    ", build batch_cop_task elapsed: " + std::to_string(batch_cop_task_elapsed) + "ms" +
-                    ", balance elapsed: " + std::to_string(balance_elapsed) + "ms" +
-                    ", cop_task num: " + std::to_string(cop_tasks.size()) +
-                    ", batch_cop_task num: " + std::to_string(batch_cop_tasks.size()) +
-                    ", retry_num: " + std::to_string(retry_num));
+        if (elapsed >= 500)
+        {
+            log->warning("buildBatchCopTasks takes too long. total elapsed: " + std::to_string(elapsed) + "ms" + ", build cop_task elapsed: " + std::to_string(cop_task_elapsed) + "ms" + ", build batch_cop_task elapsed: " + std::to_string(batch_cop_task_elapsed) + "ms" + ", balance elapsed: " + std::to_string(balance_elapsed) + "ms" + ", cop_task num: " + std::to_string(cop_tasks.size()) + ", batch_cop_task num: " + std::to_string(batch_cop_tasks.size()) + ", retry_num: " + std::to_string(retry_num));
         }
         return batch_cop_tasks;
     }
@@ -460,7 +483,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
     std::shared_ptr<::coprocessor::Response> resp;
     try
     {
-        resp = client.sendReqToRegion(bo, req, kv::copTimeout, task.store_type, task.meta_data);
+        resp = client.sendReqToRegion(bo, req, tiflash_label_filter, kv::copTimeout, task.store_type, task.meta_data);
     }
     catch (Exception & e)
     {

@@ -116,4 +116,4 @@ TEST_F(TestWithMockKVRegionSplit, testSplitRegionScan)
     ASSERT_EQ(answer, 6);
 }
 
-} // namespace
+} // namespace pingcap::tests
