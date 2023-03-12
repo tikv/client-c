@@ -1,6 +1,7 @@
 #pragma once
 
 #include <pingcap/Config.h>
+#include <pingcap/pd/Keyspace.h>
 
 #include <string>
 #include <vector>
@@ -10,20 +11,9 @@
 #include <kvproto/enginepb.pb.h>
 #include <kvproto/pdpb.pb.h>
 #pragma GCC diagnostic pop
-#include <pingcap/Config.h>
 
-namespace pingcap
+namespace pingcap::pd
 {
-namespace pd
-{
-using KeyspaceID = uint32_t;
-
-enum : KeyspaceID
-{
-    // The size of KeyspaceID allocated for PD is 3 bytes.
-    // The NullspaceID is preserved for TiDB API V1 compatibility.
-    NullspaceID = 0xffffffff,
-};
 
 class IClient
 {
@@ -57,5 +47,4 @@ public:
 
 using ClientPtr = std::shared_ptr<IClient>;
 
-} // namespace pd
-} // namespace pingcap
+} // namespace pingcap::pd
