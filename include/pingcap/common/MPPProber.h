@@ -29,7 +29,7 @@ static constexpr size_t DETECT_RPC_TIMEOUT = 2;
 inline std::chrono::seconds getElapsed(const TimePoint & ago)
 {
     auto now = std::chrono::steady_clock::now();
-    return std::chrono::duration_cast<std::chrono::seconds>(ago - now);
+    return std::chrono::duration_cast<std::chrono::seconds>(now - ago);
 }
 
 
