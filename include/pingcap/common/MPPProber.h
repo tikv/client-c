@@ -70,7 +70,9 @@ public:
     void run();
     void stop();
 
+    // Return true is this store is alive, false if dead.
     bool isRecovery(const std::string & store_addr, const std::chrono::seconds & recovery_ttl);
+    // Tag store as dead.
     void add(const std::string & store_addr);
 
 private:

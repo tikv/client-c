@@ -19,7 +19,7 @@ public:
     explicit FixedThreadPool(size_t num_)
         : num(num_)
         , stopped(false) {}
-    ~FixedThreadPool() {}
+    ~FixedThreadPool() = default;
 
     void start();
 

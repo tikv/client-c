@@ -15,21 +15,23 @@ void FixedThreadPool::start()
 
 void FixedThreadPool::loop()
 {
-    Task task;
     while (true)
     {
-        std::unique_lock<std::mutex> lock(mu);
-        cond.wait(lock, [this] {
-                return !tasks.empty() || stopped;
-        });
+        Task task;
+        {
+            std::unique_lock<std::mutex> lock(mu);
+            cond.wait(lock, [this] {
+                    return !tasks.empty() || stopped;
+                    });
 
-        if (stopped)
-            return;
+            if (stopped)
+                return;
 
-        task = tasks.front();
-        tasks.pop();
+            task = tasks.front();
+            tasks.pop();
+        }
+        task();
     }
-    task();
 }
 
 void FixedThreadPool::enqueue(const Task & task)

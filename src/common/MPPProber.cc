@@ -119,7 +119,6 @@ void ProbeState::detectAndUpdateState(const std::chrono::seconds & detect_period
 
 bool detectStore(kv::RpcClientPtr & rpc_client, const std::string & store_addr, int rpc_timeout, Logger * log)
 {
-    // auto req = std::make_shared<::mpp::IsAliveRequest>;
     kv::RpcCall<::mpp::IsAliveRequest> rpc(std::make_shared<::mpp::IsAliveRequest>());
     try
     {
