@@ -9,7 +9,7 @@ namespace pingcap
 namespace common
 {
 
-bool MPPProber::isRecovery(const std::string & store_addr, size_t recovery_ttl)
+bool MPPProber::isRecovery(const std::string & store_addr, const std::chrono::seconds & recovery_ttl)
 {
     FailedStoreMap copy_failed_stores;
     {
@@ -21,10 +21,9 @@ bool MPPProber::isRecovery(const std::string & store_addr, size_t recovery_ttl)
         return true;
 
     {
-        auto now = std::chrono::steady_clock::now();
         std::lock_guard<std::mutex> lock(iter->second->state_lock);
-        auto recovery_elapsed = std::chrono::duration_cast<std::chrono::seconds>(iter->second->recovery_timepoint - now).count();
-        return iter->second->recovery_timepoint != INVALID_TIME_POINT && recovery_elapsed > recovery_ttl;
+        return iter->second->recovery_timepoint != INVALID_TIME_POINT &&
+            getElapsed(iter->second->recovery_timepoint) > recovery_ttl;
     }
 }
 
@@ -44,16 +43,16 @@ void MPPProber::add(const std::string & store_addr)
 
 void MPPProber::run()
 {
-    while (true)
+    while (!stopped.load())
     {
-        if (scan_interval < 1)
-        {
-            throw Exception("scan_interval is invalid", ErrorCodes::LogicalError);
-        }
         std::this_thread::sleep_for(std::chrono::seconds(scan_interval));
-
         scan();
     }
+}
+
+void MPPProber::stop()
+{
+    stopped.store(true);
 }
 
 void MPPProber::scan()
@@ -73,13 +72,11 @@ void MPPProber::scan()
 
         ele.second->detectAndUpdateState(detect_period, detect_rpc_timeout);
         
-        auto now = std::chrono::steady_clock::now();
         const auto & recovery_timepoint = ele.second->recovery_timepoint;
         if (recovery_timepoint != INVALID_TIME_POINT)
         {
             // Means this store is now alive.
-            auto recovery_elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - recovery_timepoint);
-            if (recovery_elapsed > std::chrono::duration_cast<std::chrono::seconds>(MAX_RECOVERY_TIME_LIMIT))
+            if (getElapsed(recovery_timepoint) > std::chrono::duration_cast<std::chrono::seconds>(MAX_RECOVERY_TIME_LIMIT))
             {
                 recovery_stores.push_back(ele.first);
             }
@@ -87,8 +84,7 @@ void MPPProber::scan()
         else
         {
             // Store is dead, we want to check if this store has not used for MAX_OBSOLET_TIME.
-            auto lookup_elapsed = std::chrono::duration_cast<std::chrono::seconds>(ele.second->last_lookup_timepoint - now);
-            if (lookup_elapsed > std::chrono::duration_cast<std::chrono::seconds>(MAX_OBSOLET_TIME_LIMIT))
+            if (getElapsed(ele.second->last_lookup_timepoint) > std::chrono::duration_cast<std::chrono::seconds>(MAX_OBSOLET_TIME_LIMIT))
                 recovery_stores.push_back(ele.first);
         }
         ele.second->state_lock.unlock();
@@ -103,8 +99,11 @@ void MPPProber::scan()
     }
 }
 
-void ProbeState::detectAndUpdateState(size_t detect_period, size_t detect_rpc_timeout)
+void ProbeState::detectAndUpdateState(const std::chrono::seconds & detect_period, size_t detect_rpc_timeout)
 {
+    if (getElapsed(last_detect_timepoint) < detect_period)
+        return;
+
     bool dead_store = detectStore(cluster->rpc_client, store_addr, detect_rpc_timeout, log);
     if (dead_store)
     {

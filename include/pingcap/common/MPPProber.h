@@ -22,9 +22,16 @@ using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 static constexpr TimePoint INVALID_TIME_POINT = std::chrono::steady_clock::time_point::max();
 static constexpr auto MAX_RECOVERY_TIME_LIMIT = std::chrono::minutes(15);
 static constexpr auto MAX_OBSOLET_TIME_LIMIT = std::chrono::hours(1);
-static constexpr size_t SCAN_INTERVAL = 1; // scan per 1s.
-static constexpr size_t DETECT_PERIOD = 3; // do real alive rpc per 3s
+static constexpr auto SCAN_INTERVAL = std::chrono::seconds(1); // scan per 1s.
+static constexpr auto DETECT_PERIOD = std::chrono::seconds(3); // do real alive rpc per 3s.
 static constexpr size_t DETECT_RPC_TIMEOUT = 2;
+
+inline std::chrono::seconds getElapsed(const TimePoint & ago)
+{
+    auto now = std::chrono::steady_clock::now();
+    return std::chrono::duration_cast<std::chrono::seconds>(ago - now);
+}
+
 
 bool detectStore(kv::RpcClientPtr & rpc_client, const std::string & store_addr, int rpc_timeout, Logger * log);
 
@@ -46,7 +53,7 @@ struct ProbeState
     TimePoint last_detect_timepoint;
     std::mutex state_lock;
 
-    void detectAndUpdateState(size_t detect_period, size_t detect_rpc_timeout);
+    void detectAndUpdateState(const std::chrono::seconds & detect_period, size_t detect_rpc_timeout);
 };
 
 class MPPProber
@@ -57,25 +64,27 @@ public:
         , scan_interval(SCAN_INTERVAL)
         , detect_period(DETECT_PERIOD)
         , detect_rpc_timeout(DETECT_RPC_TIMEOUT)
-        , log(&Logger::get("pingcap.MPPProber")) {}
+        , log(&Logger::get("pingcap.MPPProber"))
+        , stopped(false) {}
 
     void run();
+    void stop();
 
-    bool isRecovery(const std::string & store_addr, size_t recovery_ttl);
+    bool isRecovery(const std::string & store_addr, const std::chrono::seconds & recovery_ttl);
     void add(const std::string & store_addr);
 
 private:
     using FailedStoreMap = std::unordered_map<std::string, std::shared_ptr<ProbeState>>;
-    static const int MIN_SCAN_INTERVAL = 5;
 
     void scan();
     void detect();
     
     pingcap::kv::Cluster * cluster;
-    size_t scan_interval;
-    size_t detect_period;
+    std::chrono::seconds scan_interval;
+    std::chrono::seconds detect_period;
     size_t detect_rpc_timeout;
     Logger * log;
+    std::atomic<bool> stopped;
     FailedStoreMap failed_stores;
     std::mutex store_lock;
 };

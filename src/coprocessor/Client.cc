@@ -120,7 +120,7 @@ std::map<uint64_t, kv::Store> filterAliveStores(kv::Cluster * cluster, const std
     std::map<uint64_t, kv::Store> alive_stores;
     for (const auto & ele : stores)
     {
-        if (!cluster->mpp_prober->isRecovery(ele.second.addr, /*mpp_fail_ttl=*/60))
+        if (!cluster->mpp_prober->isRecovery(ele.second.addr, /*mpp_fail_ttl=*/std::chrono::seconds(60)))
             continue;
 
         if (!common::detectStore(cluster->rpc_client, ele.second.addr, /*rpc_timeout=*/2, log))
@@ -167,9 +167,9 @@ std::vector<BatchCopTask> balanceBatchCopTasks(kv::Cluster * cluster, kv::Region
             return msg;
         };
         auto tiflash_stores = cache->getAllTiFlashStores(label_filter, /*exclude_tombstone =*/true);
-        log->information("before filter alive stores: ", tiflash_stores);
+        log->information(stores_to_str("before filter alive stores: ", tiflash_stores));
         auto alive_tiflash_stores = filterAliveStores(cluster, tiflash_stores, log);
-        log->information("after filter alive stores: ", alive_tiflash_stores);
+        log->information(stores_to_str("after filter alive stores: ", alive_tiflash_stores));
         for (const auto & store : alive_tiflash_stores)
         {
             auto store_id = store.first;

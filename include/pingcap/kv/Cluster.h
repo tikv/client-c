@@ -64,6 +64,7 @@ struct Cluster
     // (e.g. background threads) that cluster object holds so as to exit elegantly.
     ~Cluster()
     {
+        mpp_prober->stop();
         thread_pool->stop();
     }
 
