@@ -104,8 +104,8 @@ void ProbeState::detectAndUpdateState(const std::chrono::seconds & detect_period
     if (getElapsed(last_detect_timepoint) < detect_period)
         return;
 
-    bool dead_store = detectStore(cluster->rpc_client, store_addr, detect_rpc_timeout, log);
-    if (dead_store)
+    bool is_alive = detectStore(cluster->rpc_client, store_addr, detect_rpc_timeout, log);
+    if (!is_alive)
     {
         log->debug("got dead store: " + store_addr);
         recovery_timepoint = INVALID_TIME_POINT;
