@@ -124,7 +124,10 @@ std::map<uint64_t, kv::Store> filterAliveStores(kv::Cluster * cluster, const std
             continue;
 
         if (!common::detectStore(cluster->rpc_client, ele.second.addr, /*rpc_timeout=*/2, log))
+        {
             cluster->mpp_prober->add(ele.second.addr);
+            continue;
+        }
 
         alive_stores.emplace(ele.first, ele.second);
     }
