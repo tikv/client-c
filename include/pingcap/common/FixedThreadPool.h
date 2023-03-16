@@ -18,7 +18,8 @@ public:
     using Task = std::function<void()>;
     explicit FixedThreadPool(size_t num_)
         : num(num_)
-        , stopped(false) {}
+        , stopped(false)
+    {}
     ~FixedThreadPool() = default;
 
     void start();

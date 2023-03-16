@@ -21,8 +21,8 @@ void FixedThreadPool::loop()
         {
             std::unique_lock<std::mutex> lock(mu);
             cond.wait(lock, [this] {
-                    return !tasks.empty() || stopped;
-                    });
+                return !tasks.empty() || stopped;
+            });
 
             if (stopped)
                 return;

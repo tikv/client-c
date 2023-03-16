@@ -1,8 +1,9 @@
+#include <kvproto/mpp.pb.h>
+#include <pingcap/Exception.h>
 #include <pingcap/common/MPPProber.h>
 #include <pingcap/kv/Cluster.h>
-#include <pingcap/Exception.h>
+
 #include <thread>
-#include <kvproto/mpp.pb.h>
 
 namespace pingcap
 {
@@ -22,8 +23,7 @@ bool MPPProber::isRecovery(const std::string & store_addr, const std::chrono::se
 
     {
         std::lock_guard<std::mutex> lock(iter->second->state_lock);
-        return iter->second->recovery_timepoint != INVALID_TIME_POINT &&
-            getElapsed(iter->second->recovery_timepoint) > recovery_ttl;
+        return iter->second->recovery_timepoint != INVALID_TIME_POINT && getElapsed(iter->second->recovery_timepoint) > recovery_ttl;
     }
 }
 
@@ -71,7 +71,7 @@ void MPPProber::scan()
             continue;
 
         ele.second->detectAndUpdateState(detect_period, detect_rpc_timeout);
-        
+
         const auto & recovery_timepoint = ele.second->recovery_timepoint;
         if (recovery_timepoint != INVALID_TIME_POINT)
         {

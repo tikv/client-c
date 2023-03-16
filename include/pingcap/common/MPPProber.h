@@ -4,9 +4,9 @@
 #include <pingcap/kv/Rpc.h>
 
 #include <chrono>
+#include <mutex>
 #include <string>
 #include <unordered_map>
-#include <mutex>
 
 
 namespace pingcap
@@ -43,7 +43,8 @@ struct ProbeState
         , log(&Logger::get("pingcap.ProbeState"))
         , recovery_timepoint(INVALID_TIME_POINT)
         , last_lookup_timepoint(INVALID_TIME_POINT)
-        , last_detect_timepoint(INVALID_TIME_POINT) {}
+        , last_detect_timepoint(INVALID_TIME_POINT)
+    {}
 
     std::string store_addr;
     pingcap::kv::Cluster * cluster;
@@ -65,7 +66,8 @@ public:
         , detect_period(DETECT_PERIOD)
         , detect_rpc_timeout(DETECT_RPC_TIMEOUT)
         , log(&Logger::get("pingcap.MPPProber"))
-        , stopped(false) {}
+        , stopped(false)
+    {}
 
     void run();
     void stop();
@@ -80,7 +82,7 @@ private:
 
     void scan();
     void detect();
-    
+
     pingcap::kv::Cluster * cluster;
     std::chrono::seconds scan_interval;
     std::chrono::seconds detect_period;
