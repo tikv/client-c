@@ -1,8 +1,8 @@
 #pragma once
 
+#include <pingcap/Config.h>
 #include <pingcap/common/FixedThreadPool.h>
 #include <pingcap/common/MPPProber.h>
-#include <pingcap/Config.h>
 #include <pingcap/kv/LockResolver.h>
 #include <pingcap/kv/Rpc.h>
 #include <pingcap/pd/Client.h>

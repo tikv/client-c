@@ -30,7 +30,7 @@ void Cluster::startBackgourndTasks()
 {
     thread_pool->start();
     thread_pool->enqueue([this] {
-            this->mpp_prober->run();
+        this->mpp_prober->run();
     });
 }
 
