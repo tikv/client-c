@@ -170,6 +170,9 @@ std::vector<BatchCopTask> balanceBatchCopTasks(kv::Cluster * cluster, kv::Region
         log->information(stores_to_str("before filter alive stores: ", tiflash_stores));
         auto alive_tiflash_stores = filterAliveStores(cluster, tiflash_stores, log);
         log->information(stores_to_str("after filter alive stores: ", alive_tiflash_stores));
+        if (alive_tiflash_stores.empty())
+            throw Exception("no alive tiflash, cannot dispatch BatchCopTask", ErrorCodes::CoprocessorError);
+
         for (const auto & store : alive_tiflash_stores)
         {
             auto store_id = store.first;
