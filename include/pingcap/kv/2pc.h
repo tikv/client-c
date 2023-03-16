@@ -188,7 +188,7 @@ private:
         {
             if constexpr (action == ActionCommit)
             {
-                fiu_do_on("all commit fail", return );
+                fiu_do_on("all commit fail", return);
             }
             doActionOnBatches<action>(bo, std::vector<BatchKeys>(batches.begin(), batches.begin() + 1));
             batches = std::vector<BatchKeys>(batches.begin() + 1, batches.end());

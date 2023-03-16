@@ -26,6 +26,9 @@ struct Cluster
     pd::OraclePtr oracle;
 
     LockResolverPtr lock_resolver;
+
+    ::kvrpcpb::APIVersion api_version = ::kvrpcpb::APIVersion::V1;
+
     std::unique_ptr<common::ThreadPool> thread_pool;
     std::unique_ptr<common::MPPProber> mpp_prober;
 
@@ -44,6 +47,7 @@ struct Cluster
         , rpc_client(std::make_unique<RpcClient>(config))
         , oracle(std::make_unique<pd::Oracle>(pd_client, std::chrono::milliseconds(oracle_update_interval)))
         , lock_resolver(std::make_unique<LockResolver>(this))
+        , api_version(config.api_version)
         , thread_pool(std::make_unique<common::ThreadPool>(1))
         , mpp_prober(std::make_unique<common::MPPProber>())
     {

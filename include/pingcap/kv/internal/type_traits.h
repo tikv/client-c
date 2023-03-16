@@ -15,21 +15,24 @@ struct RpcTypeTraits
 };
 
 // Note that this macro is only applicable for grpc unary call
-#define PINGCAP_DEFINE_TRAITS(NAMESPACE, NAME, METHOD)            \
-    template <>                                                   \
-    struct RpcTypeTraits<::NAMESPACE::NAME##Request>              \
-    {                                                             \
-        using RequestType = ::NAMESPACE::NAME##Request;           \
-        using ResultType = ::NAMESPACE::NAME##Response;           \
-        static const char * err_msg() { return #NAME " Failed"; } \
-        static ::grpc::Status doRPCCall(                          \
-            grpc::ClientContext * context,                        \
-            std::shared_ptr<KvConnClient> client,                 \
-            const RequestType & req,                              \
-            ResultType * res)                                     \
-        {                                                         \
-            return client->stub->METHOD(context, req, res);       \
-        }                                                         \
+#define PINGCAP_DEFINE_TRAITS(NAMESPACE, NAME, METHOD)      \
+    template <>                                             \
+    struct RpcTypeTraits<::NAMESPACE::NAME##Request>        \
+    {                                                       \
+        using RequestType = ::NAMESPACE::NAME##Request;     \
+        using ResultType = ::NAMESPACE::NAME##Response;     \
+        static const char * err_msg()                       \
+        {                                                   \
+            return #NAME " Failed";                         \
+        }                                                   \
+        static ::grpc::Status doRPCCall(                    \
+            grpc::ClientContext * context,                  \
+            std::shared_ptr<KvConnClient> client,           \
+            const RequestType & req,                        \
+            ResultType * res)                               \
+        {                                                   \
+            return client->stub->METHOD(context, req, res); \
+        }                                                   \
     };
 
 PINGCAP_DEFINE_TRAITS(kvrpcpb, SplitRegion, SplitRegion)

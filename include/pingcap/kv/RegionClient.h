@@ -37,12 +37,21 @@ struct RegionClient
 
     // This method send a request to region, but is NOT Thread-Safe !!
     template <typename T>
-    auto sendReqToRegion(Backoffer & bo, std::shared_ptr<T> req, int timeout = dailTimeout, StoreType store_type = StoreType::TiKV, kv::GRPCMetaData meta_data = {})
+    auto sendReqToRegion(Backoffer & bo,
+                         std::shared_ptr<T> req,
+                         const LabelFilter & tiflash_label_filter = kv::labelFilterInvalid,
+                         int timeout = dailTimeout,
+                         StoreType store_type = StoreType::TiKV,
+                         kv::GRPCMetaData meta_data = {})
     {
         RpcCall<T> rpc(req);
+        if (store_type == kv::StoreType::TiFlash && tiflash_label_filter == kv::labelFilterInvalid)
+        {
+            throw Exception("should setup proper label_filter for tiflash");
+        }
         for (;;)
         {
-            RPCContextPtr ctx = cluster->region_cache->getRPCContext(bo, region_id, store_type, true);
+            RPCContextPtr ctx = cluster->region_cache->getRPCContext(bo, region_id, store_type, /*load_balance=*/true, tiflash_label_filter);
             if (ctx == nullptr)
             {
                 // If the region is not found in cache, it must be out
@@ -52,7 +61,7 @@ struct RegionClient
                 throw Exception("Region epoch not match after retries: Region " + region_id.toString() + " not in region cache.", RegionEpochNotMatch);
             }
             const auto & store_addr = ctx->addr;
-            rpc.setCtx(ctx);
+            rpc.setCtx(ctx, cluster->api_version);
             try
             {
                 cluster->rpc_client->sendRequest(store_addr, rpc, timeout, meta_data);

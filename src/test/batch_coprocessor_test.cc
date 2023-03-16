@@ -144,6 +144,7 @@ TEST_F(TestBatchCoprocessor, BuildTask1)
             table_ids,
             ranges_for_each_physical_table,
             kv::StoreType::TiKV,
+            kv::labelFilterNoTiFlashWriteNode,
             log);
 
         // Only 1 store, so only 1 batch cop task is generated
@@ -190,6 +191,7 @@ TEST_F(TestBatchCoprocessor, BuildTaskPartitionTable)
         table_ids,
         ranges_for_each_physical_table,
         kv::StoreType::TiKV,
+        kv::labelFilterNoTiFlashWriteNode,
         log);
 
     // Only 1 store, so only 1 batch cop task is generated
@@ -224,7 +226,7 @@ TEST_F(TestBatchCoprocessor, BuildTaskPartitionTable)
     EXPECT_EQ(batch_cop_task->table_regions[1].region_infos[1].partition_index, 1);
     EXPECT_KEY_RANGES_EQ(batch_cop_task->table_regions[1].region_infos[1].ranges, expect_ranges3);
 }
- 
+
 TEST_F(TestBatchCoprocessor, BuildTask3)
 {
     Backoffer bo(copBuildTaskMaxBackoff);
@@ -260,6 +262,7 @@ TEST_F(TestBatchCoprocessor, BuildTask3)
             table_ids,
             ranges_for_each_physical_table,
             kv::StoreType::TiKV,
+            kv::labelFilterNoTiFlashWriteNode,
             log);
 
         // Only 1 store, so only 1 batch cop task is generated

@@ -10,11 +10,21 @@
 #include <kvproto/enginepb.pb.h>
 #include <kvproto/pdpb.pb.h>
 #pragma GCC diagnostic pop
+#include <pingcap/Config.h>
 
 namespace pingcap
 {
 namespace pd
 {
+using KeyspaceID = uint32_t;
+
+enum : KeyspaceID
+{
+    // The size of KeyspaceID allocated for PD is 3 bytes.
+    // The NullspaceID is preserved for TiDB API V1 compatibility.
+    NullspaceID = 0xffffffff,
+};
+
 class IClient
 {
 public:
@@ -35,6 +45,8 @@ public:
     virtual std::vector<metapb::Store> getAllStores(bool exclude_tombstone) = 0;
 
     virtual uint64_t getGCSafePoint() = 0;
+
+    virtual KeyspaceID getKeyspaceID(const std::string & keyspace_name) = 0;
 
     virtual void update(const std::vector<std::string> & addrs, const ClusterConfig & config_) = 0;
 
