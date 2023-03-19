@@ -23,6 +23,7 @@ bool MPPProber::isRecovery(const std::string & store_addr, const std::chrono::se
 
     {
         std::lock_guard<std::mutex> lock(iter->second->state_lock);
+        iter->second->last_lookup_timepoint = std::chrono::steady_clock::now();
         return iter->second->recovery_timepoint != INVALID_TIME_POINT && getElapsed(iter->second->recovery_timepoint) > recovery_ttl;
     }
 }
@@ -86,7 +87,8 @@ void MPPProber::scan()
         else
         {
             // Store is dead, we want to check if this store has not used for MAX_OBSOLET_TIME.
-            if (getElapsed(ele.second->last_lookup_timepoint) > std::chrono::duration_cast<std::chrono::seconds>(MAX_OBSOLET_TIME_LIMIT))
+            if (ele.second->last_lookup_timepoint != INVALID_TIME_POINT &&
+                    getElapsed(ele.second->last_lookup_timepoint) > std::chrono::duration_cast<std::chrono::seconds>(MAX_OBSOLET_TIME_LIMIT))
                 recovery_stores.push_back(ele.first);
         }
         ele.second->state_lock.unlock();
@@ -103,7 +105,7 @@ void MPPProber::scan()
 
 void ProbeState::detectAndUpdateState(const std::chrono::seconds & detect_period, size_t detect_rpc_timeout)
 {
-    if (getElapsed(last_detect_timepoint) < detect_period)
+    if (last_detect_timepoint != INVALID_TIME_POINT && getElapsed(last_detect_timepoint) < detect_period)
         return;
 
     last_detect_timepoint = std::chrono::steady_clock::now();
