@@ -33,7 +33,9 @@ void MPPProber::add(const std::string & store_addr)
     auto iter = failed_stores.find(store_addr);
     if (iter == failed_stores.end())
     {
-        failed_stores[store_addr] = std::make_shared<ProbeState>(store_addr, cluster);
+        auto state = std::make_shared<ProbeState>(store_addr, cluster);
+        state->last_lookup_timepoint = std::chrono::steady_clock::now();
+        failed_stores[store_addr] = state;
     }
     else
     {
@@ -104,6 +106,7 @@ void ProbeState::detectAndUpdateState(const std::chrono::seconds & detect_period
     if (getElapsed(last_detect_timepoint) < detect_period)
         return;
 
+    last_detect_timepoint = std::chrono::steady_clock::now();
     bool is_alive = detectStore(cluster->rpc_client, store_addr, detect_rpc_timeout, log);
     if (!is_alive)
     {
