@@ -115,7 +115,26 @@ std::vector<LocationKeyRanges> splitKeyRangesByLocations(
     return res;
 }
 
-std::vector<BatchCopTask> balanceBatchCopTasks(kv::RegionCachePtr & cache, std::vector<BatchCopTask> && original_tasks, bool is_mpp, const kv::LabelFilter & label_filter, Poco::Logger * log)
+std::map<uint64_t, kv::Store> filterAliveStores(kv::Cluster * cluster, const std::map<uint64_t, kv::Store> & stores, Logger * log)
+{
+    std::map<uint64_t, kv::Store> alive_stores;
+    for (const auto & ele : stores)
+    {
+        if (!cluster->mpp_prober->isRecovery(ele.second.addr, /*mpp_fail_ttl=*/std::chrono::seconds(60)))
+            continue;
+
+        if (!common::detectStore(cluster->rpc_client, ele.second.addr, /*rpc_timeout=*/2, log))
+        {
+            cluster->mpp_prober->add(ele.second.addr);
+            continue;
+        }
+
+        alive_stores.emplace(ele.first, ele.second);
+    }
+    return alive_stores;
+}
+
+std::vector<BatchCopTask> balanceBatchCopTasks(kv::Cluster * cluster, kv::RegionCachePtr & cache, std::vector<BatchCopTask> && original_tasks, bool is_mpp, const kv::LabelFilter & label_filter, Poco::Logger * log)
 {
     if (original_tasks.empty())
     {
@@ -144,19 +163,27 @@ std::vector<BatchCopTask> balanceBatchCopTasks(kv::RegionCachePtr & cache, std::
     }
     else
     {
-        // todo: 1. filter alive stores. 2. background get all stores.
+        auto stores_to_str = [](const std::string_view prefix, const std::map<uint64_t, kv::Store> & stores) -> std::string {
+            std::string msg(prefix);
+            for (const auto & ele : stores)
+                msg += " " + ele.second.addr;
+            return msg;
+        };
         auto tiflash_stores = cache->getAllTiFlashStores(label_filter, /*exclude_tombstone =*/true);
-        std::string log_msg = "all tiflash stores: ";
-        for (const auto & store : tiflash_stores)
+        log->information(stores_to_str("before filter alive stores: ", tiflash_stores));
+        auto alive_tiflash_stores = filterAliveStores(cluster, tiflash_stores, log);
+        log->information(stores_to_str("after filter alive stores: ", alive_tiflash_stores));
+        if (alive_tiflash_stores.empty())
+            throw Exception("no alive tiflash, cannot dispatch BatchCopTask", ErrorCodes::CoprocessorError);
+
+        for (const auto & store : alive_tiflash_stores)
         {
             auto store_id = store.first;
             BatchCopTask new_batch_task;
             new_batch_task.store_addr = store.second.addr;
             new_batch_task.store_id = store_id;
             store_task_map[store_id] = new_batch_task;
-            log_msg += store.second.addr + "; ";
         }
-        log->information(log_msg);
     }
 
     std::map<uint64_t, std::map<std::string, RegionInfo>> store_candidate_region_map;
@@ -423,7 +450,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         };
         if (log->getLevel() >= Poco::Message::PRIO_INFORMATION)
             log->information(tasks_to_str("Before region balance:", batch_cop_tasks));
-        batch_cop_tasks = details::balanceBatchCopTasks(cache, std::move(batch_cop_tasks), is_mpp, label_filter, log);
+        batch_cop_tasks = details::balanceBatchCopTasks(cluster, cache, std::move(batch_cop_tasks), is_mpp, label_filter, log);
         if (log->getLevel() >= Poco::Message::PRIO_INFORMATION)
             log->information(tasks_to_str("After region balance:", batch_cop_tasks));
         auto balance_end = std::chrono::steady_clock::now();
