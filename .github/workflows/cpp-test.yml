@@ -56,6 +56,6 @@ jobs:
           export POCO_INSTALL_PATH=~/pocoinstall/v1_12_4
           export GRPC_INSTALL_PATH=~/grpcinstall/v1_44_0
           export PATH="$GRPC_INSTALL_PATH/bin:$PATH"
-          # rm -rf build && mkdir build && pushd build \
-          #   && cmake .. -DCMAKE_PREFIX_PATH=$GRPC_INSTALL_PATH && make \
-          #   && popd && rm -rf build
+          rm -rf build && mkdir build && pushd build \
+            && cmake .. -DCMAKE_PREFIX_PATH=$GRPC_INSTALL_PATH && make \
+            && popd && rm -rf build
