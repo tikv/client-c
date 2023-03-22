@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          submodules: 'true'
       - name: Install dependencies
         run: sudo apt install -y cmake clang libclang-dev llvm llvm-dev libssl-dev
       
