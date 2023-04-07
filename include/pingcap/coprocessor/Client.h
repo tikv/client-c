@@ -178,14 +178,14 @@ public:
     std::pair<Result, bool> nonBlockingNext()
     {
         std::unique_lock<std::mutex> lk(results_mutex);
-        nextImpl();
+        return nextImpl();
     }
 
     std::pair<Result, bool> next()
     {
         std::unique_lock<std::mutex> lk(results_mutex);
         cond_var.wait(lk, [this] { return unfinished_thread == 0 || cancelled || !results.empty(); });
-        nextImpl();
+        return nextImpl();
     }
 
 private:
