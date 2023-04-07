@@ -157,10 +157,8 @@ public:
         cond_var.notify_all();
     }
 
-    std::pair<Result, bool> next()
+    std::pair<Result, bool> nextImpl()
     {
-        std::unique_lock<std::mutex> lk(results_mutex);
-        cond_var.wait(lk, [this] { return unfinished_thread == 0 || cancelled || !results.empty(); });
         if (cancelled)
         {
             return std::make_pair(Result(), false);
@@ -175,6 +173,19 @@ public:
         {
             return std::make_pair(Result(), false);
         }
+    }
+
+    std::pair<Result, bool> nonBlockingNext()
+    {
+        std::unique_lock<std::mutex> lk(results_mutex);
+        nextImpl();
+    }
+
+    std::pair<Result, bool> next()
+    {
+        std::unique_lock<std::mutex> lk(results_mutex);
+        cond_var.wait(lk, [this] { return unfinished_thread == 0 || cancelled || !results.empty(); });
+        nextImpl();
     }
 
 private:
