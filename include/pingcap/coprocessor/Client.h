@@ -104,6 +104,7 @@ public:
     {
         std::shared_ptr<::coprocessor::Response> resp;
         Exception error;
+        bool finished;
 
         Result() = default;
         explicit Result(std::shared_ptr<::coprocessor::Response> resp_)
@@ -111,6 +112,9 @@ public:
         {}
         explicit Result(const Exception & err)
             : error(err)
+        {}
+        explicit Result(bool finished_)
+            : finished(finished_)
         {}
 
         const std::string & data() const { return resp->data(); }
@@ -168,6 +172,10 @@ public:
             auto ret = std::make_pair(results.front(), true);
             results.pop();
             return ret;
+        }
+        else if (unfinished_thread == 0)
+        {
+            return {Result(true), false};
         }
         else
         {
