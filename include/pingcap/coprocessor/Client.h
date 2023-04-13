@@ -104,7 +104,7 @@ public:
     {
         std::shared_ptr<::coprocessor::Response> resp;
         Exception error;
-        bool finished;
+        bool finished{false};
 
         Result() = default;
         explicit Result(std::shared_ptr<::coprocessor::Response> resp_)
