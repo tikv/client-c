@@ -24,6 +24,8 @@ struct ClusterConfig
     std::string key_path;
     ::kvrpcpb::APIVersion api_version = ::kvrpcpb::APIVersion::V1;
 
+    std::function<std::vector<std::unique_ptr<::grpc::experimental::ClientInterceptorFactoryInterface>>()> get_client_interceptors;
+
     ClusterConfig() = default;
 
     ClusterConfig(const std::string & engine_key_,
