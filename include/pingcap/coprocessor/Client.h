@@ -165,7 +165,7 @@ public:
     {
         if (cancelled)
         {
-            return std::make_pair(Result(), false);
+            return {Result(true), false};
         }
         if (!results.empty())
         {
@@ -179,7 +179,7 @@ public:
         }
         else
         {
-            return std::make_pair(Result(), false);
+            return {Result(), false};
         }
     }
 
