@@ -104,6 +104,7 @@ public:
     {
         std::shared_ptr<::coprocessor::Response> resp;
         Exception error;
+        bool finished{false};
 
         Result() = default;
         explicit Result(std::shared_ptr<::coprocessor::Response> resp_)
@@ -111,6 +112,9 @@ public:
         {}
         explicit Result(const Exception & err)
             : error(err)
+        {}
+        explicit Result(bool finished_)
+            : finished(finished_)
         {}
 
         const std::string & data() const { return resp->data(); }
@@ -157,13 +161,11 @@ public:
         cond_var.notify_all();
     }
 
-    std::pair<Result, bool> next()
+    std::pair<Result, bool> nextImpl()
     {
-        std::unique_lock<std::mutex> lk(results_mutex);
-        cond_var.wait(lk, [this] { return unfinished_thread == 0 || cancelled || !results.empty(); });
         if (cancelled)
         {
-            return std::make_pair(Result(), false);
+            return {Result(true), false};
         }
         if (!results.empty())
         {
@@ -171,10 +173,27 @@ public:
             results.pop();
             return ret;
         }
+        else if (unfinished_thread == 0)
+        {
+            return {Result(true), false};
+        }
         else
         {
-            return std::make_pair(Result(), false);
+            return {Result(), false};
         }
+    }
+
+    std::pair<Result, bool> nonBlockingNext()
+    {
+        std::unique_lock<std::mutex> lk(results_mutex);
+        return nextImpl();
+    }
+
+    std::pair<Result, bool> next()
+    {
+        std::unique_lock<std::mutex> lk(results_mutex);
+        cond_var.wait(lk, [this] { return unfinished_thread == 0 || cancelled || !results.empty(); });
+        return nextImpl();
     }
 
 private:
