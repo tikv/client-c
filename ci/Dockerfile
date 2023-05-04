@@ -1,4 +1,4 @@
-FROM ubuntu:21.04
+FROM ubuntu:23.04
 
 RUN apt update -y \
  && apt install -y cmake build-essential \
