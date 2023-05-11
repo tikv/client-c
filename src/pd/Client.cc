@@ -322,7 +322,7 @@ uint64_t Client::getGCSafePoint()
 
 uint64_t Client::getGCSafePointV2(KeyspaceID keyspaceID)
 {
-    log->information("[test-yjy] client-c getGCSafePointV2 "+std::to_string(keyspaceID))
+    log->information("[test-yjy] client-c getGCSafePointV2 "+std::to_string(keyspaceID));
     pdpb::GetGCSafePointRequest request{};
     pdpb::GetGCSafePointResponse response{};
     request.set_allocated_header(requestHeader());
