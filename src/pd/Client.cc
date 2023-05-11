@@ -323,19 +323,20 @@ uint64_t Client::getGCSafePoint()
 uint64_t Client::getGCSafePointV2(KeyspaceID keyspaceID)
 {
     log->information("[test-yjy] client-c getGCSafePointV2 "+std::to_string(keyspaceID));
-    pdpb::GetGCSafePointRequest request{};
+    pdpb::GetGCSafePointV2Request request{};
     pdpb::GetGCSafePointResponse response{};
     request.set_allocated_header(requestHeader());
+    request.set_keyspace_id(keyspaceID);
     std::string err_msg;
 
     grpc::ClientContext context;
 
     context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
 
-    auto status = leaderClient()->stub->GetGCSafePoint(&context, request, &response);
+    auto status = leaderClient()->stub->GetGCSafePointV2(&context, request, &response);
     if (!status.ok())
     {
-        err_msg = "get safe point failed: " + std::to_string(status.error_code()) + ": " + status.error_message();
+        err_msg = "get keyspace safe point failed: " + std::to_string(status.error_code()) + ": " + status.error_message();
         log->error(err_msg);
         check_leader.store(true);
         throw Exception(err_msg, status.error_code());
