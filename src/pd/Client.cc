@@ -326,7 +326,7 @@ uint64_t Client::getGCSafePointV2(KeyspaceID keyspaceID)
     pdpb::GetGCSafePointRequest request{};
     pdpb::GetGCSafePointResponse response{};
     request.set_allocated_header(requestHeader());
-    request.set_keyspace_id(keyspaceID);
+    //request.set_keyspace_id(keyspaceID);
     std::string err_msg;
 
     grpc::ClientContext context;
