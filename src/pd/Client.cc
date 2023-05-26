@@ -320,6 +320,30 @@ uint64_t Client::getGCSafePoint()
     return response.safe_point();
 }
 
+uint64_t Client::getGCSafePointV2(KeyspaceID keyspaceID)
+{
+    log->information("[test-yjy] client-c getGCSafePointV2 "+std::to_string(keyspaceID));
+    pdpb::GetGCSafePointV2Request request{};
+    pdpb::GetGCSafePointV2Response response{};
+    request.set_allocated_header(requestHeader());
+    request.set_keyspace_id(keyspaceID);
+    std::string err_msg;
+
+    grpc::ClientContext context;
+
+    context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
+
+    auto status = leaderClient()->stub->GetGCSafePointV2(&context, request, &response);
+    if (!status.ok())
+    {
+        err_msg = "get keyspace safe point failed: " + std::to_string(status.error_code()) + ": " + status.error_message();
+        log->error(err_msg);
+        check_leader.store(true);
+        throw Exception(err_msg, status.error_code());
+    }
+    return response.safe_point();
+}
+
 std::pair<metapb::Region, metapb::Peer> Client::getRegionByKey(const std::string & key)
 {
     pdpb::GetRegionRequest request{};
