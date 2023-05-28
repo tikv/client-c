@@ -128,7 +128,9 @@ RegionPtr RegionCache::loadRegionByID(Backoffer & bo, uint64_t region_id)
     {
         try
         {
-            auto [meta, leader] = pd_client->getRegionByID(region_id);
+            auto resp = pd_client->getRegionByID(region_id);
+            const auto & meta = resp.region();
+            const auto & leader = resp.leader();
 
             // If the region is not found in cache, it must be out of date and already be cleaned up. We can
             // skip the RPC by returning RegionError directly.
@@ -141,7 +143,7 @@ RegionPtr RegionCache::loadRegionByID(Backoffer & bo, uint64_t region_id)
                 throw Exception("Receive Region with no peer", RegionUnavailable);
             }
 
-            RegionPtr region = std::make_shared<Region>(meta, meta.peers(0));
+            RegionPtr region = std::make_shared<Region>(meta, meta.peers(0), std::vector<metapb::Peer>(resp.pending_peers().begin(), resp.pending_peers().end()));
             if (leader.IsInitialized())
             {
                 region->switchPeer(leader.id());
@@ -162,7 +164,9 @@ RegionPtr RegionCache::loadRegionByKey(Backoffer & bo, const std::string & key)
     {
         try
         {
-            auto [meta, leader] = pd_client->getRegionByKey(key);
+            auto resp = pd_client->getRegionByKey(key);
+            const auto & meta = resp.region();
+            const auto & leader = resp.leader();
             if (!meta.IsInitialized())
             {
                 throw Exception("region not found for region key " + Redact::keyToDebugString(key), RegionUnavailable);
@@ -171,7 +175,7 @@ RegionPtr RegionCache::loadRegionByKey(Backoffer & bo, const std::string & key)
             {
                 throw Exception("Receive Region with no peer", RegionUnavailable);
             }
-            RegionPtr region = std::make_shared<Region>(meta, meta.peers(0));
+            RegionPtr region = std::make_shared<Region>(meta, meta.peers(0), std::vector<metapb::Peer>(resp.pending_peers().begin(), resp.pending_peers().end()));
             if (leader.IsInitialized())
             {
                 region->switchPeer(leader.id());
@@ -234,14 +238,15 @@ Store RegionCache::getStore(Backoffer & bo, uint64_t id)
     return reloadStore(store);
 }
 
-std::vector<uint64_t> RegionCache::getAllValidTiFlashStores(Backoffer & bo, const RegionVerID & region_id, const Store & current_store, const LabelFilter & label_filter)
+std::pair<std::vector<uint64_t>, std::vector<uint64_t>> RegionCache::getAllValidTiFlashStores(Backoffer & bo, const RegionVerID & region_id, const Store & current_store, const LabelFilter & label_filter)
 {
     std::vector<uint64_t> all_stores;
+    std::vector<uint64_t> non_pending_stores;
     RegionPtr cached_region = getRegionByIDFromCache(region_id);
     if (cached_region == nullptr)
     {
         all_stores.emplace_back(current_store.id);
-        return all_stores;
+        return std::make_pair(all_stores, non_pending_stores);
     }
 
     // Get others tiflash store ids
@@ -250,8 +255,19 @@ std::vector<uint64_t> RegionCache::getAllValidTiFlashStores(Backoffer & bo, cons
     for (const auto & peer : peers)
     {
         all_stores.emplace_back(peer.store_id());
+        bool is_pending = false;
+        for (const auto & pending : cached_region->pending_peers)
+        {
+            if (pending.id() == peer.id() && pending.store_id() == peer.store_id())
+            {
+                is_pending = true;
+                break;
+            }
+        }
+        if (!is_pending) 
+            non_pending_stores.emplace_back(peer.store_id());
     }
-    return all_stores;
+    return std::make_pair(all_stores, non_pending_stores);
 }
 
 RegionPtr RegionCache::searchCachedRegion(const std::string & key)

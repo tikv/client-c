@@ -32,11 +32,9 @@ public:
 
     virtual uint64_t getTS() = 0;
 
-    // return region meta and leader peer.
-    virtual std::pair<metapb::Region, metapb::Peer> getRegionByKey(const std::string & key) = 0;
+    virtual pdpb::GetRegionResponse getRegionByKey(const std::string & key) = 0;
 
-    // return region meta and leader peer.
-    virtual std::pair<metapb::Region, metapb::Peer> getRegionByID(uint64_t region_id) = 0;
+    virtual pdpb::GetRegionResponse getRegionByID(uint64_t region_id) = 0;
 
     virtual metapb::Store getStore(uint64_t store_id) = 0;
 
