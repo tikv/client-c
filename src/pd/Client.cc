@@ -335,6 +335,7 @@ uint64_t Client::getGCSafePointV2(KeyspaceID keyspace_id)
     auto status = leaderClient()->stub->GetGCSafePointV2(&context, request, &response);
     if (!status.ok())
     {
+        err_msg = "get keyspace_id:"+ std::to_string(keyspace_id) +" safe point failed: " + std::to_string(status.error_code()) + ": " + status.error_message();
         log->error(err_msg);
         check_leader.store(true);
         throw Exception(err_msg, status.error_code());
