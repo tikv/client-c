@@ -46,6 +46,9 @@ public:
 
     virtual uint64_t getGCSafePoint() = 0;
 
+    // Return the gc safe point of given keyspace_id.
+    virtual uint64_t getGCSafePointV2(KeyspaceID keyspace_id) = 0;
+
     virtual KeyspaceID getKeyspaceID(const std::string & keyspace_name) = 0;
 
     virtual void update(const std::vector<std::string> & addrs, const ClusterConfig & config_) = 0;
