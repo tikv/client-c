@@ -21,7 +21,7 @@ public:
 
     uint64_t getGCSafePoint() override { return 10000000; }
 
-    uint64_t getGCSafePointV2(KeyspaceID keyspace_id) override { return 10000000; }
+    uint64_t getGCSafePointV2(KeyspaceID) override { return 10000000; }
 
     uint64_t getTS() override { return Clock::now().time_since_epoch().count(); }
 
