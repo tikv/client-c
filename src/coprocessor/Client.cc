@@ -402,6 +402,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                 cluster->region_cache->dropRegion(cop_task.region_id);
 
             // Use non_pending_stores to dispatch this task, so no need to wait tiflash replica sync from tikv.
+            // If all stores are in pending state, we use `all_stores` as fallback.
             if (!non_pending_stores.empty())
                 all_stores = non_pending_stores;
 

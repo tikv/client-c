@@ -85,7 +85,6 @@ struct Region
 {
     metapb::Region meta;
     metapb::Peer leader_peer;
-    // This is just an indicator, maybe empty.
     std::vector<metapb::Peer> pending_peers;
     std::atomic_uint work_tiflash_peer_idx;
 
