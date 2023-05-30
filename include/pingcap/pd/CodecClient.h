@@ -1,11 +1,11 @@
 #pragma once
 
+#include <kvproto/pdpb.pb.h>
 #include <pingcap/Config.h>
 #include <pingcap/Exception.h>
 #include <pingcap/pd/Client.h>
 
 #include <sstream>
-#include "pdpb.pb.h"
 
 namespace pingcap
 {
