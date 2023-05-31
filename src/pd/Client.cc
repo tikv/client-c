@@ -343,7 +343,7 @@ uint64_t Client::getGCSafePointV2(KeyspaceID keyspace_id)
     return response.safe_point();
 }
 
-std::pair<metapb::Region, metapb::Peer> Client::getRegionByKey(const std::string & key)
+pdpb::GetRegionResponse Client::getRegionByKey(const std::string & key)
 {
     pdpb::GetRegionRequest request{};
     pdpb::GetRegionResponse response{};
@@ -364,12 +364,10 @@ std::pair<metapb::Region, metapb::Peer> Client::getRegionByKey(const std::string
         throw Exception(err_msg, GRPCErrorCode);
     }
 
-    if (!response.has_region())
-        return {};
-    return std::make_pair(response.region(), response.leader());
+    return response;
 }
 
-std::pair<metapb::Region, metapb::Peer> Client::getRegionByID(uint64_t region_id)
+pdpb::GetRegionResponse Client::getRegionByID(uint64_t region_id)
 {
     pdpb::GetRegionByIDRequest request{};
     pdpb::GetRegionResponse response{};
@@ -390,10 +388,7 @@ std::pair<metapb::Region, metapb::Peer> Client::getRegionByID(uint64_t region_id
         throw Exception(err_msg, GRPCErrorCode);
     }
 
-    if (!response.has_region())
-        return {};
-
-    return std::make_pair(response.region(), response.leader());
+    return response;
 }
 
 std::vector<metapb::Store> Client::getAllStores(bool exclude_tombstone)

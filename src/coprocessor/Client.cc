@@ -395,7 +395,17 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                 // Then `splitRegion` will reloads these regions.
                 continue;
             }
-            auto all_stores = cluster->region_cache->getAllValidTiFlashStores(bo, cop_task.region_id, rpc_context->store, label_filter);
+            auto [all_stores, non_pending_stores] = cluster->region_cache->getAllValidTiFlashStores(bo, cop_task.region_id, rpc_context->store, label_filter);
+
+            // There are pending store for this region, need to refresh region cache until this region is ok.
+            if (all_stores.size() != non_pending_stores.size())
+                cluster->region_cache->dropRegion(cop_task.region_id);
+
+            // Use non_pending_stores to dispatch this task, so no need to wait tiflash replica sync from tikv.
+            // If all stores are in pending state, we use `all_stores` as fallback.
+            if (!non_pending_stores.empty())
+                all_stores = non_pending_stores;
+
             if (auto iter = store_task_map.find(rpc_context->addr); iter == store_task_map.end())
             {
                 BatchCopTask batch_cop_task;

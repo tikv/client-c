@@ -44,9 +44,9 @@ public:
     // only implement a weak get ts.
     uint64_t getTS() override;
 
-    std::pair<metapb::Region, metapb::Peer> getRegionByKey(const std::string & key) override;
+    pdpb::GetRegionResponse getRegionByKey(const std::string & key) override;
 
-    std::pair<metapb::Region, metapb::Peer> getRegionByID(uint64_t region_id) override;
+    pdpb::GetRegionResponse getRegionByID(uint64_t region_id) override;
 
     metapb::Store getStore(uint64_t store_id) override;
 
