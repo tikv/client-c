@@ -508,5 +508,29 @@ bool Client::isClusterBootstrapped()
     return response.bootstrapped();
 }
 
+#define RESOURCE_MANAGER_CALL_DEFINITION(FUNC_NAME, GRPC_METHOD, REQUEST_TYPE, RESPONSE_TYPE)
+    ::resource_manager::RESPONSE_TYPE Client::FUNC_NAME(const ::resource_manager::REQUEST_TYPE & request) \
+    { \
+        ::resource_manager::ListResourceGroupsResponse response; \
+        grpc::ClientContext context; \
+        context.set_deadline(std::chrono::system_clock::now() + pd_timeout); \
+        auto status = leaderClient()->resource_manager_stub->ListResourceGroups(&context, request, &response); \
+        if (!status.ok()) \
+        { \
+            std::string err_msg = ("get region by id failed: " + std::to_string(status.error_code()) + ": " + status.error_message()); \
+            log->error(err_msg); \
+            check_leader.store(true); \
+            throw Exception(err_msg, GRPCErrorCode); \
+        } \
+        return response; \
+    }
+
+RESOURCE_MANAGER_CALL_DEFINITION(listResourceGroups, ListResourceGroups, ListResourceGroupsRequest, ListResourceGroupsResponse)
+RESOURCE_MANAGER_CALL_DEFINITION(getResourceGroup, GetResourceGroup, GetResourceGroupRequest, GetResourceGroupResponse)
+RESOURCE_MANAGER_CALL_DEFINITION(addResourceGroup, AddResourceGroup, AddResourceGroupRequest, AddResourceGroupResponse)
+RESOURCE_MANAGER_CALL_DEFINITION(modifyResourceGroup, ModifyResourceGroup, ModifyResourceGroupRequest, ModifyResourceGroupResponse)
+RESOURCE_MANAGER_CALL_DEFINITION(deleteResourceGroup, DeleteResourceGroup, DeleteResourceGroupRequest, DeleteResourceGroupResponse)
+RESOURCE_MANAGER_CALL_DEFINITION(acquireTokenBuckets, AcquireTokenBuckets, AcquireTokenBucketsRequest, AcquireTokenBucketsResponse)
+
 } // namespace pd
 } // namespace pingcap

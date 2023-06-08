@@ -41,6 +41,18 @@ public:
     bool isMock() override { return true; }
 
     std::string getLeaderUrl() override { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
+
+    ::resource_manager::ListResourceGroupsResponse listResourceGroups() { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
+
+    ::resource_manager::GetResourceGroupResponse getResourceGroup(::resource_manager::GetResourceGroupRequest) { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
+
+    ::resource_manager::PutResourceGroupResponse putResourceGroup(::resource_manager::PutResourceGroupRequest) { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
+
+    ::resource_manager::PutResourceGroupResponse modifyResourceGroup(::resource_manager::PutResourceGroupRequest) { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
+
+    ::resource_manager::DeleteResourceGroupRequest deleteResourceGroup(::resource_manager::DeleteResourceGroupRequest) { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
+
+    ::resource_manager::TokenBucketsResponse acquireTokenBuckets(::resource_manager::TokenBucketsRequest) { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
 };
 
 } // namespace pd

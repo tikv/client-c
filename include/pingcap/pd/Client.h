@@ -64,6 +64,18 @@ public:
 
     std::string getLeaderUrl() override;
 
+    // ResourceControl related.
+    ::resource_manager::ListResourceGroupsResponse listResourceGroups() override;
+
+    ::resource_manager::GetResourceGroupResponse getResourceGroup(::resource_manager::GetResourceGroupRequest) override;
+
+    ::resource_manager::PutResourceGroupResponse putResourceGroup(::resource_manager::PutResourceGroupRequest) override;
+
+    ::resource_manager::PutResourceGroupResponse modifyResourceGroup(::resource_manager::PutResourceGroupRequest) override;
+
+    ::resource_manager::DeleteResourceGroupRequest deleteResourceGroup(::resource_manager::DeleteResourceGroupRequest) override;
+
+    ::resource_manager::TokenBucketsResponse acquireTokenBuckets(::resource_manager::TokenBucketsRequest) override;
 private:
     void initClusterID();
 
@@ -82,6 +94,8 @@ private:
         std::shared_ptr<grpc::Channel> channel;
         std::unique_ptr<pdpb::PD::Stub> stub;
         std::unique_ptr<keyspacepb::Keyspace::Stub> keyspace_stub;
+        // gjt todo
+        std::unique_ptr<resource_manager::ResourceManager::Stub> resource_manager_stub;
         PDConnClient(std::string addr, const ClusterConfig & config)
         {
             if (config.hasTlsConfig())
