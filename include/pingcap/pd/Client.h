@@ -6,6 +6,7 @@
 #include <kvproto/keyspacepb.grpc.pb.h>
 #include <kvproto/keyspacepb.pb.h>
 #include <kvproto/pdpb.grpc.pb.h>
+#include <kvproto/resource_manager.grpc.pb.h>
 #include <pingcap/Config.h>
 #include <pingcap/Log.h>
 #include <pingcap/pd/IClient.h>
