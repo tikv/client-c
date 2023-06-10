@@ -66,17 +66,17 @@ public:
     std::string getLeaderUrl() override;
 
     // ResourceControl related.
-    ::resource_manager::ListResourceGroupsResponse listResourceGroups() override;
+    resource_manager::ListResourceGroupsResponse listResourceGroups(const resource_manager::ListResourceGroupsRequest &) override;
 
-    ::resource_manager::GetResourceGroupResponse getResourceGroup(::resource_manager::GetResourceGroupRequest) override;
+    resource_manager::GetResourceGroupResponse getResourceGroup(const resource_manager::GetResourceGroupRequest &) override;
 
-    ::resource_manager::PutResourceGroupResponse putResourceGroup(::resource_manager::PutResourceGroupRequest) override;
+    resource_manager::PutResourceGroupResponse addResourceGroup(const resource_manager::PutResourceGroupRequest &) override;
 
-    ::resource_manager::PutResourceGroupResponse modifyResourceGroup(::resource_manager::PutResourceGroupRequest) override;
+    resource_manager::PutResourceGroupResponse modifyResourceGroup(const resource_manager::PutResourceGroupRequest &) override;
 
-    ::resource_manager::DeleteResourceGroupRequest deleteResourceGroup(::resource_manager::DeleteResourceGroupRequest) override;
+    resource_manager::DeleteResourceGroupResponse deleteResourceGroup(const resource_manager::DeleteResourceGroupRequest &) override;
 
-    ::resource_manager::TokenBucketsResponse acquireTokenBuckets(::resource_manager::TokenBucketsRequest) override;
+    std::shared_ptr<grpc::ClientReaderWriter<resource_manager::TokenBucketsRequest, resource_manager::TokenBucketsResponse>> acquireTokenBuckets() override;
 private:
     void initClusterID();
 

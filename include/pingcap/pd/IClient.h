@@ -57,17 +57,17 @@ public:
     virtual std::string getLeaderUrl() = 0;
 
     // ResourceControl related.
-    virtual ::resource_manager::ListResourceGroupsResponse listResourceGroups() = 0;
+    virtual resource_manager::ListResourceGroupsResponse listResourceGroups(const resource_manager::ListResourceGroupsRequest &) = 0;
 
-    virtual ::resource_manager::GetResourceGroupResponse getResourceGroup(::resource_manager::GetResourceGroupRequest) = 0;
+    virtual resource_manager::GetResourceGroupResponse getResourceGroup(const resource_manager::GetResourceGroupRequest &) = 0;
 
-    virtual ::resource_manager::PutResourceGroupResponse putResourceGroup(::resource_manager::PutResourceGroupRequest) = 0;
+    virtual resource_manager::PutResourceGroupResponse addResourceGroup(const resource_manager::PutResourceGroupRequest &) = 0;
 
-    virtual ::resource_manager::PutResourceGroupResponse modifyResourceGroup(::resource_manager::PutResourceGroupRequest) = 0;
+    virtual resource_manager::PutResourceGroupResponse modifyResourceGroup(const resource_manager::PutResourceGroupRequest &) = 0;
 
-    virtual ::resource_manager::DeleteResourceGroupRequest deleteResourceGroup(::resource_manager::DeleteResourceGroupRequest) = 0;
+    virtual resource_manager::DeleteResourceGroupResponse deleteResourceGroup(const resource_manager::DeleteResourceGroupRequest &) = 0;
 
-    virtual ::resource_manager::TokenBucketsResponse acquireTokenBuckets(::resource_manager::TokenBucketsRequest) = 0;
+    virtual std::shared_ptr<grpc::ClientReaderWriter<resource_manager::TokenBucketsRequest, resource_manager::TokenBucketsResponse>> acquireTokenBuckets() = 0;
 };
 
 using ClientPtr = std::shared_ptr<IClient>;
