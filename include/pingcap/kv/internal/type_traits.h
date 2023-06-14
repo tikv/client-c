@@ -53,6 +53,7 @@ PINGCAP_DEFINE_TRAITS(coprocessor, , Coprocessor)
 PINGCAP_DEFINE_TRAITS(mpp, DispatchTask, DispatchMPPTask)
 PINGCAP_DEFINE_TRAITS(mpp, CancelTask, CancelMPPTask)
 PINGCAP_DEFINE_TRAITS(mpp, IsAlive, IsAlive)
+PINGCAP_DEFINE_TRAITS(mpp, ReportTaskStatus, ReportMPPTaskStatus)
 
 // streaming trait for BatchRequest
 template <>
