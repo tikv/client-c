@@ -508,7 +508,7 @@ bool Client::isClusterBootstrapped()
     return response.bootstrapped();
 }
 
-#define RESOURCE_MANAGER_CALL_DEFINITION(FUNC_NAME, GRPC_METHOD, REQUEST_TYPE, RESPONSE_TYPE)                                                                       \
+#define RESOURCE_CONTROL_FUNCTION_DEFINITION(FUNC_NAME, GRPC_METHOD, REQUEST_TYPE, RESPONSE_TYPE)                                                                   \
     ::resource_manager::RESPONSE_TYPE Client::FUNC_NAME(const ::resource_manager::REQUEST_TYPE & request)                                                           \
     {                                                                                                                                                               \
         ::resource_manager::RESPONSE_TYPE response;                                                                                                                 \
@@ -525,11 +525,11 @@ bool Client::isClusterBootstrapped()
         return response;                                                                                                                                            \
     }
 
-RESOURCE_MANAGER_CALL_DEFINITION(listResourceGroups, ListResourceGroups, ListResourceGroupsRequest, ListResourceGroupsResponse)
-RESOURCE_MANAGER_CALL_DEFINITION(getResourceGroup, GetResourceGroup, GetResourceGroupRequest, GetResourceGroupResponse)
-RESOURCE_MANAGER_CALL_DEFINITION(addResourceGroup, AddResourceGroup, PutResourceGroupRequest, PutResourceGroupResponse)
-RESOURCE_MANAGER_CALL_DEFINITION(modifyResourceGroup, ModifyResourceGroup, PutResourceGroupRequest, PutResourceGroupResponse)
-RESOURCE_MANAGER_CALL_DEFINITION(deleteResourceGroup, DeleteResourceGroup, DeleteResourceGroupRequest, DeleteResourceGroupResponse)
+RESOURCE_CONTROL_FUNCTION_DEFINITION(listResourceGroups, ListResourceGroups, ListResourceGroupsRequest, ListResourceGroupsResponse)
+RESOURCE_CONTROL_FUNCTION_DEFINITION(getResourceGroup, GetResourceGroup, GetResourceGroupRequest, GetResourceGroupResponse)
+RESOURCE_CONTROL_FUNCTION_DEFINITION(addResourceGroup, AddResourceGroup, PutResourceGroupRequest, PutResourceGroupResponse)
+RESOURCE_CONTROL_FUNCTION_DEFINITION(modifyResourceGroup, ModifyResourceGroup, PutResourceGroupRequest, PutResourceGroupResponse)
+RESOURCE_CONTROL_FUNCTION_DEFINITION(deleteResourceGroup, DeleteResourceGroup, DeleteResourceGroupRequest, DeleteResourceGroupResponse)
 
 std::shared_ptr<grpc::ClientReaderWriter<resource_manager::TokenBucketsRequest, resource_manager::TokenBucketsResponse>> Client::acquireTokenBuckets()
 {
