@@ -95,7 +95,6 @@ private:
         std::shared_ptr<grpc::Channel> channel;
         std::unique_ptr<pdpb::PD::Stub> stub;
         std::unique_ptr<keyspacepb::Keyspace::Stub> keyspace_stub;
-        // gjt todo
         std::unique_ptr<resource_manager::ResourceManager::Stub> resource_manager_stub;
         PDConnClient(std::string addr, const ClusterConfig & config)
         {
@@ -109,6 +108,7 @@ private:
             }
             stub = pdpb::PD::NewStub(channel);
             keyspace_stub = keyspacepb::Keyspace::NewStub(channel);
+            resource_manager_stub = resource_manager::ResourceManager::NewStub(channel);
         }
     };
 
