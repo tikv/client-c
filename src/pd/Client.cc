@@ -508,5 +508,35 @@ bool Client::isClusterBootstrapped()
     return response.bootstrapped();
 }
 
+#define RESOURCE_CONTROL_FUNCTION_DEFINITION(FUNC_NAME, GRPC_METHOD, REQUEST_TYPE, RESPONSE_TYPE)                                                                   \
+    ::resource_manager::RESPONSE_TYPE Client::FUNC_NAME(const ::resource_manager::REQUEST_TYPE & request)                                                           \
+    {                                                                                                                                                               \
+        ::resource_manager::RESPONSE_TYPE response;                                                                                                                 \
+        grpc::ClientContext context;                                                                                                                                \
+        context.set_deadline(std::chrono::system_clock::now() + pd_timeout);                                                                                        \
+        auto status = leaderClient()->resource_manager_stub->GRPC_METHOD(&context, request, &response);                                                             \
+        if (!status.ok())                                                                                                                                           \
+        {                                                                                                                                                           \
+            std::string err_msg = ("resource manager grpc call failed: " #GRPC_METHOD ". " + std::to_string(status.error_code()) + ": " + status.error_message());  \
+            log->error(err_msg);                                                                                                                                    \
+            check_leader.store(true);                                                                                                                               \
+            throw Exception(err_msg, GRPCErrorCode);                                                                                                                \
+        }                                                                                                                                                           \
+        return response;                                                                                                                                            \
+    }
+
+RESOURCE_CONTROL_FUNCTION_DEFINITION(listResourceGroups, ListResourceGroups, ListResourceGroupsRequest, ListResourceGroupsResponse)
+RESOURCE_CONTROL_FUNCTION_DEFINITION(getResourceGroup, GetResourceGroup, GetResourceGroupRequest, GetResourceGroupResponse)
+RESOURCE_CONTROL_FUNCTION_DEFINITION(addResourceGroup, AddResourceGroup, PutResourceGroupRequest, PutResourceGroupResponse)
+RESOURCE_CONTROL_FUNCTION_DEFINITION(modifyResourceGroup, ModifyResourceGroup, PutResourceGroupRequest, PutResourceGroupResponse)
+RESOURCE_CONTROL_FUNCTION_DEFINITION(deleteResourceGroup, DeleteResourceGroup, DeleteResourceGroupRequest, DeleteResourceGroupResponse)
+
+std::shared_ptr<grpc::ClientReaderWriter<resource_manager::TokenBucketsRequest, resource_manager::TokenBucketsResponse>> Client::acquireTokenBuckets()
+{
+    resource_manager::TokenBucketsResponse response;
+    grpc::ClientContext context;
+    return leaderClient()->resource_manager_stub->AcquireTokenBuckets(&context);
+}
+
 } // namespace pd
 } // namespace pingcap

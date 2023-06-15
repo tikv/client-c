@@ -41,6 +41,24 @@ public:
     bool isMock() override { return true; }
 
     std::string getLeaderUrl() override { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
+
+    ::resource_manager::ListResourceGroupsResponse listResourceGroups(const ::resource_manager::ListResourceGroupsRequest &) override
+    { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
+
+    ::resource_manager::GetResourceGroupResponse getResourceGroup(const ::resource_manager::GetResourceGroupRequest &) override
+    { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
+
+    ::resource_manager::PutResourceGroupResponse addResourceGroup(const ::resource_manager::PutResourceGroupRequest &) override
+    { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
+
+    ::resource_manager::PutResourceGroupResponse modifyResourceGroup(const ::resource_manager::PutResourceGroupRequest &) override
+    { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
+
+    ::resource_manager::DeleteResourceGroupResponse deleteResourceGroup(const ::resource_manager::DeleteResourceGroupRequest &) override
+    { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
+
+    std::shared_ptr<grpc::ClientReaderWriter<resource_manager::TokenBucketsRequest, resource_manager::TokenBucketsResponse>> acquireTokenBuckets() override
+    { throw Exception("not implemented", pingcap::ErrorCodes::UnknownError); }
 };
 
 } // namespace pd

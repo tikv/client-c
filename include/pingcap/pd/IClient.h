@@ -9,6 +9,7 @@
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <kvproto/enginepb.pb.h>
 #include <kvproto/pdpb.pb.h>
+#include <kvproto/resource_manager.pb.h>
 #pragma GCC diagnostic pop
 #include <pingcap/Config.h>
 
@@ -54,6 +55,19 @@ public:
     virtual bool isMock() = 0;
 
     virtual std::string getLeaderUrl() = 0;
+
+    // ResourceControl related.
+    virtual resource_manager::ListResourceGroupsResponse listResourceGroups(const resource_manager::ListResourceGroupsRequest &) = 0;
+
+    virtual resource_manager::GetResourceGroupResponse getResourceGroup(const resource_manager::GetResourceGroupRequest &) = 0;
+
+    virtual resource_manager::PutResourceGroupResponse addResourceGroup(const resource_manager::PutResourceGroupRequest &) = 0;
+
+    virtual resource_manager::PutResourceGroupResponse modifyResourceGroup(const resource_manager::PutResourceGroupRequest &) = 0;
+
+    virtual resource_manager::DeleteResourceGroupResponse deleteResourceGroup(const resource_manager::DeleteResourceGroupRequest &) = 0;
+
+    virtual std::shared_ptr<grpc::ClientReaderWriter<resource_manager::TokenBucketsRequest, resource_manager::TokenBucketsResponse>> acquireTokenBuckets() = 0;
 };
 
 using ClientPtr = std::shared_ptr<IClient>;
