@@ -40,6 +40,7 @@ PINGCAP_DEFINE_TRAITS(kvrpcpb, Commit, KvCommit)
 PINGCAP_DEFINE_TRAITS(kvrpcpb, Prewrite, KvPrewrite)
 PINGCAP_DEFINE_TRAITS(kvrpcpb, Scan, KvScan)
 PINGCAP_DEFINE_TRAITS(kvrpcpb, Get, KvGet)
+PINGCAP_DEFINE_TRAITS(kvrpcpb, MvccGetByKey, MvccGetByKey)
 PINGCAP_DEFINE_TRAITS(kvrpcpb, ReadIndex, ReadIndex)
 PINGCAP_DEFINE_TRAITS(kvrpcpb, CheckTxnStatus, KvCheckTxnStatus)
 PINGCAP_DEFINE_TRAITS(kvrpcpb, ResolveLock, KvResolveLock)
@@ -52,6 +53,7 @@ PINGCAP_DEFINE_TRAITS(coprocessor, , Coprocessor)
 PINGCAP_DEFINE_TRAITS(mpp, DispatchTask, DispatchMPPTask)
 PINGCAP_DEFINE_TRAITS(mpp, CancelTask, CancelMPPTask)
 PINGCAP_DEFINE_TRAITS(mpp, IsAlive, IsAlive)
+PINGCAP_DEFINE_TRAITS(mpp, ReportTaskStatus, ReportMPPTaskStatus)
 
 // streaming trait for BatchRequest
 template <>
