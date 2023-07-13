@@ -124,10 +124,13 @@ void ProbeState::detectAndUpdateState(const std::chrono::seconds & detect_period
 
 bool detectStore(kv::RpcClientPtr & rpc_client, const std::string & store_addr, int rpc_timeout, Logger * log)
 {
-    kv::RpcCall<::mpp::IsAliveRequest> rpc(std::make_shared<::mpp::IsAliveRequest>());
+    kv::RpcCall<kv::RPC_NAME(IsAlive)> rpc(std::make_shared<::mpp::IsAliveRequest>());
+    grpc::ClientContext context;
+    context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(rpc_timeout));
+    ::mpp::IsAliveResponse resp;
     try
     {
-        rpc_client->sendRequest(store_addr, rpc, rpc_timeout, kv::GRPCMetaData{});
+        rpc_client->sendRequest(store_addr, &context, rpc, &resp);
     }
     catch (const Exception & e)
     {
@@ -135,8 +138,7 @@ bool detectStore(kv::RpcClientPtr & rpc_client, const std::string & store_addr, 
         return false;
     }
 
-    const auto & resp = rpc.getResp();
-    return resp->available();
+    return resp.available();
 }
 
 } // namespace common

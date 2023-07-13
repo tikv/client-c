@@ -35,17 +35,15 @@ using GRPCMetaData = std::multimap<std::string, std::string>;
 template <class T>
 class RpcCall
 {
-    using Trait = RpcTypeTraits<T>;
-    using S = typename Trait::ResultType;
+    using RequestType = typename T::RequestType;
+    using ResponseType = typename T::ResponseType;
 
-    std::shared_ptr<T> req;
-    std::shared_ptr<S> resp;
+    std::shared_ptr<RequestType> req;
     Logger * log;
 
 public:
-    explicit RpcCall(std::shared_ptr<T> req_)
+    explicit RpcCall(std::shared_ptr<RequestType> req_)
         : req(req_)
-        , resp(std::make_shared<S>())
         , log(&Logger::get("pingcap.tikv"))
     {}
 
@@ -74,26 +72,20 @@ public:
         context->set_allocated_peer(new metapb::Peer(rpc_ctx->peer));
     }
 
-    std::shared_ptr<S> getResp() { return resp; }
-
-    void call(std::shared_ptr<KvConnClient> client, int timeout, GRPCMetaData meta_data = {})
+    void call(grpc::ClientContext * context, std::shared_ptr<KvConnClient> client, typename T::ResponseType * resp)
     {
-        grpc::ClientContext context;
-        context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(timeout));
-        for (auto & it : meta_data)
-            context.AddMetadata(it.first, it.second);
-        auto status = Trait::doRPCCall(&context, client, *req, resp.get());
+        auto status = T::doRPCCall(context, client, *req, resp);
         if (!status.ok())
         {
-            std::string err_msg = std::string(Trait::err_msg()) + std::to_string(status.error_code()) + ": " + status.error_message();
+            std::string err_msg = std::string(T::err_msg()) + std::to_string(status.error_code()) + ": " + status.error_message();
             log->error(err_msg);
             throw Exception(err_msg, GRPCErrorCode);
         }
     }
 
-    auto callStream(grpc::ClientContext * context, std::shared_ptr<KvConnClient> client) { return Trait::doRPCCall(context, client, *req); }
+    auto callStream(grpc::ClientContext * context, std::shared_ptr<KvConnClient> client) { return T::doRPCCall(context, client, *req); }
 
-    auto callStreamAsync(grpc::ClientContext * context, std::shared_ptr<KvConnClient> client, grpc::CompletionQueue & cq, void * call) { return Trait::doAsyncRPCCall(context, client, *req, cq, call); }
+    auto callStreamAsync(grpc::ClientContext * context, std::shared_ptr<KvConnClient> client, grpc::CompletionQueue & cq, void * call) { return T::doAsyncRPCCall(context, client, *req, cq, call); }
 };
 
 template <typename T>
@@ -125,11 +117,11 @@ struct RpcClient
     ConnArrayPtr createConnArray(const std::string & addr);
 
     template <class T>
-    void sendRequest(std::string addr, RpcCall<T> & rpc, int timeout, GRPCMetaData meta_data = {})
+    void sendRequest(std::string addr, grpc::ClientContext * context, RpcCall<T> & rpc, typename T::ResponseType * resp)
     {
         ConnArrayPtr conn_array = getConnArray(addr);
         auto conn_client = conn_array->get();
-        rpc.call(conn_client, timeout, meta_data);
+        rpc.call(context, conn_client, resp);
     }
 
     template <class T>

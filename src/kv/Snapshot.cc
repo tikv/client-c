@@ -35,23 +35,23 @@ kvrpcpb::MvccInfo Snapshot::mvccGet(Backoffer & bo, const std::string & key)
         auto location = cluster->region_cache->locateKey(bo, key);
         auto region_client = RegionClient(cluster, location.region);
 
-        std::shared_ptr<::kvrpcpb::MvccGetByKeyResponse> response;
+        ::kvrpcpb::MvccGetByKeyResponse response;
         try
         {
-            response = region_client.sendReqToRegion(bo, request);
+            region_client.sendReqToRegion<RPC_NAME(MvccGetByKey)>(bo, request, &response);
         }
         catch (Exception & e)
         {
             bo.backoff(boRegionMiss, e);
             continue;
         }
-        if (!response->error().empty())
+        if (!response.error().empty())
         {
             Logger * log(&Logger::get("Snapshot::mvccGet"));
-            log->error("reponse error is {}", response->error());
+            log->error("reponse error is {}", response.error());
             continue;
         }
-        return response->info();
+        return response.info();
     }
 }
 
@@ -79,19 +79,19 @@ std::string Snapshot::Get(Backoffer & bo, const std::string & key)
         auto location = cluster->region_cache->locateKey(bo, key);
         auto region_client = RegionClient(cluster, location.region);
 
-        std::shared_ptr<::kvrpcpb::GetResponse> response;
+        ::kvrpcpb::GetResponse response;
         try
         {
-            response = region_client.sendReqToRegion(bo, request);
+            region_client.sendReqToRegion<RPC_NAME(KvGet)>(bo, request, &response);
         }
         catch (Exception & e)
         {
             bo.backoff(boRegionMiss, e);
             continue;
         }
-        if (response->has_error())
+        if (response.has_error())
         {
-            auto lock = extractLockFromKeyErr(response->error());
+            auto lock = extractLockFromKeyErr(response.error());
             std::vector<LockPtr> locks{lock};
             std::vector<uint64_t> pushed;
             auto before_expired = cluster->lock_resolver->resolveLocks(bo, version, locks, pushed);
@@ -105,11 +105,11 @@ std::string Snapshot::Get(Backoffer & bo, const std::string & key)
                 bo.backoffWithMaxSleep(
                     boTxnLockFast,
                     before_expired,
-                    Exception("key error : " + response->error().ShortDebugString(), LockError));
+                    Exception("key error : " + response.error().ShortDebugString(), LockError));
             }
             continue;
         }
-        return response->value();
+        return response.value();
     }
 }
 

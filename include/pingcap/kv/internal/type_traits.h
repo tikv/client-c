@@ -14,13 +14,14 @@ struct RpcTypeTraits
 {
 };
 
+#define RPC_NAME(METHOD) RpcType##METHOD
+
 // Note that this macro is only applicable for grpc unary call
 #define PINGCAP_DEFINE_TRAITS(NAMESPACE, NAME, METHOD)      \
-    template <>                                             \
-    struct RpcTypeTraits<::NAMESPACE::NAME##Request>        \
+    struct RPC_NAME(METHOD)        \
     {                                                       \
         using RequestType = ::NAMESPACE::NAME##Request;     \
-        using ResultType = ::NAMESPACE::NAME##Response;     \
+        using ResponseType = ::NAMESPACE::NAME##Response;     \
         static const char * err_msg()                       \
         {                                                   \
             return #NAME " Failed";                         \
@@ -29,7 +30,7 @@ struct RpcTypeTraits
             grpc::ClientContext * context,                  \
             std::shared_ptr<KvConnClient> client,           \
             const RequestType & req,                        \
-            ResultType * res)                               \
+            ResponseType * res)                               \
         {                                                   \
             return client->stub->METHOD(context, req, res); \
         }                                                   \

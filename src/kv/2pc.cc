@@ -170,11 +170,11 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
 
         fiu_do_on("invalid_max_commit_ts", { req->set_max_commit_ts(min_commit_ts - 1); });
 
-        std::shared_ptr<kvrpcpb::PrewriteResponse> response;
+        kvrpcpb::PrewriteResponse response;
         RegionClient region_client(cluster, batch.region);
         try
         {
-            response = region_client.sendReqToRegion(bo, req);
+            region_client.sendReqToRegion<RPC_NAME(KvPrewrite)>(bo, req, &response);
         }
         catch (Exception & e)
         {
@@ -184,13 +184,13 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
             return;
         }
 
-        if (response->errors_size() != 0)
+        if (response.errors_size() != 0)
         {
             std::vector<LockPtr> locks;
-            int size = response->errors_size();
+            int size = response.errors_size();
             for (int i = 0; i < size; i++)
             {
-                const auto & err = response->errors(i);
+                const auto & err = response.errors(i);
                 if (err.has_already_exist())
                 {
                     throw Exception("key : " + Redact::keyToDebugString(err.already_exist().key()) + " has existed.", LogicalError);
@@ -222,7 +222,7 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
 
             if (use_async_commit)
             {
-                if (response->min_commit_ts() == 0)
+                if (response.min_commit_ts() == 0)
                 {
                     log->warning("async commit cannot proceed since the returned minCommitTS is zero, fallback to normal path");
                     use_async_commit = false;
@@ -230,9 +230,9 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
                 else
                 {
                     commit_ts_mu.lock();
-                    if (response->min_commit_ts() > min_commit_ts)
+                    if (response.min_commit_ts() > min_commit_ts)
                     {
-                        min_commit_ts = response->min_commit_ts();
+                        min_commit_ts = response.min_commit_ts();
                     }
                     commit_ts_mu.unlock();
                 }
@@ -253,11 +253,11 @@ void TwoPhaseCommitter::commitSingleBatch(Backoffer & bo, const BatchKeys & batc
     req->set_start_version(start_ts);
     req->set_commit_version(commit_ts);
 
-    std::shared_ptr<kvrpcpb::CommitResponse> response;
+    kvrpcpb::CommitResponse response;
     RegionClient region_client(cluster, batch.region);
     try
     {
-        response = region_client.sendReqToRegion(bo, req);
+        region_client.sendReqToRegion<RPC_NAME(KvCommit)>(bo, req, &response);
     }
     catch (Exception & e)
     {
@@ -266,9 +266,9 @@ void TwoPhaseCommitter::commitSingleBatch(Backoffer & bo, const BatchKeys & batc
         commitKeys(bo, batch.keys);
         return;
     }
-    if (response->has_error())
+    if (response.has_error())
     {
-        throw Exception("meet errors: " + response->error().ShortDebugString(), LockError);
+        throw Exception("meet errors: " + response.error().ShortDebugString(), LockError);
     }
 
     commited = true;
@@ -286,22 +286,22 @@ uint64_t sendTxnHeartBeat(Backoffer & bo, Cluster * cluster, std::string & prima
         req->set_advise_lock_ttl(ttl);
 
         RegionClient client(cluster, loc.region);
-        std::shared_ptr<kvrpcpb::TxnHeartBeatResponse> response;
+        kvrpcpb::TxnHeartBeatResponse response;
         try
         {
-            response = client.sendReqToRegion(bo, req);
+            client.sendReqToRegion<RPC_NAME(KvTxnHeartBeat)>(bo, req, &response);
         }
         catch (Exception & e)
         {
             bo.backoff(boRegionMiss, e);
             continue;
         }
-        if (response->has_error())
+        if (response.has_error())
         {
-            throw Exception("unexpected err :" + response->error().ShortDebugString(), ErrorCodes::UnknownError);
+            throw Exception("unexpected err :" + response.error().ShortDebugString(), ErrorCodes::UnknownError);
         }
 
-        return response->lock_ttl();
+        return response.lock_ttl();
     }
 }
 
