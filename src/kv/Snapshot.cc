@@ -22,9 +22,9 @@ kvrpcpb::MvccInfo Snapshot::mvccGet(Backoffer & bo, const std::string & key)
 {
     for (;;)
     {
-        auto request = std::make_shared<kvrpcpb::MvccGetByKeyRequest>();
-        request->set_key(key);
-        ::kvrpcpb::Context * context = request->mutable_context();
+        kvrpcpb::MvccGetByKeyRequest request;
+        request.set_key(key);
+        ::kvrpcpb::Context * context = request.mutable_context();
         context->set_priority(::kvrpcpb::Normal);
         context->set_not_fill_cache(false);
         for (auto ts : min_commit_ts_pushed.getTimestamps())
@@ -65,10 +65,10 @@ std::string Snapshot::Get(Backoffer & bo, const std::string & key)
 {
     for (;;)
     {
-        auto request = std::make_shared<kvrpcpb::GetRequest>();
-        request->set_key(key);
-        request->set_version(version);
-        ::kvrpcpb::Context * context = request->mutable_context();
+        kvrpcpb::GetRequest request;
+        request.set_key(key);
+        request.set_version(version);
+        ::kvrpcpb::Context * context = request.mutable_context();
         context->set_priority(::kvrpcpb::Normal);
         context->set_not_fill_cache(false);
         for (auto ts : min_commit_ts_pushed.getTimestamps())

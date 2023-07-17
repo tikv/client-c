@@ -38,7 +38,7 @@ struct RegionClient
     // This method send a request to region, but is NOT Thread-Safe !!
     template <typename T>
     void sendReqToRegion(Backoffer & bo,
-                         std::shared_ptr<typename T::RequestType> req,
+                         typename T::RequestType & req,
                          typename T::ResponseType * resp,
                          const LabelFilter & tiflash_label_filter = kv::labelFilterInvalid,
                          int timeout = dailTimeout,
@@ -57,7 +57,6 @@ struct RegionClient
                 // If the region is not found in cache, it must be out
                 // of date and already be cleaned up. We can skip the
                 // RPC by returning RegionError directly.
-
                 throw Exception("Region epoch not match after retries: Region " + region_id.toString() + " not in region cache.", RegionEpochNotMatch);
             }
             const auto & store_addr = ctx->addr;

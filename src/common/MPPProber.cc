@@ -124,7 +124,8 @@ void ProbeState::detectAndUpdateState(const std::chrono::seconds & detect_period
 
 bool detectStore(kv::RpcClientPtr & rpc_client, const std::string & store_addr, int rpc_timeout, Logger * log)
 {
-    kv::RpcCall<kv::RPC_NAME(IsAlive)> rpc(std::make_shared<::mpp::IsAliveRequest>());
+    ::mpp::IsAliveRequest request;
+    kv::RpcCall<kv::RPC_NAME(IsAlive)> rpc(request);
     grpc::ClientContext context;
     context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(rpc_timeout));
     ::mpp::IsAliveResponse resp;

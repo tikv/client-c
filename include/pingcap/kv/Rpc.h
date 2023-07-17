@@ -38,11 +38,11 @@ class RpcCall
     using RequestType = typename T::RequestType;
     using ResponseType = typename T::ResponseType;
 
-    std::shared_ptr<RequestType> req;
+    RequestType & req;
     Logger * log;
 
 public:
-    explicit RpcCall(std::shared_ptr<RequestType> req_)
+    explicit RpcCall(RequestType & req_)
         : req(req_)
         , log(&Logger::get("pingcap.tikv"))
     {}
@@ -65,7 +65,7 @@ public:
                 req_api_ver = kvrpcpb::APIVersion::V2;
             }
         }
-        ::kvrpcpb::Context * context = req->mutable_context();
+        ::kvrpcpb::Context * context = req.mutable_context();
         context->set_api_version(req_api_ver);
         context->set_region_id(rpc_ctx->region.id);
         context->set_allocated_region_epoch(new metapb::RegionEpoch(rpc_ctx->meta.region_epoch()));
@@ -74,7 +74,7 @@ public:
 
     void call(grpc::ClientContext * context, std::shared_ptr<KvConnClient> client, typename T::ResponseType * resp)
     {
-        auto status = T::doRPCCall(context, client, *req, resp);
+        auto status = T::doRPCCall(context, client, req, resp);
         if (!status.ok())
         {
             std::string err_msg = std::string(T::err_msg()) + std::to_string(status.error_code()) + ": " + status.error_message();
@@ -117,7 +117,7 @@ struct RpcClient
     ConnArrayPtr createConnArray(const std::string & addr);
 
     template <class T>
-    void sendRequest(std::string addr, grpc::ClientContext * context, RpcCall<T> & rpc, typename T::ResponseType * resp)
+    void sendRequest(const std::string & addr, grpc::ClientContext * context, RpcCall<T> & rpc, typename T::ResponseType * resp)
     {
         ConnArrayPtr conn_array = getConnArray(addr);
         auto conn_client = conn_array->get();
@@ -125,7 +125,7 @@ struct RpcClient
     }
 
     template <class T>
-    auto sendStreamRequest(std::string addr, grpc::ClientContext * context, RpcCall<T> & rpc)
+    auto sendStreamRequest(const std::string & addr, grpc::ClientContext * context, RpcCall<T> & rpc)
     {
         ConnArrayPtr conn_array = getConnArray(addr);
         auto conn_client = conn_array->get();
@@ -133,7 +133,7 @@ struct RpcClient
     }
 
     template <class T>
-    auto sendStreamRequestAsync(std::string addr, grpc::ClientContext * context, RpcCall<T> & rpc, grpc::CompletionQueue & cq, void * call)
+    auto sendStreamRequestAsync(const std::string & addr, grpc::ClientContext * context, RpcCall<T> & rpc, grpc::CompletionQueue & cq, void * call)
     {
         ConnArrayPtr conn_array = getConnArray(addr);
         auto conn_client = conn_array->get();

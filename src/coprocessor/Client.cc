@@ -501,25 +501,25 @@ std::vector<BatchCopTask> buildBatchCopTasks(
 
 std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopTask & task)
 {
-    auto req = std::make_shared<::coprocessor::Request>();
-    auto * ctx = req->mutable_context();
+    ::coprocessor::Request req;
+    auto * ctx = req.mutable_context();
     if (task.keyspace_id != pd::NullspaceID)
     {
         ctx->set_api_version(kvrpcpb::APIVersion::V2);
         ctx->set_keyspace_id(task.keyspace_id);
     }
-    req->set_tp(task.req->tp);
-    req->set_start_ts(task.req->start_ts);
-    req->set_schema_ver(task.req->schema_version);
-    req->set_data(task.req->data);
-    req->set_is_cache_enabled(false);
+    req.set_tp(task.req->tp);
+    req.set_start_ts(task.req->start_ts);
+    req.set_schema_ver(task.req->schema_version);
+    req.set_data(task.req->data);
+    req.set_is_cache_enabled(false);
     for (auto ts : min_commit_ts_pushed.getTimestamps())
     {
-        req->mutable_context()->add_resolved_locks(ts);
+        req.mutable_context()->add_resolved_locks(ts);
     }
     for (const auto & range : task.ranges)
     {
-        auto * pb_range = req->add_ranges();
+        auto * pb_range = req.add_ranges();
         range.setKeyRange(pb_range);
     }
 

@@ -134,18 +134,18 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
 
     for (;;)
     {
-        auto req = std::make_shared<kvrpcpb::PrewriteRequest>();
+        kvrpcpb::PrewriteRequest req;
         for (const std::string & key : batch.keys)
         {
-            auto * mut = req->add_mutations();
+            auto * mut = req.add_mutations();
             mut->set_key(key);
             mut->set_value(mutations[key]);
         }
-        req->set_primary_lock(primary_lock);
-        req->set_start_version(start_ts);
-        req->set_lock_ttl(lock_ttl);
-        req->set_txn_size(batch_txn_size);
-        req->set_max_commit_ts(max_commit_ts);
+        req.set_primary_lock(primary_lock);
+        req.set_start_version(start_ts);
+        req.set_lock_ttl(lock_ttl);
+        req.set_txn_size(batch_txn_size);
+        req.set_max_commit_ts(max_commit_ts);
         if (use_async_commit)
         {
             if (batch.is_primary)
@@ -155,17 +155,17 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
                     (void)v;
                     if (k == primary_lock)
                         continue;
-                    auto * secondary = req->add_secondaries();
+                    auto * secondary = req.add_secondaries();
                     *secondary = k;
                 }
             }
-            req->set_min_commit_ts(min_commit_ts);
-            req->set_use_async_commit(true);
+            req.set_min_commit_ts(min_commit_ts);
+            req.set_use_async_commit(true);
         }
         else
         {
             // TODO: set right min_commit_ts for pessimistic lock
-            req->set_min_commit_ts(start_ts + 1);
+            req.set_min_commit_ts(start_ts + 1);
         }
 
         fiu_do_on("invalid_max_commit_ts", { req->set_max_commit_ts(min_commit_ts - 1); });
@@ -245,13 +245,13 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
 
 void TwoPhaseCommitter::commitSingleBatch(Backoffer & bo, const BatchKeys & batch)
 {
-    auto req = std::make_shared<kvrpcpb::CommitRequest>();
+    kvrpcpb::CommitRequest req;
     for (const auto & key : batch.keys)
     {
-        req->add_keys(key);
+        req.add_keys(key);
     }
-    req->set_start_version(start_ts);
-    req->set_commit_version(commit_ts);
+    req.set_start_version(start_ts);
+    req.set_commit_version(commit_ts);
 
     kvrpcpb::CommitResponse response;
     RegionClient region_client(cluster, batch.region);
@@ -280,10 +280,10 @@ uint64_t sendTxnHeartBeat(Backoffer & bo, Cluster * cluster, std::string & prima
     {
         auto loc = cluster->region_cache->locateKey(bo, primary_key);
 
-        auto req = std::make_shared<::kvrpcpb::TxnHeartBeatRequest>();
-        req->set_primary_lock(primary_key);
-        req->set_start_version(start_ts);
-        req->set_advise_lock_ttl(ttl);
+        ::kvrpcpb::TxnHeartBeatRequest req;
+        req.set_primary_lock(primary_key);
+        req.set_start_version(start_ts);
+        req.set_advise_lock_ttl(ttl);
 
         RegionClient client(cluster, loc.region);
         kvrpcpb::TxnHeartBeatResponse response;

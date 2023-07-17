@@ -63,14 +63,14 @@ void Scanner::getData(Backoffer & bo)
 
 
         auto region_client = RegionClient(snap.cluster, loc.region);
-        auto request = std::make_shared<kvrpcpb::ScanRequest>();
-        request->set_start_key(next_start_key);
-        request->set_end_key(req_end_key);
-        request->set_limit(batch);
-        request->set_version(snap.version);
-        request->set_key_only(false);
+        kvrpcpb::ScanRequest request;
+        request.set_start_key(next_start_key);
+        request.set_end_key(req_end_key);
+        request.set_limit(batch);
+        request.set_version(snap.version);
+        request.set_key_only(false);
 
-        auto * context = request->mutable_context();
+        auto * context = request.mutable_context();
         context->set_priority(::kvrpcpb::Normal);
         context->set_not_fill_cache(false);
 
