@@ -64,7 +64,7 @@ template <typename T>
 class RpcCall
 {
 public:
-    RpcCall(RpcClientPtr & client_, const std::string & addr_)
+    RpcCall(const RpcClientPtr & client_, const std::string & addr_)
         : client(client_)
         , addr(addr_)
         , log(&Logger::get("pingcap.tikv"))
@@ -117,7 +117,7 @@ public:
     }
 
 private:
-    RpcClientPtr & client;
+    const RpcClientPtr & client;
     const std::string & addr;
     Logger * log;
 };
