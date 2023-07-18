@@ -36,10 +36,10 @@ struct RegionClient
     {}
 
     // This method send a request to region, but is NOT Thread-Safe !!
-    template <typename T>
+    template <typename T, typename U, typename V>
     void sendReqToRegion(Backoffer & bo,
-                         typename T::RequestType & req,
-                         typename T::ResponseType * resp,
+                         U & req,
+                         V * resp,
                          const LabelFilter & tiflash_label_filter = kv::labelFilterInvalid,
                          int timeout = dailTimeout,
                          StoreType store_type = StoreType::TiKV,
@@ -59,20 +59,18 @@ struct RegionClient
                 // RPC by returning RegionError directly.
                 throw Exception("Region epoch not match after retries: Region " + region_id.toString() + " not in region cache.", RegionEpochNotMatch);
             }
-            const auto & store_addr = ctx->addr;
-            RpcCall<T> rpc(req);
-            rpc.setCtx(ctx, cluster->api_version);
+            RpcCall<T> rpc(cluster->rpc_client, ctx->addr);
+            rpc.setCtx(req, ctx, cluster->api_version);
             grpc::ClientContext context;
             context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(timeout));
             for (auto & it : meta_data)
                 context.AddMetadata(it.first, it.second);
-            try
+            auto status = rpc.call(&context, req, resp);
+            if (!status.ok())
             {
-                cluster->rpc_client->sendRequest(store_addr, &context, rpc, resp);
-            }
-            catch (const Exception & e)
-            {
-                onSendFail(bo, e, ctx);
+                std::string err_msg = rpc.errMsg(status);
+                log->warning(err_msg);
+                onSendFail(bo, Exception(err_msg, GRPCErrorCode), ctx);
                 continue;
             }
             if (resp->has_region_error())

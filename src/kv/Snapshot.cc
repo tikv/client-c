@@ -1,8 +1,8 @@
 #include <pingcap/Exception.h>
+#include <pingcap/Log.h>
 #include <pingcap/kv/Backoff.h>
 #include <pingcap/kv/Scanner.h>
 #include <pingcap/kv/Snapshot.h>
-#include <pingcap/Log.h>
 
 namespace pingcap
 {
