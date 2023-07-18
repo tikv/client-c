@@ -144,13 +144,12 @@ public:
     }
 
     // send all tasks.
-    template <bool is_stream>
     void open()
     {
         unfinished_thread = concurrency;
         for (int i = 0; i < concurrency; i++)
         {
-            std::thread worker(&ResponseIter::thread<is_stream>, this);
+            std::thread worker(&ResponseIter::thread, this);
             worker_threads.push_back(std::move(worker));
         }
         log->debug("coprocessor has " + std::to_string(tasks.size()) + " tasks.");
@@ -198,7 +197,6 @@ public:
     }
 
 private:
-    template <bool is_stream>
     void thread()
     {
         log->information("thread start.");
@@ -222,13 +220,11 @@ private:
             const CopTask & task = tasks[task_index];
             task_index++;
             lk.unlock();
-            handleTask<is_stream>(task);
+            handleTask(task);
         }
     }
 
-    template <bool is_stream>
     std::vector<CopTask> handleTaskImpl(kv::Backoffer & bo, const CopTask & task);
-    template <bool is_stream>
     void handleTask(const CopTask & task);
 
     size_t task_index = 0;

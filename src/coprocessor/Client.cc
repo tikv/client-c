@@ -499,7 +499,6 @@ std::vector<BatchCopTask> buildBatchCopTasks(
     }
 }
 
-template <bool is_stream>
 std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopTask & task)
 {
     ::coprocessor::Request req;
@@ -570,7 +569,6 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
     return {};
 }
 
-template <bool is_stream>
 void ResponseIter::handleTask(const CopTask & task)
 {
     std::unordered_map<uint64_t, kv::Backoffer> bo_maps;
@@ -584,7 +582,7 @@ void ResponseIter::handleTask(const CopTask & task)
         {
             auto & current_task = remain_tasks[idx];
             auto & bo = bo_maps.try_emplace(current_task.region_id.id, kv::copNextMaxBackoff).first->second;
-            auto new_tasks = handleTaskImpl<is_stream>(bo, current_task);
+            auto new_tasks = handleTaskImpl(bo, current_task);
             if (!new_tasks.empty())
             {
                 remain_tasks.insert(remain_tasks.end(), new_tasks.begin(), new_tasks.end());
