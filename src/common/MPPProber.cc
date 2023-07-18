@@ -125,7 +125,7 @@ bool detectStore(kv::RpcClientPtr & rpc_client, const std::string & store_addr, 
 {
     kv::RpcCall<kv::RPC_NAME(IsAlive)> rpc(rpc_client, store_addr);
     grpc::ClientContext context;
-    context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(rpc_timeout));
+    rpc.setClientContext(context, rpc_timeout);
     ::mpp::IsAliveRequest req;
     ::mpp::IsAliveResponse resp;
     auto status = rpc.call(&context, req, &resp);

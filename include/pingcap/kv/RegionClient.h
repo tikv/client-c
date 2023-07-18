@@ -43,7 +43,7 @@ struct RegionClient
                          const LabelFilter & tiflash_label_filter = kv::labelFilterInvalid,
                          int timeout = dailTimeout,
                          StoreType store_type = StoreType::TiKV,
-                         kv::GRPCMetaData meta_data = {})
+                         const kv::GRPCMetaData & meta_data = {})
     {
         if (store_type == kv::StoreType::TiFlash && tiflash_label_filter == kv::labelFilterInvalid)
         {
@@ -60,11 +60,11 @@ struct RegionClient
                 throw Exception("Region epoch not match after retries: Region " + region_id.toString() + " not in region cache.", RegionEpochNotMatch);
             }
             RpcCall<T> rpc(cluster->rpc_client, ctx->addr);
-            rpc.setCtx(req, ctx, cluster->api_version);
+            rpc.setRequestCtx(req, ctx, cluster->api_version);
+
             grpc::ClientContext context;
-            context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(timeout));
-            for (auto & it : meta_data)
-                context.AddMetadata(it.first, it.second);
+            rpc.setClientContext(context, timeout, meta_data);
+
             auto status = rpc.call(&context, req, resp);
             if (!status.ok())
             {

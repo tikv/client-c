@@ -71,7 +71,7 @@ public:
     {}
 
     template <typename U>
-    void setCtx(U & req, RPCContextPtr rpc_ctx, kvrpcpb::APIVersion api_version)
+    void setRequestCtx(U & req, RPCContextPtr rpc_ctx, kvrpcpb::APIVersion api_version)
     {
         // TODO: attach the API version with a better manner.
         // We check if the region range is in the keyspace, if it does, we use the API v2.
@@ -94,6 +94,13 @@ public:
         context->set_region_id(rpc_ctx->region.id);
         context->set_allocated_region_epoch(new metapb::RegionEpoch(rpc_ctx->meta.region_epoch()));
         context->set_allocated_peer(new metapb::Peer(rpc_ctx->peer));
+    }
+
+    void setClientContext(::grpc::ClientContext & context, int timeout, const GRPCMetaData & meta_data = {})
+    {
+        context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(timeout));
+        for (auto & it : meta_data)
+            context.AddMetadata(it.first, it.second);
     }
 
     template <typename... Args>
