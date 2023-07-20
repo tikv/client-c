@@ -657,5 +657,8 @@ void ResponseIter::handleTask(const CopTask & task)
     }
 }
 
+template void ResponseIter::handleTask<false>(const CopTask &);
+template void ResponseIter::handleTask<true>(const CopTask &);
+
 } // namespace coprocessor
 } // namespace pingcap
