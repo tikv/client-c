@@ -527,7 +527,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
     if (task.before_send)
         task.before_send();
 
-    auto handle_resp = [&](auto * resp) -> std::vector<CopTask> {
+    auto handle_resp = [&](std::shared_ptr<::coprocessor::Response> && resp) -> std::vector<CopTask> {
         if (resp->has_locked())
         {
             kv::LockPtr lock = std::make_shared<kv::Lock>(resp->locked());
@@ -576,7 +576,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
             return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, log, task.meta_data, task.before_send);
         }
 
-        auto ret = handle_resp(resp);
+        auto ret = handle_resp(std::move(resp));
         if (!ret.empty())
             return ret;
 
@@ -621,7 +621,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
             bo.backoff(kv::boRegionMiss, e);
             return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, log, task.meta_data, task.before_send);
         }
-        return handle_resp(resp);
+        return handle_resp(std::move(resp));
     }
 }
 
