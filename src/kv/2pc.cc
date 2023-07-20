@@ -168,7 +168,7 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
             req.set_min_commit_ts(start_ts + 1);
         }
 
-        fiu_do_on("invalid_max_commit_ts", { req->set_max_commit_ts(min_commit_ts - 1); });
+        fiu_do_on("invalid_max_commit_ts", { req.set_max_commit_ts(min_commit_ts - 1); });
 
         kvrpcpb::PrewriteResponse response;
         RegionClient region_client(cluster, batch.region);
