@@ -68,9 +68,7 @@ struct RegionClient
             auto status = rpc.call(&context, req, resp);
             if (!status.ok())
             {
-                std::string err_msg = rpc.errMsg(status);
-                log->warning(err_msg);
-                onSendFail(bo, Exception(err_msg, GRPCErrorCode), ctx);
+                onSendFail(bo, Exception(rpc.errMsg(status), GRPCErrorCode), ctx);
                 continue;
             }
             if (resp->has_region_error())
@@ -80,6 +78,53 @@ struct RegionClient
                 continue;
             }
             return;
+        }
+    }
+
+    template <typename T, typename U, typename V>
+    auto sendStreamReqToRegion(Backoffer & bo,
+                               U & req,
+                               V * resp,
+                               const LabelFilter & tiflash_label_filter = kv::labelFilterInvalid,
+                               int timeout = dailTimeout,
+                               StoreType store_type = StoreType::TiKV,
+                               const kv::GRPCMetaData & meta_data = {})
+    {
+        if (store_type == kv::StoreType::TiFlash && tiflash_label_filter == kv::labelFilterInvalid)
+        {
+            throw Exception("should setup proper label_filter for tiflash");
+        }
+        for (;;)
+        {
+            RPCContextPtr ctx = cluster->region_cache->getRPCContext(bo, region_id, store_type, /*load_balance=*/true, tiflash_label_filter);
+            if (ctx == nullptr)
+            {
+                // If the region is not found in cache, it must be out
+                // of date and already be cleaned up. We can skip the
+                // RPC by returning RegionError directly.
+                throw Exception("Region epoch not match after retries: Region " + region_id.toString() + " not in region cache.", RegionEpochNotMatch);
+            }
+            RpcCall<T> rpc(cluster->rpc_client, ctx->addr);
+            rpc.setRequestCtx(req, ctx, cluster->api_version);
+
+            grpc::ClientContext context;
+            rpc.setClientContext(context, timeout, meta_data);
+
+            auto reader = rpc.call(&context, req);
+            if (reader->Read(resp))
+            {
+                if (resp->has_region_error())
+                {
+                    log->warning("region " + region_id.toString() + " find error: " + resp->region_error().message());
+                    onRegionError(bo, ctx, resp->region_error());
+                    continue;
+                }
+                return reader;
+            }
+            auto status = reader->Finish();
+            if (status.ok())
+                throw Exception("Unknown error, Read return false but status is ok", ErrorCodes::CoprocessorError);
+            onSendFail(bo, Exception(rpc.errMsg(status), GRPCErrorCode), ctx);
         }
     }
 

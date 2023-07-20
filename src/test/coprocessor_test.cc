@@ -66,15 +66,22 @@ TEST_F(TestCoprocessor, testBuildTask1)
 
     fiu_enable("sleep_before_push_result", 1, nullptr, 0);
     pingcap::coprocessor::ResponseIter iter(std::move(tasks), test_cluster.get(), 8, &Logger::get("pingcap/coprocessor"));
-    iter.open();
+    iter.open<false>();
 
     for (int i = 0; i < 4; i++)
     {
-        auto [_, has_next] = iter.next();
-        ASSERT_EQ(has_next, true);
+        ASSERT_EQ(iter.next().second, true);
     }
-    auto [_, has_next] = iter.next();
-    ASSERT_EQ(has_next, false);
+    ASSERT_EQ(iter.next().second, false);
+
+    pingcap::coprocessor::ResponseIter iter2(std::move(tasks), test_cluster.get(), 8, &Logger::get("pingcap/coprocessor"));
+    iter2.open<true>();
+
+    for (int i = 0; i < 4; i++)
+    {
+        ASSERT_EQ(iter2.next().second, true);
+    }
+    ASSERT_EQ(iter2.next().second, false);
 }
 
 } // namespace pingcap::tests

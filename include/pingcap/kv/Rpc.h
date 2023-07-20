@@ -99,7 +99,7 @@ public:
     void setClientContext(::grpc::ClientContext & context, int timeout, const GRPCMetaData & meta_data = {})
     {
         context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(timeout));
-        for (auto & it : meta_data)
+        for (const auto & it : meta_data)
             context.AddMetadata(it.first, it.second);
     }
 
