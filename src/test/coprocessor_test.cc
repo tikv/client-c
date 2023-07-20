@@ -65,6 +65,7 @@ TEST_F(TestCoprocessor, testBuildTask1)
     control_cluster->splitRegion("e");
 
     fiu_enable("sleep_before_push_result", 1, nullptr, 0);
+    auto task2 = tasks;
     pingcap::coprocessor::ResponseIter iter(std::move(tasks), test_cluster.get(), 8, &Logger::get("pingcap/coprocessor"));
     iter.open<false>();
 
@@ -74,7 +75,7 @@ TEST_F(TestCoprocessor, testBuildTask1)
     }
     ASSERT_EQ(iter.next().second, false);
 
-    pingcap::coprocessor::ResponseIter iter2(std::move(tasks), test_cluster.get(), 8, &Logger::get("pingcap/coprocessor"));
+    pingcap::coprocessor::ResponseIter iter2(std::move(task2), test_cluster.get(), 8, &Logger::get("pingcap/coprocessor"));
     iter2.open<true>();
 
     for (int i = 0; i < 4; i++)
