@@ -77,6 +77,7 @@ struct RegionClient
             {
                 log->warning("region " + region_id.toString() + " find error: " + resp->region_error().message());
                 onRegionError(bo, ctx, resp->region_error());
+                continue;
             }
             return;
         }
