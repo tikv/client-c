@@ -526,7 +526,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
     if (task.before_send)
         task.before_send();
     kv::RegionClient client(cluster, task.region_id);
-    std::shared_ptr<::coprocessor::Response> resp;
+    auto resp = std::make_shared<::coprocessor::Response>();
     try
     {
         client.sendReqToRegion<kv::RPC_NAME(Coprocessor)>(bo, req, resp.get(), tiflash_label_filter, kv::copTimeout, task.store_type, task.meta_data);
