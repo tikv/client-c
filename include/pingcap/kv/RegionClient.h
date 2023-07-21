@@ -82,11 +82,11 @@ struct RegionClient
     }
 
     template <typename V>
-    struct StreamResult
+    struct StreamRequestContext
     {
-        StreamResult() = default;
-        StreamResult(StreamResult && other) = default;
-        StreamResult & operator=(StreamResult && other) = default;
+        StreamRequestContext() = default;
+        StreamRequestContext(StreamRequestContext && other) = default;
+        StreamRequestContext & operator=(StreamRequestContext && other) = default;
 
         grpc::ClientContext context;
         std::unique_ptr<::grpc::ClientReader<V>> reader;
@@ -95,7 +95,7 @@ struct RegionClient
 
     template <typename T, typename U, typename V>
     void sendStreamReqToRegion(Backoffer & bo,
-                               StreamResult<V> & result,
+                               StreamRequestContext<V> & req_ctx,
                                U & req,
                                V * resp,
                                const LabelFilter & tiflash_label_filter = kv::labelFilterInvalid,
@@ -119,26 +119,25 @@ struct RegionClient
             }
             RpcCall<T> rpc(cluster->rpc_client, ctx->addr);
             rpc.setRequestCtx(req, ctx, cluster->api_version);
+            rpc.setClientContext(req_ctx.context, timeout, meta_data);
 
-            rpc.setClientContext(result.context, timeout, meta_data);
-
-            result.reader = rpc.call(&result.context, req);
-            if (result.reader->Read(resp))
+            req_ctx.reader = rpc.call(&req_ctx.context, req);
+            if (req_ctx.reader->Read(resp))
             {
                 if (resp->has_region_error())
                 {
                     log->warning("region " + region_id.toString() + " find error: " + resp->region_error().message());
                     onRegionError(bo, ctx, resp->region_error());
-                    result.reader->Finish();
+                    req_ctx.reader->Finish();
                     continue;
                 }
                 return;
             }
-            auto status = result.reader->Finish();
+            auto status = req_ctx.reader->Finish();
             if (status.ok())
             {
                 // empty response
-                result.is_empty_finish = true;
+                req_ctx.is_empty_finish = true;
                 return;
             }
             onSendFail(bo, Exception(rpc.errMsg(status), GRPCErrorCode), ctx);
