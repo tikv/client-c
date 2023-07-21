@@ -565,7 +565,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
     if constexpr (is_stream)
     {
         auto resp = std::make_shared<::coprocessor::Response>();
-        std::unique_ptr<::grpc::ClientReaderInterface<::coprocessor::Response>> reader;
+        std::unique_ptr<::grpc::ClientReader<::coprocessor::Response>> reader;
         try
         {
             bool is_finish;
