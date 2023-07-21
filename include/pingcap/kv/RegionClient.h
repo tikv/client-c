@@ -81,8 +81,21 @@ struct RegionClient
         }
     }
 
+    template <typename V>
+    struct StreamResult
+    {
+        StreamResult() = default;
+        StreamResult(StreamResult && other) = default;
+        StreamResult & operator=(StreamResult && other) = default;
+
+        grpc::ClientContext context;
+        std::unique_ptr<::grpc::ClientReader<V>> reader;
+        bool is_empty_finish = false;
+    };
+
     template <typename T, typename U, typename V>
-    auto sendStreamReqToRegion(Backoffer & bo,
+    void sendStreamReqToRegion(Backoffer & bo,
+                               StreamResult<V> & result,
                                U & req,
                                V * resp,
                                const LabelFilter & tiflash_label_filter = kv::labelFilterInvalid,
@@ -107,24 +120,27 @@ struct RegionClient
             RpcCall<T> rpc(cluster->rpc_client, ctx->addr);
             rpc.setRequestCtx(req, ctx, cluster->api_version);
 
-            grpc::ClientContext context;
-            rpc.setClientContext(context, timeout, meta_data);
+            rpc.setClientContext(result.context, timeout, meta_data);
 
-            auto reader = rpc.call(&context, req);
-            if (reader->Read(resp))
+            result.reader = rpc.call(&result.context, req);
+            if (result.reader->Read(resp))
             {
                 if (resp->has_region_error())
                 {
                     log->warning("region " + region_id.toString() + " find error: " + resp->region_error().message());
                     onRegionError(bo, ctx, resp->region_error());
-                    reader->Finish();
+                    result.reader->Finish();
                     continue;
                 }
-                return std::make_tuple(std::move(reader), false);
+                return;
             }
-            auto status = reader->Finish();
+            auto status = result.reader->Finish();
             if (status.ok())
-                return std::make_tuple(std::move(reader), true);
+            {
+                // empty response
+                result.is_empty_finish = true;
+                return;
+            }
             onSendFail(bo, Exception(rpc.errMsg(status), GRPCErrorCode), ctx);
         }
     }
