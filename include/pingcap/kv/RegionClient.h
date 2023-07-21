@@ -117,13 +117,14 @@ struct RegionClient
                 {
                     log->warning("region " + region_id.toString() + " find error: " + resp->region_error().message());
                     onRegionError(bo, ctx, resp->region_error());
+                    reader->Finish();
                     continue;
                 }
-                return reader;
+                return std::make_tuple(std::move(reader), false);
             }
             auto status = reader->Finish();
             if (status.ok())
-                throw Exception("Unknown error, Read return false but status is ok", ErrorCodes::CoprocessorError);
+                return std::make_tuple(std::move(reader), true);
             onSendFail(bo, Exception(rpc.errMsg(status), GRPCErrorCode), ctx);
         }
     }

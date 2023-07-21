@@ -568,7 +568,10 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
         std::unique_ptr<::grpc::ClientReaderInterface<::coprocessor::Response>> reader;
         try
         {
-            reader = client.sendStreamReqToRegion<kv::RPC_NAME(CoprocessorStream)>(bo, req, resp.get(), tiflash_label_filter, kv::copTimeout, task.store_type, task.meta_data);
+            bool is_finish;
+            std::tie(reader, is_finish) = client.sendStreamReqToRegion<kv::RPC_NAME(CoprocessorStream)>(bo, req, resp.get(), tiflash_label_filter, kv::copTimeout, task.store_type, task.meta_data);
+            if (is_finish)
+                return {};
         }
         catch (Exception & e)
         {
