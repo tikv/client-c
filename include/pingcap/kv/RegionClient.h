@@ -68,6 +68,11 @@ struct RegionClient
             auto status = rpc.call(&context, req, resp);
             if (!status.ok())
             {
+                if (status.error_code() == ::grpc::StatusCode::UNIMPLEMENTED)
+                {
+                    // The rpc is not implemented on this service.
+                    throw Exception("rpc is not implemented: " + rpc.errMsg(status), GRPCNotImplemented);
+                }
                 onSendFail(bo, Exception(rpc.errMsg(status), GRPCErrorCode), ctx);
                 continue;
             }
@@ -82,22 +87,22 @@ struct RegionClient
     }
 
     template <typename V>
-    struct StreamRequestContext
+    struct StreamRequestCtx
     {
-        StreamRequestContext() = default;
-        StreamRequestContext(StreamRequestContext && other) = default;
-        StreamRequestContext & operator=(StreamRequestContext && other) = default;
+        StreamRequestCtx() = default;
+        StreamRequestCtx(StreamRequestCtx && other) = default;
+        StreamRequestCtx & operator=(StreamRequestCtx && other) = default;
 
         grpc::ClientContext context;
         std::unique_ptr<::grpc::ClientReader<V>> reader;
-        bool is_empty_finish = false;
+        bool no_resp = false;
     };
 
-    template <typename T, typename U, typename V>
+    template <typename T, typename REQ, typename RESP>
     void sendStreamReqToRegion(Backoffer & bo,
-                               StreamRequestContext<V> & req_ctx,
-                               U & req,
-                               V * resp,
+                               StreamRequestCtx<RESP> & req_ctx,
+                               REQ & req,
+                               RESP * first_resp,
                                const LabelFilter & tiflash_label_filter = kv::labelFilterInvalid,
                                int timeout = dailTimeout,
                                StoreType store_type = StoreType::TiKV,
@@ -122,12 +127,12 @@ struct RegionClient
             rpc.setClientContext(req_ctx.context, timeout, meta_data);
 
             req_ctx.reader = rpc.call(&req_ctx.context, req);
-            if (req_ctx.reader->Read(resp))
+            if (req_ctx.reader->Read(first_resp))
             {
-                if (resp->has_region_error())
+                if (first_resp->has_region_error())
                 {
-                    log->warning("region " + region_id.toString() + " find error: " + resp->region_error().message());
-                    onRegionError(bo, ctx, resp->region_error());
+                    log->warning("region " + region_id.toString() + " find error: " + first_resp->region_error().message());
+                    onRegionError(bo, ctx, first_resp->region_error());
                     req_ctx.reader->Finish();
                     continue;
                 }
@@ -136,9 +141,14 @@ struct RegionClient
             auto status = req_ctx.reader->Finish();
             if (status.ok())
             {
-                // empty response
-                req_ctx.is_empty_finish = true;
+                // No response msg.
+                req_ctx.no_resp = true;
                 return;
+            }
+            else if (status.error_code() == ::grpc::StatusCode::UNIMPLEMENTED)
+            {
+                // The rpc is not implemented on this service.
+                throw Exception("rpc is not implemented: " + rpc.errMsg(status), GRPCNotImplemented);
             }
             onSendFail(bo, Exception(rpc.errMsg(status), GRPCErrorCode), ctx);
         }

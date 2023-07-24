@@ -562,57 +562,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
     };
 
     kv::RegionClient client(cluster, task.region_id);
-    if constexpr (is_stream)
-    {
-        auto resp = std::make_shared<::coprocessor::Response>();
-        kv::RegionClient::StreamRequestContext<::coprocessor::Response> req_ctx;
-        try
-        {
-            client.sendStreamReqToRegion<kv::RPC_NAME(CoprocessorStream)>(bo, req_ctx, req, resp.get(), tiflash_label_filter, kv::copTimeout, task.store_type, task.meta_data);
-            if (req_ctx.is_empty_finish)
-                return {};
-        }
-        catch (Exception & e)
-        {
-            bo.backoff(kv::boRegionMiss, e);
-            return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, log, task.meta_data, task.before_send);
-        }
-
-        auto ret = handle_resp(std::move(resp));
-        if (!ret.empty())
-            return ret;
-
-        while (!cancelled)
-        {
-            resp = std::make_shared<::coprocessor::Response>();
-            if (!req_ctx.reader->Read(resp.get()))
-                break;
-            if (resp->has_region_error())
-                throw Exception("Coprocessor stream subsequent response has region error: " + resp->region_error().message(), ErrorCodes::CoprocessorError);
-
-            /// Throw exception for the lock error from a subsequent response is ok for tiflash.
-            /// Because tiflash will resolve all locks from a region before sending a response.
-            /// However, it's not true for tikv. Currently, this logic is only used for tiflash.
-            if (resp->has_locked())
-                throw Exception("Coprocessor stream subsequent response has lock error", ErrorCodes::CoprocessorError);
-
-            const std::string & err_msg = resp->other_error();
-            if (!err_msg.empty())
-                throw Exception("Coprocessor other error: " + err_msg, ErrorCodes::CoprocessorError);
-
-            std::lock_guard<std::mutex> lk(results_mutex);
-            results.push(Result(resp));
-            cond_var.notify_one();
-        }
-
-        auto status = req_ctx.reader->Finish();
-        if (!status.ok())
-            throw Exception("Coprocessor stream finish error: " + status.error_message(), ErrorCodes::CoprocessorError);
-
-        return {};
-    }
-    else
-    {
+    auto handle_cop_req = [&]() -> std::vector<CopTask> {
         auto resp = std::make_shared<::coprocessor::Response>();
         try
         {
@@ -624,7 +574,62 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
             return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, log, task.meta_data, task.before_send);
         }
         return handle_resp(std::move(resp));
+    };
+
+    if constexpr (!is_stream)
+        return handle_cop_req();
+
+    auto resp = std::make_shared<::coprocessor::Response>();
+    kv::RegionClient::StreamRequestCtx<::coprocessor::Response> req_ctx;
+    try
+    {
+        client.sendStreamReqToRegion<kv::RPC_NAME(CoprocessorStream)>(bo, req_ctx, req, resp.get(), tiflash_label_filter, kv::copTimeout, task.store_type, task.meta_data);
+        if (req_ctx.no_resp)
+            return {};
     }
+    catch (Exception & e)
+    {
+        if (e.code() == GRPCNotImplemented)
+        {
+            // Fallback to use coprocessor rpc.
+            return handle_cop_req();
+        }
+        bo.backoff(kv::boRegionMiss, e);
+        return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, log, task.meta_data, task.before_send);
+    }
+
+    auto ret = handle_resp(std::move(resp));
+    if (!ret.empty())
+        return ret;
+
+    while (!cancelled)
+    {
+        resp = std::make_shared<::coprocessor::Response>();
+        if (!req_ctx.reader->Read(resp.get()))
+            break;
+        if (resp->has_region_error())
+            throw Exception("Coprocessor stream subsequent response has region error: " + resp->region_error().message(), ErrorCodes::CoprocessorError);
+
+        /// Throw exception for the lock error from a subsequent response is ok for tiflash.
+        /// Because tiflash will resolve all locks from a region before sending a response.
+        /// However, it's not true for tikv. Currently, this logic is only used for tiflash.
+        if (resp->has_locked())
+            throw Exception("Coprocessor stream subsequent response has lock error", ErrorCodes::CoprocessorError);
+
+        const std::string & err_msg = resp->other_error();
+        if (!err_msg.empty())
+            throw Exception("Coprocessor other error: " + err_msg, ErrorCodes::CoprocessorError);
+
+        std::lock_guard<std::mutex> lk(results_mutex);
+        results.push(Result(resp));
+        cond_var.notify_one();
+    }
+
+    auto status = req_ctx.reader->Finish();
+    if (!status.ok())
+        throw Exception("Coprocessor stream finish error: " + status.error_message(), ErrorCodes::CoprocessorError);
+
+    return {};
 }
 
 template <bool is_stream>
