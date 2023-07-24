@@ -592,6 +592,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
         if (e.code() == GRPCNotImplemented)
         {
             // Fallback to use coprocessor rpc.
+            log->information("coprocessor stream is not implemented, fallback to use coprocessor");
             return handle_cop_req();
         }
         bo.backoff(kv::boRegionMiss, e);
