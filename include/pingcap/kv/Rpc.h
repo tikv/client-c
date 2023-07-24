@@ -51,24 +51,10 @@ public:
 
     void setCtx(RPCContextPtr rpc_ctx, kvrpcpb::APIVersion api_version)
     {
-        // TODO: attach the API version with a better manner.
-        // We check if the region range is in the keyspace, if it does, we use the API v2.
-        kvrpcpb::APIVersion req_api_ver = kvrpcpb::APIVersion::V1;
-        if (api_version == kvrpcpb::APIVersion::V2)
-        {
-            auto start_key = rpc_ctx->meta.start_key();
-            auto end_key = rpc_ctx->meta.end_key();
-            std::string min_raw_v2_key = {'r', 0, 0, 0};
-            std::string max_raw_v2_key = {'s', 0, 0, 0};
-            std::string min_txn_v2_key = {'x', 0, 0, 0};
-            std::string max_txn_v2_key = {'y', 0, 0, 0};
-            if ((start_key >= min_raw_v2_key && end_key < min_raw_v2_key) || (start_key >= min_txn_v2_key && end_key < max_txn_v2_key))
-            {
-                req_api_ver = kvrpcpb::APIVersion::V2;
-            }
-        }
         ::kvrpcpb::Context * context = req->mutable_context();
-        context->set_api_version(req_api_ver);
+        // Set api_version to this context, it's caller's duty to ensure the api_version.
+        // Besides, the tikv will check api_version and key mode in server-side.
+        context->set_api_version(api_version);
         context->set_region_id(rpc_ctx->region.id);
         context->set_allocated_region_epoch(new metapb::RegionEpoch(rpc_ctx->meta.region_epoch()));
         context->set_allocated_peer(new metapb::Peer(rpc_ctx->peer));
