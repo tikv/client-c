@@ -73,7 +73,7 @@ public:
     template <typename REQ>
     void setRequestCtx(REQ & req, RPCContextPtr rpc_ctx, kvrpcpb::APIVersion api_version)
     {
-        ::kvrpcpb::Context * context = req->mutable_context();
+        ::kvrpcpb::Context * context = req.mutable_context();
         // Set api_version to this context, it's caller's duty to ensure the api_version.
         // Besides, the tikv will check api_version and key mode in server-side.
         context->set_api_version(api_version);
