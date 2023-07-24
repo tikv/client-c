@@ -1,0 +1,63 @@
+name: C++ Test
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+jobs:
+  cpp-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          submodules: 'true'
+      - name: Install dependencies
+        run: sudo apt install -y cmake clang libclang-dev llvm llvm-dev libssl-dev
+      
+      - name: Cache Poco
+        id: cache-poco
+        uses: actions/cache@v3
+        with:
+          path: ~/pocoinstall/v1_12_4
+          key: ${{ runner.os }}-Poco-v_1_12_4-t0
+      - name: Install Poco
+        if: steps.cache-poco.outputs.cache-hit != 'true'
+        run: |
+          export POCO_INSTALL_PATH=~/pocoinstall/v1_12_4 && mkdir -p ${POCO_INSTALL_PATH}
+          git clone https://github.com/pocoproject/poco.git
+          pushd poco && git checkout poco-1.12.4-release && git submodule update --init
+          mkdir poco_build && pushd poco_build \
+            && cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$POCO_INSTALL_PATH \
+            && make install && popd
+
+      - name: Cache gRPC
+        id: cache-grpc
+        uses: actions/cache@v3
+        with:
+          path: ~/grpcinstall/v1_44_0
+          key: ${{ runner.os }}-gRPC-v1_44_0-t0
+      - name: Install gRPC
+        if: steps.cache-grpc.outputs.cache-hit != 'true'
+        run: |
+          export GRPC_INSTALL_PATH=~/grpcinstall/v1_44_0 && mkdir -p $GRPC_INSTALL_PATH
+          git clone https://github.com/grpc/grpc.git
+          pushd grpc && git checkout v1.44.0 && git submodule update --init
+          mkdir -p grpcbuild && pushd grpcbuild \
+            && cmake .. -DgRPC_BUILD_TESTS=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$GRPC_INSTALL_PATH \
+            && make install && popd
+          rm -rf grpcbuild && mkdir -p grpcbuild && pushd grpcbuild \
+            && cmake .. -DgRPC_INSTALL=ON -DgRPC_BUILD_TESTS=OFF -DgRPC_PROTOBUF_PROVIDER=package -DgRPC_ZLIB_PROVIDER=package -DgRPC_CARES_PROVIDER=package -DgRPC_SSL_PROVIDER=package -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$GRPC_INSTALL_PATH \
+            && make install && popd
+          popd
+
+      - name: Test C++
+        run: |
+          export POCO_INSTALL_PATH=~/pocoinstall/v1_12_4
+          export GRPC_INSTALL_PATH=~/grpcinstall/v1_44_0
+          export PATH="$GRPC_INSTALL_PATH/bin:$PATH"
+          rm -rf build && mkdir build && pushd build \
+            && cmake .. -DCMAKE_PREFIX_PATH="$GRPC_INSTALL_PATH;$POCO_INSTALL_PATH" && make \
+            && popd && rm -rf build
