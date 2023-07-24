@@ -31,60 +31,6 @@ struct ConnArray
 using ConnArrayPtr = std::shared_ptr<ConnArray>;
 using GRPCMetaData = std::multimap<std::string, std::string>;
 
-// RpcCall holds the request and response, and delegates RPC calls.
-template <class T>
-class RpcCall
-{
-    using Trait = RpcTypeTraits<T>;
-    using S = typename Trait::ResultType;
-
-    std::shared_ptr<T> req;
-    std::shared_ptr<S> resp;
-    Logger * log;
-
-public:
-    explicit RpcCall(std::shared_ptr<T> req_)
-        : req(req_)
-        , resp(std::make_shared<S>())
-        , log(&Logger::get("pingcap.tikv"))
-    {}
-
-    void setCtx(RPCContextPtr rpc_ctx, kvrpcpb::APIVersion api_version)
-    {
-        ::kvrpcpb::Context * context = req->mutable_context();
-        // Set api_version to this context, it's caller's duty to ensure the api_version.
-        // Besides, the tikv will check api_version and key mode in server-side.
-        context->set_api_version(api_version);
-        context->set_region_id(rpc_ctx->region.id);
-        context->set_allocated_region_epoch(new metapb::RegionEpoch(rpc_ctx->meta.region_epoch()));
-        context->set_allocated_peer(new metapb::Peer(rpc_ctx->peer));
-    }
-
-    std::shared_ptr<S> getResp() { return resp; }
-
-    void call(std::shared_ptr<KvConnClient> client, int timeout, GRPCMetaData meta_data = {})
-    {
-        grpc::ClientContext context;
-        context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(timeout));
-        for (auto & it : meta_data)
-            context.AddMetadata(it.first, it.second);
-        auto status = Trait::doRPCCall(&context, client, *req, resp.get());
-        if (!status.ok())
-        {
-            std::string err_msg = std::string(Trait::err_msg()) + std::to_string(status.error_code()) + ": " + status.error_message();
-            log->error(err_msg);
-            throw Exception(err_msg, GRPCErrorCode);
-        }
-    }
-
-    auto callStream(grpc::ClientContext * context, std::shared_ptr<KvConnClient> client) { return Trait::doRPCCall(context, client, *req); }
-
-    auto callStreamAsync(grpc::ClientContext * context, std::shared_ptr<KvConnClient> client, grpc::CompletionQueue & cq, void * call) { return Trait::doAsyncRPCCall(context, client, *req, cq, call); }
-};
-
-template <typename T>
-using RpcCallPtr = std::unique_ptr<RpcCall<T>>;
-
 struct RpcClient
 {
     ClusterConfig config;
@@ -109,33 +55,58 @@ struct RpcClient
     ConnArrayPtr getConnArray(const std::string & addr);
 
     ConnArrayPtr createConnArray(const std::string & addr);
-
-    template <class T>
-    void sendRequest(std::string addr, RpcCall<T> & rpc, int timeout, GRPCMetaData meta_data = {})
-    {
-        ConnArrayPtr conn_array = getConnArray(addr);
-        auto conn_client = conn_array->get();
-        rpc.call(conn_client, timeout, meta_data);
-    }
-
-    template <class T>
-    auto sendStreamRequest(std::string addr, grpc::ClientContext * context, RpcCall<T> & rpc)
-    {
-        ConnArrayPtr conn_array = getConnArray(addr);
-        auto conn_client = conn_array->get();
-        return rpc.callStream(context, conn_client);
-    }
-
-    template <class T>
-    auto sendStreamRequestAsync(std::string addr, grpc::ClientContext * context, RpcCall<T> & rpc, grpc::CompletionQueue & cq, void * call)
-    {
-        ConnArrayPtr conn_array = getConnArray(addr);
-        auto conn_client = conn_array->get();
-        return rpc.callStreamAsync(context, conn_client, cq, call);
-    }
 };
 
 using RpcClientPtr = std::unique_ptr<RpcClient>;
+
+// RpcCall holds the request and response, and delegates RPC calls.
+template <typename T>
+class RpcCall
+{
+public:
+    RpcCall(const RpcClientPtr & client_, const std::string & addr_)
+        : client(client_)
+        , addr(addr_)
+        , log(&Logger::get("pingcap.tikv"))
+    {}
+
+    template <typename REQ>
+    void setRequestCtx(REQ & req, RPCContextPtr rpc_ctx, kvrpcpb::APIVersion api_version)
+    {
+        ::kvrpcpb::Context * context = req->mutable_context();
+        // Set api_version to this context, it's caller's duty to ensure the api_version.
+        // Besides, the tikv will check api_version and key mode in server-side.
+        context->set_api_version(api_version);
+        context->set_region_id(rpc_ctx->region.id);
+        context->set_allocated_region_epoch(new metapb::RegionEpoch(rpc_ctx->meta.region_epoch()));
+        context->set_allocated_peer(new metapb::Peer(rpc_ctx->peer));
+    }
+
+    void setClientContext(::grpc::ClientContext & context, int timeout, const GRPCMetaData & meta_data = {})
+    {
+        context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(timeout));
+        for (const auto & it : meta_data)
+            context.AddMetadata(it.first, it.second);
+    }
+
+    template <typename... Args>
+    auto call(Args &&... args)
+    {
+        ConnArrayPtr conn_array = client->getConnArray(addr);
+        auto conn_client = conn_array->get();
+        return T::call(conn_client, std::forward<Args>(args)...);
+    }
+
+    std::string errMsg(const ::grpc::Status & status)
+    {
+        return std::string(T::errMsg()) + std::to_string(status.error_code()) + ": " + status.error_message();
+    }
+
+private:
+    const RpcClientPtr & client;
+    const std::string & addr;
+    Logger * log;
+};
 
 } // namespace kv
 } // namespace pingcap

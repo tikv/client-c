@@ -140,7 +140,7 @@ struct AsyncResolveData
     // In this function, resp->locks is the list of locks, and expected is the number of keys. AsyncResolveData.missing_lock will be
     // set to true if the lengths don't match. If the lengths do match, then the locks are added to asyncResolveData.locks
     // and will need to be resolved by the caller.
-    void addKeys(std::shared_ptr<::kvrpcpb::CheckSecondaryLocksResponse> resp, int expected, uint64_t start_ts)
+    void addKeys(::kvrpcpb::CheckSecondaryLocksResponse * resp, int expected, uint64_t start_ts)
     {
         std::lock_guard l(mu);
 

@@ -264,7 +264,7 @@ std::pair<std::vector<uint64_t>, std::vector<uint64_t>> RegionCache::getAllValid
                 break;
             }
         }
-        if (!is_pending) 
+        if (!is_pending)
             non_pending_stores.emplace_back(peer.store_id());
     }
     return std::make_pair(all_stores, non_pending_stores);
