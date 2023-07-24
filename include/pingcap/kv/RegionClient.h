@@ -73,7 +73,9 @@ struct RegionClient
                     // The rpc is not implemented on this service.
                     throw Exception("rpc is not implemented: " + rpc.errMsg(status), GRPCNotImplemented);
                 }
-                onSendFail(bo, Exception(rpc.errMsg(status), GRPCErrorCode), ctx);
+                std::string err_msg = rpc.errMsg(status);
+                log->warning(err_msg);
+                onSendFail(bo, Exception(err_msg, GRPCErrorCode), ctx);
                 continue;
             }
             if (resp->has_region_error())
@@ -86,7 +88,7 @@ struct RegionClient
         }
     }
 
-    template <typename V>
+    template <typename RESP>
     struct StreamRequestCtx
     {
         StreamRequestCtx() = default;
@@ -94,7 +96,7 @@ struct RegionClient
         StreamRequestCtx & operator=(StreamRequestCtx && other) = default;
 
         grpc::ClientContext context;
-        std::unique_ptr<::grpc::ClientReader<V>> reader;
+        std::unique_ptr<::grpc::ClientReader<RESP>> reader;
         bool no_resp = false;
     };
 
@@ -150,7 +152,9 @@ struct RegionClient
                 // The rpc is not implemented on this service.
                 throw Exception("rpc is not implemented: " + rpc.errMsg(status), GRPCNotImplemented);
             }
-            onSendFail(bo, Exception(rpc.errMsg(status), GRPCErrorCode), ctx);
+            std::string err_msg = rpc.errMsg(status);
+            log->warning(err_msg);
+            onSendFail(bo, Exception(err_msg, GRPCErrorCode), ctx);
         }
     }
 
