@@ -580,11 +580,11 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
         return handle_cop_req();
 
     auto resp = std::make_shared<::coprocessor::Response>();
-    kv::RegionClient::StreamRequestCtx<::coprocessor::Response> req_ctx;
+    std::unique_ptr<kv::RegionClient::StreamRequestCtx<::coprocessor::Response>> req_ctx;
     try
     {
-        client.sendStreamReqToRegion<kv::RPC_NAME(CoprocessorStream)>(bo, req_ctx, req, resp.get(), tiflash_label_filter, kv::copTimeout, task.store_type, task.meta_data);
-        if (req_ctx.no_resp)
+        req_ctx = client.sendStreamReqToRegion<kv::RPC_NAME(CoprocessorStream)>(bo, req, resp.get(), tiflash_label_filter, kv::copTimeout, task.store_type, task.meta_data);
+        if (req_ctx->no_resp)
             return {};
     }
     catch (Exception & e)
@@ -605,7 +605,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
     while (!cancelled)
     {
         resp = std::make_shared<::coprocessor::Response>();
-        if (!req_ctx.reader->Read(resp.get()))
+        if (!req_ctx->reader->Read(resp.get()))
             break;
         if (resp->has_region_error())
             throw Exception("Coprocessor stream subsequent response has region error: " + resp->region_error().message(), ErrorCodes::CoprocessorError);
@@ -625,7 +625,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
         cond_var.notify_one();
     }
 
-    auto status = req_ctx.reader->Finish();
+    auto status = req_ctx->reader->Finish();
     if (!status.ok())
         throw Exception("Coprocessor stream finish error: " + status.error_message(), ErrorCodes::CoprocessorError);
 

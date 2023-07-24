@@ -95,14 +95,13 @@ struct RegionClient
         StreamRequestCtx(StreamRequestCtx && other) = default;
         StreamRequestCtx & operator=(StreamRequestCtx && other) = default;
 
-        grpc::ClientContext context;
+        ::grpc::ClientContext context;
         std::unique_ptr<::grpc::ClientReader<RESP>> reader;
         bool no_resp = false;
     };
 
     template <typename T, typename REQ, typename RESP>
-    void sendStreamReqToRegion(Backoffer & bo,
-                               StreamRequestCtx<RESP> & req_ctx,
+    auto sendStreamReqToRegion(Backoffer & bo,
                                REQ & req,
                                RESP * first_resp,
                                const LabelFilter & tiflash_label_filter = kv::labelFilterInvalid,
@@ -124,28 +123,29 @@ struct RegionClient
                 // RPC by returning RegionError directly.
                 throw Exception("Region epoch not match after retries: Region " + region_id.toString() + " not in region cache.", RegionEpochNotMatch);
             }
+
+            auto req_ctx = std::make_unique<StreamRequestCtx<RESP>>();
             RpcCall<T> rpc(cluster->rpc_client, ctx->addr);
             rpc.setRequestCtx(req, ctx, cluster->api_version);
-            rpc.setClientContext(req_ctx.context, timeout, meta_data);
+            rpc.setClientContext(req_ctx->context, timeout, meta_data);
 
-            req_ctx.reader = rpc.call(&req_ctx.context, req);
-            if (req_ctx.reader->Read(first_resp))
+            req_ctx->reader = rpc.call(&req_ctx->context, req);
+            if (req_ctx->reader->Read(first_resp))
             {
                 if (first_resp->has_region_error())
                 {
                     log->warning("region " + region_id.toString() + " find error: " + first_resp->region_error().message());
                     onRegionError(bo, ctx, first_resp->region_error());
-                    req_ctx.reader->Finish();
                     continue;
                 }
-                return;
+                return req_ctx;
             }
-            auto status = req_ctx.reader->Finish();
+            auto status = req_ctx->reader->Finish();
             if (status.ok())
             {
                 // No response msg.
-                req_ctx.no_resp = true;
-                return;
+                req_ctx->no_resp = true;
+                return req_ctx;
             }
             else if (status.error_code() == ::grpc::StatusCode::UNIMPLEMENTED)
             {
