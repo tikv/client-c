@@ -156,32 +156,31 @@ TxnStatus LockResolver::getTxnStatus(Backoffer & bo, uint64_t txn_id, const std:
     }
     TxnStatus status;
 
-    auto req = std::make_shared<::kvrpcpb::CheckTxnStatusRequest>();
-    req->set_primary_key(primary);
-    req->set_lock_ts(txn_id);
-    req->set_caller_start_ts(caller_start_ts);
-    req->set_current_ts(current_ts);
-    req->set_rollback_if_not_exist(rollback_if_not_exists);
-    req->set_force_sync_commit(force_sync_commit);
+    ::kvrpcpb::CheckTxnStatusRequest req;
+    req.set_primary_key(primary);
+    req.set_lock_ts(txn_id);
+    req.set_caller_start_ts(caller_start_ts);
+    req.set_current_ts(current_ts);
+    req.set_rollback_if_not_exist(rollback_if_not_exists);
+    req.set_force_sync_commit(force_sync_commit);
     for (;;)
     {
         auto loc = cluster->region_cache->locateKey(bo, primary);
 
-        std::shared_ptr<::kvrpcpb::CheckTxnStatusResponse> response;
-
+        ::kvrpcpb::CheckTxnStatusResponse response;
         RegionClient client(cluster, loc.region);
         try
         {
-            response = client.sendReqToRegion(bo, req);
+            client.sendReqToRegion<RPC_NAME(KvCheckTxnStatus)>(bo, req, &response);
         }
         catch (Exception & e)
         {
             bo.backoff(boRegionMiss, e);
             continue;
         }
-        if (response->has_error())
+        if (response.has_error())
         {
-            const auto & key_error = response->error();
+            const auto & key_error = response.error();
             if (key_error.has_txn_not_found())
             {
                 throw Exception("txn not found: ", ErrorCodes::TxnNotFound);
@@ -191,23 +190,23 @@ TxnStatus LockResolver::getTxnStatus(Backoffer & bo, uint64_t txn_id, const std:
                 throw Exception("unexpected err :" + key_error.ShortDebugString(), ErrorCodes::UnknownError);
             }
         }
-        status.action = response->action();
-        status.primary_lock = response->lock_info();
+        status.action = response.action();
+        status.primary_lock = response.lock_info();
         if (status.primary_lock.has_value() && status.primary_lock->use_async_commit())
         {
-            if (!client.cluster->oracle->isExpired(txn_id, response->lock_ttl()))
+            if (!client.cluster->oracle->isExpired(txn_id, response.lock_ttl()))
             {
-                status.ttl = response->lock_ttl();
+                status.ttl = response.lock_ttl();
             }
         }
-        else if (response->lock_ttl() != 0)
+        else if (response.lock_ttl() != 0)
         {
-            status.ttl = response->lock_ttl();
+            status.ttl = response.lock_ttl();
         }
         else
         {
             status.ttl = 0;
-            status.commit_ts = response->commit_version();
+            status.commit_ts = response.commit_version();
             if (status.isCacheable())
             {
                 saveResolved(txn_id, status);
@@ -226,32 +225,32 @@ void LockResolver::resolveLock(Backoffer & bo, LockPtr lock, TxnStatus & status,
         {
             return;
         }
-        auto req = std::make_shared<::kvrpcpb::ResolveLockRequest>();
-        req->set_start_version(lock->txn_id);
+        ::kvrpcpb::ResolveLockRequest req;
+        req.set_start_version(lock->txn_id);
         if (status.isCommitted())
-            req->set_commit_version(status.commit_ts);
+            req.set_commit_version(status.commit_ts);
         if (lock->txn_size < bigTxnThreshold)
         {
-            req->add_keys(lock->key);
+            req.add_keys(lock->key);
             if (!status.isCommitted())
             {
                 log->information("resolveLock rollback lock " + lock->toDebugString());
             }
         }
         RegionClient client(cluster, loc.region);
-        std::shared_ptr<kvrpcpb::ResolveLockResponse> response;
+        kvrpcpb::ResolveLockResponse response;
         try
         {
-            response = client.sendReqToRegion(bo, req);
+            client.sendReqToRegion<RPC_NAME(KvResolveLock)>(bo, req, &response);
         }
         catch (Exception & e)
         {
             bo.backoff(boRegionMiss, e);
             continue;
         }
-        if (response->has_error())
+        if (response.has_error())
         {
-            throw Exception("unexpected err :" + response->error().ShortDebugString(), ErrorCodes::UnknownError);
+            throw Exception("unexpected err :" + response.error().ShortDebugString(), ErrorCodes::UnknownError);
         }
         if (lock->txn_size >= bigTxnThreshold)
         {
@@ -275,22 +274,22 @@ void LockResolver::resolvePessimisticLock(Backoffer & bo, LockPtr lock, std::uno
         {
             lock_for_update_ts = std::numeric_limits<uint64_t>::max();
         }
-        auto req = std::make_shared<::kvrpcpb::PessimisticRollbackRequest>();
-        req->set_start_version(lock->txn_id);
-        req->set_for_update_ts(lock_for_update_ts);
-        req->add_keys(lock->key);
+        ::kvrpcpb::PessimisticRollbackRequest req;
+        req.set_start_version(lock->txn_id);
+        req.set_for_update_ts(lock_for_update_ts);
+        req.add_keys(lock->key);
         RegionClient client(cluster, loc.region);
-        std::shared_ptr<::kvrpcpb::PessimisticRollbackResponse> response;
+        ::kvrpcpb::PessimisticRollbackResponse response;
         try
         {
-            response = client.sendReqToRegion(bo, req);
+            client.sendReqToRegion<RPC_NAME(KVPessimisticRollback)>(bo, req, &response);
         }
         catch (Exception & e)
         {
             bo.backoff(boRegionMiss, e);
             continue;
         }
-        const auto & key_errors = response->errors();
+        const auto & key_errors = response.errors();
         if (!key_errors.empty())
         {
             log->error("unexpected resolve pessimistic lock err: " + key_errors[0].ShortDebugString());
@@ -349,26 +348,25 @@ void LockResolver::resolveRegionLocks(
     std::vector<std::string> & keys,
     TxnStatus & status)
 {
-    auto req = std::make_shared<::kvrpcpb::ResolveLockRequest>();
-    req->set_start_version(lock->txn_id);
+    ::kvrpcpb::ResolveLockRequest req;
+    req.set_start_version(lock->txn_id);
 
     if (status.isCommitted())
     {
-        req->set_commit_version(status.commit_ts);
+        req.set_commit_version(status.commit_ts);
     }
 
     for (auto & key : keys)
     {
-        auto * k = req->add_keys();
+        auto * k = req.add_keys();
         *k = key;
     }
 
     RegionClient client(cluster, region_id);
-    std::shared_ptr<::kvrpcpb::ResolveLockResponse> response{};
-
+    ::kvrpcpb::ResolveLockResponse response;
     try
     {
-        response = client.sendReqToRegion(bo, req);
+        client.sendReqToRegion<RPC_NAME(KvResolveLock)>(bo, req, &response);
     }
     catch (Exception & e)
     {
@@ -380,10 +378,6 @@ void LockResolver::resolveRegionLocks(
             resolveRegionLocks(bo, lock, region_id, keys, status);
         }
         return;
-    }
-    if (response == nullptr)
-    {
-        throw Exception("Response body missing.", ErrorCodes::UnknownError);
     }
 }
 
@@ -448,19 +442,19 @@ void LockResolver::checkSecondaries(
     RegionVerID cur_region_id,
     AsyncResolveDataPtr shared_data)
 {
-    auto check_request = std::make_shared<::kvrpcpb::CheckSecondaryLocksRequest>();
+    ::kvrpcpb::CheckSecondaryLocksRequest check_request;
     for (auto & key : cur_keys)
     {
-        auto * k = check_request->add_keys();
+        auto * k = check_request.add_keys();
         *k = key;
     }
-    check_request->set_start_version(txn_id);
+    check_request.set_start_version(txn_id);
 
     RegionClient client(cluster, cur_region_id);
-    std::shared_ptr<::kvrpcpb::CheckSecondaryLocksResponse> response{};
+    ::kvrpcpb::CheckSecondaryLocksResponse response;
     try
     {
-        response = client.sendReqToRegion(bo, check_request);
+        client.sendReqToRegion<RPC_NAME(KvCheckSecondaryLocks)>(bo, check_request, &response);
     }
     catch (Exception & e)
     {
@@ -474,12 +468,8 @@ void LockResolver::checkSecondaries(
         }
         return;
     }
-    if (response == nullptr)
-    {
-        throw Exception("Response body missing.", ErrorCodes::UnknownError);
-    }
 
-    shared_data->addKeys(response, cur_keys.size(), txn_id);
+    shared_data->addKeys(&response, cur_keys.size(), txn_id);
 }
 
 TxnStatus LockResolver::getTxnStatusFromLock(Backoffer & bo, LockPtr lock, uint64_t caller_start_ts, bool force_sync_commit)
