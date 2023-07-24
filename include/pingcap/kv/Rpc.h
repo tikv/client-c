@@ -70,8 +70,8 @@ public:
         , log(&Logger::get("pingcap.tikv"))
     {}
 
-    template <typename U>
-    void setRequestCtx(U & req, RPCContextPtr rpc_ctx, kvrpcpb::APIVersion api_version)
+    template <typename REQ>
+    void setRequestCtx(REQ & req, RPCContextPtr rpc_ctx, kvrpcpb::APIVersion api_version)
     {
         // TODO: attach the API version with a better manner.
         // We check if the region range is in the keyspace, if it does, we use the API v2.
@@ -99,7 +99,7 @@ public:
     void setClientContext(::grpc::ClientContext & context, int timeout, const GRPCMetaData & meta_data = {})
     {
         context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(timeout));
-        for (auto & it : meta_data)
+        for (const auto & it : meta_data)
             context.AddMetadata(it.first, it.second);
     }
 

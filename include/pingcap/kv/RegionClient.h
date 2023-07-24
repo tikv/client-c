@@ -36,10 +36,10 @@ struct RegionClient
     {}
 
     // This method send a request to region, but is NOT Thread-Safe !!
-    template <typename T, typename U, typename V>
+    template <typename T, typename REQ, typename RESP>
     void sendReqToRegion(Backoffer & bo,
-                         U & req,
-                         V * resp,
+                         REQ & req,
+                         RESP * resp,
                          const LabelFilter & tiflash_label_filter = kv::labelFilterInvalid,
                          int timeout = dailTimeout,
                          StoreType store_type = StoreType::TiKV,
