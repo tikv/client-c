@@ -43,7 +43,7 @@ template <typename T>
 class IMPMCQueue
 {
 public:
-    virtual ~IMPMCQueue() = 0;
+    virtual ~IMPMCQueue() = default;
 
     virtual MPMCQueueResult tryPush(T &&) = 0;
     virtual MPMCQueueResult push(T &&) = 0;
@@ -63,6 +63,8 @@ public:
     MPMCQueue()
         : status(MPMCQueueStatus::NORMAL)
     {}
+
+    ~MPMCQueue() override = default;
 
     MPMCQueueResult tryPush(T && t) override
     {
