@@ -127,11 +127,11 @@ struct RegionClient
 
     template <typename T, typename REQ, typename RESP>
     std::unique_ptr<StreamReader<RESP>> sendStreamReqToRegion(Backoffer & bo,
-                               REQ & req,
-                               const LabelFilter & tiflash_label_filter = kv::labelFilterInvalid,
-                               int timeout = dailTimeout,
-                               StoreType store_type = StoreType::TiKV,
-                               const kv::GRPCMetaData & meta_data = {})
+                                                              REQ & req,
+                                                              const LabelFilter & tiflash_label_filter = kv::labelFilterInvalid,
+                                                              int timeout = dailTimeout,
+                                                              StoreType store_type = StoreType::TiKV,
+                                                              const kv::GRPCMetaData & meta_data = {})
     {
         if (store_type == kv::StoreType::TiFlash && tiflash_label_filter == kv::labelFilterInvalid)
         {

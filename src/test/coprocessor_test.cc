@@ -65,7 +65,8 @@ TEST_F(TestCoprocessor, BuildTask)
     control_cluster->splitRegion("e");
 
     fiu_enable("sleep_before_push_result", 1, nullptr, 0);
-    pingcap::coprocessor::ResponseIter iter(std::move(tasks), test_cluster.get(), 8, &Logger::get("pingcap/coprocessor"));
+    auto queue = std::make_unique<common::MPMCQueue<pingcap::coprocessor::ResponseIter::Result>>();
+    pingcap::coprocessor::ResponseIter iter(std::move(queue), std::move(tasks), test_cluster.get(), 8, &Logger::get("pingcap/coprocessor"));
     iter.open<false>();
 
     for (int i = 0; i < 4; i++)
@@ -109,7 +110,8 @@ TEST_F(TestCoprocessor, BuildTaskStream)
     control_cluster->splitRegion("e");
 
     fiu_enable("sleep_before_push_result", 1, nullptr, 0);
-    pingcap::coprocessor::ResponseIter iter(std::move(tasks), test_cluster.get(), 8, &Logger::get("pingcap/coprocessor"));
+    auto queue = std::make_unique<common::MPMCQueue<pingcap::coprocessor::ResponseIter::Result>>();
+    pingcap::coprocessor::ResponseIter iter(std::move(queue), std::move(tasks), test_cluster.get(), 8, &Logger::get("pingcap/coprocessor"));
     iter.open<true>();
 
     for (int i = 0; i < 4; i++)

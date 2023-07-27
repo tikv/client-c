@@ -1,4 +1,5 @@
 #pragma once
+#include <pingcap/common/MPMCQueue.h>
 #include <pingcap/kv/Cluster.h>
 #include <pingcap/kv/RegionCache.h>
 #include <pingcap/kv/RegionClient.h>
@@ -120,12 +121,14 @@ public:
         const std::string & data() const { return resp->data(); }
     };
 
-    ResponseIter(std::vector<CopTask> && tasks_,
+    ResponseIter(std::unique_ptr<common::IMPMCQueue<Result>> && queue_,
+                 std::vector<CopTask> && tasks_,
                  kv::Cluster * cluster_,
                  int concurrency_,
                  Logger * log_,
                  const kv::LabelFilter & tiflash_label_filter_ = kv::labelFilterInvalid)
-        : tasks(std::move(tasks_))
+        : queue(std::move(queue_))
+        , tasks(std::move(tasks_))
         , cluster(cluster_)
         , concurrency(concurrency_)
         , unfinished_thread(0)
@@ -159,42 +162,39 @@ public:
     void cancel()
     {
         cancelled = true;
-        cond_var.notify_all();
-    }
-
-    std::pair<Result, bool> nextImpl()
-    {
-        if (cancelled)
-        {
-            return {Result(true), false};
-        }
-        if (!results.empty())
-        {
-            auto ret = std::make_pair(results.front(), true);
-            results.pop();
-            return ret;
-        }
-        else if (unfinished_thread == 0)
-        {
-            return {Result(true), false};
-        }
-        else
-        {
-            return {Result(), false};
-        }
+        queue->cancel();
     }
 
     std::pair<Result, bool> nonBlockingNext()
     {
-        std::unique_lock<std::mutex> lk(results_mutex);
-        return nextImpl();
+        Result res;
+        switch (queue->tryPop(res))
+        {
+        case common::MPMCQueueResult::OK:
+            return {std::move(res), true};
+        case common::MPMCQueueResult::CANCELLED:
+        case common::MPMCQueueResult::FINISHED:
+            return {Result(true), false};
+        case common::MPMCQueueResult::EMPTY:
+            return {Result(), false};
+        default:
+            __builtin_unreachable();
+        }
     }
 
     std::pair<Result, bool> next()
     {
-        std::unique_lock<std::mutex> lk(results_mutex);
-        cond_var.wait(lk, [this] { return unfinished_thread == 0 || cancelled || !results.empty(); });
-        return nextImpl();
+        Result res;
+        switch (queue->pop(res))
+        {
+        case common::MPMCQueueResult::OK:
+            return {std::move(res), true};
+        case common::MPMCQueueResult::CANCELLED:
+        case common::MPMCQueueResult::FINISHED:
+            return {Result(true), false};
+        default:
+            __builtin_unreachable();
+        }
     }
 
 private:
@@ -207,17 +207,17 @@ private:
             if (cancelled)
             {
                 log->information("cop task has been cancelled");
-                unfinished_thread--;
-                cond_var.notify_one();
                 return;
             }
-            std::unique_lock<std::mutex> lk(results_mutex);
+            std::unique_lock<std::mutex> lk(task_mutex);
             if (tasks.size() == task_index)
             {
-                unfinished_thread--;
                 lk.unlock();
-                cond_var.notify_one();
-                return;
+                if (unfinished_thread.fetch_sub(1) == 1)
+                {
+                    queue->finish();
+                    return;
+                }
             }
             const CopTask & task = tasks[task_index];
             task_index++;
@@ -231,17 +231,17 @@ private:
     template <bool is_stream>
     void handleTask(const CopTask & task);
 
+    std::unique_ptr<common::IMPMCQueue<Result>> queue;
+
+    std::mutex task_mutex;
     size_t task_index = 0;
     const std::vector<CopTask> tasks;
+
     std::vector<std::thread> worker_threads;
 
     kv::Cluster * cluster;
     int concurrency;
     kv::MinCommitTSPushed min_commit_ts_pushed;
-
-    std::mutex results_mutex;
-
-    std::queue<Result> results;
 
     std::atomic_int unfinished_thread;
     std::atomic_bool cancelled;

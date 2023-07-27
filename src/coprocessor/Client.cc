@@ -568,9 +568,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
 
         fiu_do_on("sleep_before_push_result", { std::this_thread::sleep_for(1s); });
 
-        std::lock_guard<std::mutex> lk(results_mutex);
-        results.push(Result(resp));
-        cond_var.notify_one();
+        queue->push(Result(resp));
         return {};
     };
 
@@ -625,9 +623,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
 
         fiu_do_on("sleep_before_push_result", { std::this_thread::sleep_for(1s); });
 
-        std::lock_guard<std::mutex> lk(results_mutex);
-        results.push(Result(resp));
-        cond_var.notify_one();
+        queue->push(Result(resp));
     }
 
     auto status = reader->finish();
@@ -660,9 +656,7 @@ void ResponseIter::handleTask(const CopTask & task)
         catch (const pingcap::Exception & e)
         {
             log->error("coprocessor meets error : ", e.displayText());
-            std::lock_guard<std::mutex> lk(results_mutex);
-            results.push(Result(e));
-            cond_var.notify_one();
+            queue->push(Result(e));
             break;
         }
         idx++;
