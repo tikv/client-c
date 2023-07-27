@@ -117,7 +117,7 @@ struct RegionClient
         }
 
     private:
-        friend class RegionClient;
+        friend struct RegionClient;
         ::grpc::ClientContext context;
         std::unique_ptr<::grpc::ClientReader<RESP>> reader;
         bool no_resp = false;

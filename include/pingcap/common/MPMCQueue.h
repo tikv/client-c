@@ -57,7 +57,7 @@ public:
 };
 
 template <typename T>
-class MPMCQueue : IMPMCQueue<T>
+class MPMCQueue : public IMPMCQueue<T>
 {
 public:
     MPMCQueue()
