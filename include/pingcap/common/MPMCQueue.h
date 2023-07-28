@@ -17,6 +17,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <queue>
+#include <cassert>
 
 namespace pingcap
 {
