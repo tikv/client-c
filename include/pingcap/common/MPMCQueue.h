@@ -14,10 +14,10 @@
 
 #pragma once
 
+#include <cassert>
 #include <condition_variable>
 #include <mutex>
 #include <queue>
-#include <cassert>
 
 namespace pingcap
 {
@@ -86,6 +86,7 @@ public:
         case MPMCQueueStatus::FINISHED:
             return MPMCQueueResult::FINISHED;
         }
+        __builtin_unreachable();
     }
 
     MPMCQueueResult tryPop(T & t) override

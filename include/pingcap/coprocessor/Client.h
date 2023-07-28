@@ -7,7 +7,6 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
-#include <queue>
 #include <thread>
 
 namespace pingcap
@@ -214,10 +213,8 @@ private:
             {
                 lk.unlock();
                 if (unfinished_thread.fetch_sub(1) == 1)
-                {
                     queue->finish();
-                    return;
-                }
+                return;
             }
             const CopTask & task = tasks[task_index];
             task_index++;
@@ -245,8 +242,7 @@ private:
 
     std::atomic_int unfinished_thread;
     std::atomic_bool cancelled;
-    std::condition_variable cond_var;
-    kv::LabelFilter tiflash_label_filter;
+    const kv::LabelFilter tiflash_label_filter;
 
     Logger * log;
 };

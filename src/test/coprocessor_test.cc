@@ -66,6 +66,7 @@ TEST_F(TestCoprocessor, BuildTask)
 
     fiu_enable("sleep_before_push_result", 1, nullptr, 0);
     auto queue = std::make_unique<common::MPMCQueue<pingcap::coprocessor::ResponseIter::Result>>();
+    auto tasks2 = tasks;
     pingcap::coprocessor::ResponseIter iter(std::move(queue), std::move(tasks), test_cluster.get(), 8, &Logger::get("pingcap/coprocessor"));
     iter.open<false>();
 
@@ -74,6 +75,15 @@ TEST_F(TestCoprocessor, BuildTask)
         ASSERT_EQ(iter.next().second, true);
     }
     ASSERT_EQ(iter.next().second, false);
+
+    auto queue2 = std::make_unique<common::MPMCQueue<pingcap::coprocessor::ResponseIter::Result>>();
+    pingcap::coprocessor::ResponseIter iter2(std::move(queue2), std::move(tasks2), test_cluster.get(), 8, &Logger::get("pingcap/coprocessor"));
+    iter2.open<false>();
+
+    ASSERT_EQ(iter2.next().second, true);
+    ASSERT_EQ(iter2.next().second, true);
+    iter2.cancel();
+    ASSERT_EQ(iter2.next().second, false);
 }
 
 TEST_F(TestCoprocessor, BuildTaskStream)
@@ -111,6 +121,7 @@ TEST_F(TestCoprocessor, BuildTaskStream)
 
     fiu_enable("sleep_before_push_result", 1, nullptr, 0);
     auto queue = std::make_unique<common::MPMCQueue<pingcap::coprocessor::ResponseIter::Result>>();
+    auto tasks2 = tasks;
     pingcap::coprocessor::ResponseIter iter(std::move(queue), std::move(tasks), test_cluster.get(), 8, &Logger::get("pingcap/coprocessor"));
     iter.open<true>();
 
@@ -119,6 +130,15 @@ TEST_F(TestCoprocessor, BuildTaskStream)
         ASSERT_EQ(iter.next().second, true);
     }
     ASSERT_EQ(iter.next().second, false);
+
+    auto queue2 = std::make_unique<common::MPMCQueue<pingcap::coprocessor::ResponseIter::Result>>();
+    pingcap::coprocessor::ResponseIter iter2(std::move(queue2), std::move(tasks2), test_cluster.get(), 8, &Logger::get("pingcap/coprocessor"));
+    iter2.open<true>();
+
+    ASSERT_EQ(iter2.next().second, true);
+    ASSERT_EQ(iter2.next().second, true);
+    iter2.cancel();
+    ASSERT_EQ(iter2.next().second, false);
 }
 
 } // namespace pingcap::tests
