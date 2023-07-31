@@ -546,7 +546,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
     };
 
     kv::RegionClient client(cluster, task.region_id);
-    auto handle_cop_req = [&]() -> std::vector<CopTask> {
+    auto handle_unary_cop = [&]() -> std::vector<CopTask> {
         auto resp = std::make_shared<::coprocessor::Response>();
         try
         {
@@ -573,7 +573,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
     };
 
     if constexpr (!is_stream)
-        return handle_cop_req();
+        return handle_unary_cop();
 
     auto resp = std::make_shared<::coprocessor::Response>();
     std::unique_ptr<kv::RegionClient::StreamReader<::coprocessor::Response>> reader;
@@ -587,7 +587,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
         {
             // Fallback to use coprocessor rpc.
             log->information("coprocessor stream is not implemented, fallback to use coprocessor");
-            return handle_cop_req();
+            return handle_unary_cop();
         }
         bo.backoff(kv::boRegionMiss, e);
         return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, log, task.meta_data, task.before_send);
