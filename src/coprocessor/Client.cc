@@ -611,11 +611,11 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
             /// Because tiflash will resolve all locks from a region before sending a response.
             /// However, it's not true for tikv. Currently, this logic is only used for tiflash.
             if (resp->has_locked())
-                throw Exception("Coprocessor stream subsequent response has lock error", ErrorCodes::CoprocessorError);
+                throw Exception("Coprocessor stream subsequent response has a lock error", ErrorCodes::CoprocessorError);
         }
 
         if (resp->has_region_error())
-            throw Exception("Coprocessor stream subsequent response has region error: " + resp->region_error().message(), ErrorCodes::CoprocessorError);
+            throw Exception("Coprocessor stream subsequent response has a region error: " + resp->region_error().message(), ErrorCodes::CoprocessorError);
 
         const std::string & err_msg = resp->other_error();
         if (!err_msg.empty())
