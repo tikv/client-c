@@ -28,7 +28,8 @@ enum ErrorCodes : int
     NonAsyncCommit = 17,
     KeyspaceNotEnabled = 18,
     InternalError = 19,
-    UnknownError = 20
+    GRPCNotImplemented = 20,
+    UnknownError = 21
 };
 
 class Exception : public Poco::Exception

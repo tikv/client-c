@@ -15,7 +15,7 @@ constexpr int copTimeout = 20;
 // RegionClient sends KV/Cop requests to tikv/tiflash server (corresponding to `RegionRequestSender` in go-client). It handles network errors and some region errors internally.
 //
 // Typically, a KV/Cop requests is bind to a region, all keys that are involved in the request should be located in the region.
-// The sending process begins with looking for the address of leader (may be learners for ReadIndex request) store's address of the target region from cache,
+// The sending process begins with looking for the address of leader (maybe learners for ReadIndex request) store's address of the target region from cache,
 // and the request is then sent to the destination TiKV server over TCP connection.
 // If region is updated, can be caused by leader transfer, region split, region merge, or region balance, tikv server may not able to process request and send back a RegionError.
 // RegionClient takes care of errors that does not relevant to region range, such as 'I/O timeout', 'NotLeader', and 'ServerIsBusy'.
@@ -68,6 +68,11 @@ struct RegionClient
             auto status = rpc.call(&context, req, resp);
             if (!status.ok())
             {
+                if (status.error_code() == ::grpc::StatusCode::UNIMPLEMENTED)
+                {
+                    // The rpc is not implemented on this service.
+                    throw Exception("rpc is not implemented: " + rpc.errMsg(status), GRPCNotImplemented);
+                }
                 std::string err_msg = rpc.errMsg(status);
                 log->warning(err_msg);
                 onSendFail(bo, Exception(err_msg, GRPCErrorCode), ctx);
@@ -80,6 +85,100 @@ struct RegionClient
                 continue;
             }
             return;
+        }
+    }
+
+    template <typename RESP>
+    class StreamReader
+    {
+    public:
+        StreamReader() = default;
+        StreamReader(StreamReader && other) = default;
+        StreamReader & operator=(StreamReader && other) = default;
+
+        bool read(RESP * msg)
+        {
+            if (no_resp)
+                return false;
+            if (is_first_read)
+            {
+                is_first_read = false;
+                msg->Swap(&first_resp);
+                return true;
+            }
+            return reader->Read(msg);
+        }
+
+        ::grpc::Status finish()
+        {
+            if (no_resp)
+                return ::grpc::Status::OK;
+            return reader->Finish();
+        }
+
+    private:
+        friend struct RegionClient;
+        ::grpc::ClientContext context;
+        std::unique_ptr<::grpc::ClientReader<RESP>> reader;
+        bool no_resp = false;
+        bool is_first_read = true;
+        RESP first_resp;
+    };
+
+    template <typename T, typename REQ, typename RESP>
+    std::unique_ptr<StreamReader<RESP>> sendStreamReqToRegion(Backoffer & bo,
+                                                              REQ & req,
+                                                              const LabelFilter & tiflash_label_filter = kv::labelFilterInvalid,
+                                                              int timeout = dailTimeout,
+                                                              StoreType store_type = StoreType::TiKV,
+                                                              const kv::GRPCMetaData & meta_data = {})
+    {
+        if (store_type == kv::StoreType::TiFlash && tiflash_label_filter == kv::labelFilterInvalid)
+        {
+            throw Exception("should setup proper label_filter for tiflash");
+        }
+        for (;;)
+        {
+            RPCContextPtr ctx = cluster->region_cache->getRPCContext(bo, region_id, store_type, /*load_balance=*/true, tiflash_label_filter);
+            if (ctx == nullptr)
+            {
+                // If the region is not found in cache, it must be out
+                // of date and already be cleaned up. We can skip the
+                // RPC by returning RegionError directly.
+                throw Exception("Region epoch not match after retries: Region " + region_id.toString() + " not in region cache.", RegionEpochNotMatch);
+            }
+
+            auto stream_reader = std::make_unique<StreamReader<RESP>>();
+            RpcCall<T> rpc(cluster->rpc_client, ctx->addr);
+            rpc.setRequestCtx(req, ctx, cluster->api_version);
+            rpc.setClientContext(stream_reader->context, timeout, meta_data);
+
+            stream_reader->reader = rpc.call(&stream_reader->context, req);
+            if (stream_reader->reader->Read(&stream_reader->first_resp))
+            {
+                if (stream_reader->first_resp.has_region_error())
+                {
+                    log->warning("region " + region_id.toString() + " find error: " + stream_reader->first_resp.region_error().message());
+                    onRegionError(bo, ctx, stream_reader->first_resp.region_error());
+                    continue;
+                }
+                return stream_reader;
+            }
+            auto status = stream_reader->reader->Finish();
+            if (status.ok())
+            {
+                // No response msg.
+                stream_reader->no_resp = true;
+                return stream_reader;
+            }
+            else if (status.error_code() == ::grpc::StatusCode::UNIMPLEMENTED)
+            {
+                // The rpc is not implemented on this service.
+                throw Exception("rpc is not implemented: " + rpc.errMsg(status), GRPCNotImplemented);
+            }
+            std::string err_msg = rpc.errMsg(status);
+            log->warning(err_msg);
+            onSendFail(bo, Exception(err_msg, GRPCErrorCode), ctx);
         }
     }
 
