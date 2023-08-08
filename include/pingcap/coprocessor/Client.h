@@ -131,14 +131,14 @@ public:
         , cluster(cluster_)
         , concurrency(concurrency_)
         , unfinished_thread(0)
-        , cancelled(false)
+        , is_cancelled(false)
         , tiflash_label_filter(tiflash_label_filter_)
         , log(log_)
     {}
 
     ~ResponseIter()
     {
-        cancelled = true;
+        is_cancelled = true;
         for (auto & worker_thread : worker_threads)
         {
             worker_thread.join();
@@ -164,7 +164,9 @@ public:
 
     void cancel()
     {
-        cancelled = true;
+        bool old_val = false;
+        if (!is_cancelled.compare_exchange_strong(old_val, true))
+            return;
         queue->cancel();
     }
 
@@ -207,7 +209,7 @@ private:
         log->information("thread start.");
         while (true)
         {
-            if (cancelled)
+            if (is_cancelled)
             {
                 log->information("cop task has been cancelled");
                 return;
@@ -245,7 +247,7 @@ private:
     kv::MinCommitTSPushed min_commit_ts_pushed;
 
     std::atomic_int unfinished_thread;
-    std::atomic_bool cancelled;
+    std::atomic_bool is_cancelled;
 
     std::atomic_bool is_opened = false;
     const kv::LabelFilter tiflash_label_filter;
