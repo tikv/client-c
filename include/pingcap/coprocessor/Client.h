@@ -145,16 +145,20 @@ public:
         }
     }
 
-    // send all tasks.
     template <bool is_stream>
     void open()
     {
+        bool old_val = false;
+        if (!is_opened.compare_exchange_strong(old_val, true))
+            return;
+
         unfinished_thread = concurrency;
         for (int i = 0; i < concurrency; i++)
         {
             std::thread worker(&ResponseIter::thread<is_stream>, this);
             worker_threads.push_back(std::move(worker));
         }
+
         log->debug("coprocessor has " + std::to_string(tasks.size()) + " tasks.");
     }
 
@@ -242,6 +246,8 @@ private:
 
     std::atomic_int unfinished_thread;
     std::atomic_bool cancelled;
+
+    std::atomic_bool is_opened = false;
     const kv::LabelFilter tiflash_label_filter;
 
     Logger * log;
