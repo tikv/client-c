@@ -172,6 +172,7 @@ public:
 
     std::pair<Result, bool> nonBlockingNext()
     {
+        assert(is_opened);
         Result res;
         switch (queue->tryPop(res))
         {
@@ -189,6 +190,7 @@ public:
 
     std::pair<Result, bool> next()
     {
+        assert(is_opened);
         Result res;
         switch (queue->pop(res))
         {
