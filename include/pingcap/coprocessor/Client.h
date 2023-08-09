@@ -97,6 +97,8 @@ struct BatchCopTask
     uint64_t store_id;
 };
 
+/// A iterator dedicated to send coprocessor(stream) request and receive responses.
+/// All functions are thread-safe.
 class ResponseIter
 {
 public:
@@ -131,7 +133,6 @@ public:
         , cluster(cluster_)
         , concurrency(concurrency_)
         , unfinished_thread(0)
-        , is_cancelled(false)
         , tiflash_label_filter(tiflash_label_filter_)
         , log(log_)
     {}
@@ -249,9 +250,10 @@ private:
     kv::MinCommitTSPushed min_commit_ts_pushed;
 
     std::atomic_int unfinished_thread;
-    std::atomic_bool is_cancelled;
 
+    std::atomic_bool is_cancelled = false;
     std::atomic_bool is_opened = false;
+
     const kv::LabelFilter tiflash_label_filter;
 
     Logger * log;
