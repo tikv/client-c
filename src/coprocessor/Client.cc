@@ -594,7 +594,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
     }
 
     bool is_first_resp = true;
-    while (!cancelled)
+    while (!is_cancelled)
     {
         resp = std::make_shared<::coprocessor::Response>();
         if (!reader->read(resp.get()))
@@ -641,7 +641,7 @@ void ResponseIter::handleTask(const CopTask & task)
     size_t idx = 0;
     while (idx < remain_tasks.size())
     {
-        if (cancelled)
+        if (is_cancelled)
             return;
         try
         {

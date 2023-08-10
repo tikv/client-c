@@ -97,6 +97,8 @@ struct BatchCopTask
     uint64_t store_id;
 };
 
+/// A iterator dedicated to send coprocessor(stream) request and receive responses.
+/// All functions are thread-safe.
 class ResponseIter
 {
 public:
@@ -131,41 +133,47 @@ public:
         , cluster(cluster_)
         , concurrency(concurrency_)
         , unfinished_thread(0)
-        , cancelled(false)
         , tiflash_label_filter(tiflash_label_filter_)
         , log(log_)
     {}
 
     ~ResponseIter()
     {
-        cancelled = true;
+        is_cancelled = true;
         for (auto & worker_thread : worker_threads)
         {
             worker_thread.join();
         }
     }
 
-    // send all tasks.
     template <bool is_stream>
     void open()
     {
+        bool old_val = false;
+        if (!is_opened.compare_exchange_strong(old_val, true))
+            return;
+
         unfinished_thread = concurrency;
         for (int i = 0; i < concurrency; i++)
         {
             std::thread worker(&ResponseIter::thread<is_stream>, this);
             worker_threads.push_back(std::move(worker));
         }
+
         log->debug("coprocessor has " + std::to_string(tasks.size()) + " tasks.");
     }
 
     void cancel()
     {
-        cancelled = true;
+        bool old_val = false;
+        if (!is_cancelled.compare_exchange_strong(old_val, true))
+            return;
         queue->cancel();
     }
 
     std::pair<Result, bool> nonBlockingNext()
     {
+        assert(is_opened);
         Result res;
         switch (queue->tryPop(res))
         {
@@ -183,6 +191,7 @@ public:
 
     std::pair<Result, bool> next()
     {
+        assert(is_opened);
         Result res;
         switch (queue->pop(res))
         {
@@ -203,7 +212,7 @@ private:
         log->information("thread start.");
         while (true)
         {
-            if (cancelled)
+            if (is_cancelled)
             {
                 log->information("cop task has been cancelled");
                 return;
@@ -241,7 +250,10 @@ private:
     kv::MinCommitTSPushed min_commit_ts_pushed;
 
     std::atomic_int unfinished_thread;
-    std::atomic_bool cancelled;
+
+    std::atomic_bool is_cancelled = false;
+    std::atomic_bool is_opened = false;
+
     const kv::LabelFilter tiflash_label_filter;
 
     Logger * log;
