@@ -127,11 +127,13 @@ public:
                  kv::Cluster * cluster_,
                  int concurrency_,
                  Logger * log_,
+                 int timeout_ = kv::copTimeout,
                  const kv::LabelFilter & tiflash_label_filter_ = kv::labelFilterInvalid)
         : queue(std::move(queue_))
         , tasks(std::move(tasks_))
         , cluster(cluster_)
         , concurrency(concurrency_)
+        , timeout(timeout_)
         , unfinished_thread(0)
         , tiflash_label_filter(tiflash_label_filter_)
         , log(log_)
@@ -246,7 +248,8 @@ private:
     std::vector<std::thread> worker_threads;
 
     kv::Cluster * cluster;
-    int concurrency;
+    const int concurrency;
+    const int timeout;
     kv::MinCommitTSPushed min_commit_ts_pushed;
 
     std::atomic_int unfinished_thread;
