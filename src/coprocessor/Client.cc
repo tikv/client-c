@@ -550,7 +550,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
         auto resp = std::make_shared<::coprocessor::Response>();
         try
         {
-            client.sendReqToRegion<kv::RPC_NAME(Coprocessor)>(bo, req, resp.get(), tiflash_label_filter, kv::copTimeout, task.store_type, task.meta_data);
+            client.sendReqToRegion<kv::RPC_NAME(Coprocessor)>(bo, req, resp.get(), tiflash_label_filter, timeout, task.store_type, task.meta_data);
         }
         catch (Exception & e)
         {
@@ -579,7 +579,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
     std::unique_ptr<kv::RegionClient::StreamReader<::coprocessor::Response>> reader;
     try
     {
-        reader = client.sendStreamReqToRegion<kv::RPC_NAME(CoprocessorStream), ::coprocessor::Request, ::coprocessor::Response>(bo, req, tiflash_label_filter, kv::copTimeout, task.store_type, task.meta_data);
+        reader = client.sendStreamReqToRegion<kv::RPC_NAME(CoprocessorStream), ::coprocessor::Request, ::coprocessor::Response>(bo, req, tiflash_label_filter, timeout, task.store_type, task.meta_data);
     }
     catch (Exception & e)
     {
