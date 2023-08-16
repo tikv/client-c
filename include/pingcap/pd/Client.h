@@ -76,7 +76,7 @@ public:
 
     resource_manager::DeleteResourceGroupResponse deleteResourceGroup(const resource_manager::DeleteResourceGroupRequest &) override;
 
-    std::vector<resource_manager::TokenBucketsResponse> acquireTokenBuckets(const resource_manager::TokenBucketsRequest & req) override;
+    resource_manager::TokenBucketsResponse acquireTokenBuckets(const resource_manager::TokenBucketsRequest & req) override;
 
 private:
     void initClusterID();

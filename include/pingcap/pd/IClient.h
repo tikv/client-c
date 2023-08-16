@@ -67,7 +67,7 @@ public:
 
     virtual resource_manager::DeleteResourceGroupResponse deleteResourceGroup(const resource_manager::DeleteResourceGroupRequest &) = 0;
 
-    virtual std::vector<resource_manager::TokenBucketsResponse> acquireTokenBuckets(const resource_manager::TokenBucketsRequest & req) = 0;
+    virtual resource_manager::TokenBucketsResponse acquireTokenBuckets(const resource_manager::TokenBucketsRequest & req) = 0;
 };
 
 using ClientPtr = std::shared_ptr<IClient>;

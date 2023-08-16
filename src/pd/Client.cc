@@ -531,7 +531,7 @@ RESOURCE_CONTROL_FUNCTION_DEFINITION(addResourceGroup, AddResourceGroup, PutReso
 RESOURCE_CONTROL_FUNCTION_DEFINITION(modifyResourceGroup, ModifyResourceGroup, PutResourceGroupRequest, PutResourceGroupResponse)
 RESOURCE_CONTROL_FUNCTION_DEFINITION(deleteResourceGroup, DeleteResourceGroup, DeleteResourceGroupRequest, DeleteResourceGroupResponse)
 
-std::vector<resource_manager::TokenBucketsResponse> Client::acquireTokenBuckets(const resource_manager::TokenBucketsRequest & req)
+resource_manager::TokenBucketsResponse Client::acquireTokenBuckets(const resource_manager::TokenBucketsRequest & req)
 {
     grpc::ClientContext context;
     context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
@@ -539,14 +539,15 @@ std::vector<resource_manager::TokenBucketsResponse> Client::acquireTokenBuckets(
     auto stream = leaderClient()->resource_manager_stub->AcquireTokenBuckets(&context);
     if (!stream->Write(req))
     {
-        throw Exception("gjt error", GRPCErrorCode);
+        throw Exception("resource manager grpc call failed: AcquireTokenBuckets. write failed", GRPCErrorCode);
     }
 
-    std::vector<resource_manager::TokenBucketsResponse> resps;
     resource_manager::TokenBucketsResponse resp;
-    while (stream->Read(&resp))
-        resps.push_back(resp);
-    return resps;
+    if (!stream->Read(&resp))
+    {
+        throw Exception("resource manager grpc call failed: AcquireTokenBuckets. read failed", GRPCErrorCode);
+    }
+    return resp;
 }
 
 } // namespace pd

@@ -67,7 +67,7 @@ public:
         throw Exception("not implemented", pingcap::ErrorCodes::UnknownError);
     }
 
-    std::vector<resource_manager::TokenBucketsResponse> acquireTokenBuckets(const resource_manager::TokenBucketsRequest &) override
+    resource_manager::TokenBucketsResponse acquireTokenBuckets(const resource_manager::TokenBucketsRequest &) override
     {
         throw Exception("not implemented", pingcap::ErrorCodes::UnknownError);
     }
