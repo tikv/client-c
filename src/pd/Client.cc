@@ -536,17 +536,21 @@ resource_manager::TokenBucketsResponse Client::acquireTokenBuckets(const resourc
     grpc::ClientContext context;
     context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
 
+    static const std::string err_msg_prefix = "resource manager grpc call failed: AcquireTokenBuckets.";
     auto stream = leaderClient()->resource_manager_stub->AcquireTokenBuckets(&context);
     if (!stream->Write(req))
     {
-        throw Exception("resource manager grpc call failed: AcquireTokenBuckets. write failed", GRPCErrorCode);
+        auto status = stream->Finish();
+        throw Exception(err_msg_prefix + " write failed: " + status.error_message(), GRPCErrorCode);
     }
 
     resource_manager::TokenBucketsResponse resp;
     if (!stream->Read(&resp))
     {
-        throw Exception("resource manager grpc call failed: AcquireTokenBuckets. read failed", GRPCErrorCode);
+        auto status = stream->Finish();
+        throw Exception(err_msg_prefix + " read failed: " + status.error_message(), GRPCErrorCode);
     }
+
     return resp;
 }
 
