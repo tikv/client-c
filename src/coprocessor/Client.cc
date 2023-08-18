@@ -499,6 +499,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
     }
 }
 
+template <bool is_stream>
 std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopTask & task)
 {
     ::coprocessor::Request req;
@@ -525,21 +526,10 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
 
     if (task.before_send)
         task.before_send();
-    kv::RegionClient client(cluster, task.region_id);
-    auto resp = std::make_shared<::coprocessor::Response>();
-    try
-    {
-        client.sendReqToRegion<kv::RPC_NAME(Coprocessor)>(bo, req, resp.get(), tiflash_label_filter, kv::copTimeout, task.store_type, task.meta_data);
-    }
-    catch (Exception & e)
-    {
-        bo.backoff(kv::boRegionMiss, e);
-        return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, log, task.meta_data, task.before_send);
-    }
-    if (resp->has_locked())
-    {
-        kv::LockPtr lock = std::make_shared<kv::Lock>(resp->locked());
-        log->debug("encounter lock problem: " + resp->locked().DebugString());
+
+    auto handle_locked_resp = [&](const ::kvrpcpb::LockInfo & locked) -> std::vector<CopTask> {
+        kv::LockPtr lock = std::make_shared<kv::Lock>(locked);
+        log->debug("encounter lock problem: " + locked.DebugString());
         std::vector<uint64_t> pushed;
         std::vector<kv::LockPtr> locks{lock};
         auto before_expired = cluster->lock_resolver->resolveLocks(bo, task.req->start_ts, locks, pushed);
@@ -550,25 +540,100 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
         if (before_expired > 0)
         {
             log->information("get lock and sleep for a while, sleep time is " + std::to_string(before_expired) + "ms.");
-            bo.backoffWithMaxSleep(kv::boTxnLockFast, before_expired, Exception(resp->locked().DebugString(), ErrorCodes::LockError));
+            bo.backoffWithMaxSleep(kv::boTxnLockFast, before_expired, Exception(locked.DebugString(), ErrorCodes::LockError));
         }
+        return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, log, task.meta_data, task.before_send);
+    };
+
+    kv::RegionClient client(cluster, task.region_id);
+    auto handle_unary_cop = [&]() -> std::vector<CopTask> {
+        auto resp = std::make_shared<::coprocessor::Response>();
+        try
+        {
+            client.sendReqToRegion<kv::RPC_NAME(Coprocessor)>(bo, req, resp.get(), tiflash_label_filter, timeout, task.store_type, task.meta_data);
+        }
+        catch (Exception & e)
+        {
+            bo.backoff(kv::boRegionMiss, e);
+            return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, log, task.meta_data, task.before_send);
+        }
+        if (resp->has_locked())
+            return handle_locked_resp(resp->locked());
+
+        const std::string & err_msg = resp->other_error();
+        if (!err_msg.empty())
+        {
+            throw Exception("Coprocessor other error: " + err_msg, ErrorCodes::CoprocessorError);
+        }
+
+        fiu_do_on("sleep_before_push_result", { std::this_thread::sleep_for(1s); });
+
+        queue->push(Result(resp));
+        return {};
+    };
+
+    if constexpr (!is_stream)
+        return handle_unary_cop();
+
+    auto resp = std::make_shared<::coprocessor::Response>();
+    std::unique_ptr<kv::RegionClient::StreamReader<::coprocessor::Response>> reader;
+    try
+    {
+        reader = client.sendStreamReqToRegion<kv::RPC_NAME(CoprocessorStream), ::coprocessor::Request, ::coprocessor::Response>(bo, req, tiflash_label_filter, timeout, task.store_type, task.meta_data);
+    }
+    catch (Exception & e)
+    {
+        if (e.code() == GRPCNotImplemented)
+        {
+            // Fallback to use coprocessor rpc.
+            log->information("coprocessor stream is not implemented, fallback to use coprocessor");
+            return handle_unary_cop();
+        }
+        bo.backoff(kv::boRegionMiss, e);
         return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, log, task.meta_data, task.before_send);
     }
 
-    const std::string & err_msg = resp->other_error();
-    if (!err_msg.empty())
+    bool is_first_resp = true;
+    while (!is_cancelled)
     {
-        throw Exception("Coprocessor error: " + err_msg, ErrorCodes::CoprocessorError);
+        resp = std::make_shared<::coprocessor::Response>();
+        if (!reader->read(resp.get()))
+            break;
+        if (is_first_resp)
+        {
+            is_first_resp = false;
+            if (resp->has_locked())
+                return handle_locked_resp(resp->locked());
+        }
+        else
+        {
+            /// Throw exception for the lock error from a subsequent response is ok for tiflash.
+            /// Because tiflash will resolve all locks from a region before sending a response.
+            /// However, it's not true for tikv. Currently, this logic is only used for tiflash.
+            if (resp->has_locked())
+                throw Exception("Coprocessor stream subsequent response has a lock error", ErrorCodes::CoprocessorError);
+        }
+
+        if (resp->has_region_error())
+            throw Exception("Coprocessor stream subsequent response has a region error: " + resp->region_error().message(), ErrorCodes::CoprocessorError);
+
+        const std::string & err_msg = resp->other_error();
+        if (!err_msg.empty())
+            throw Exception("Coprocessor other error: " + err_msg, ErrorCodes::CoprocessorError);
+
+        fiu_do_on("sleep_before_push_result", { std::this_thread::sleep_for(1s); });
+
+        queue->push(Result(resp));
     }
 
-    fiu_do_on("sleep_before_push_result", { std::this_thread::sleep_for(1s); });
+    auto status = reader->finish();
+    if (!status.ok())
+        throw Exception("Coprocessor stream finish error: " + status.error_message(), ErrorCodes::CoprocessorError);
 
-    std::lock_guard<std::mutex> lk(results_mutex);
-    results.push(Result(resp));
-    cond_var.notify_one();
     return {};
 }
 
+template <bool is_stream>
 void ResponseIter::handleTask(const CopTask & task)
 {
     std::unordered_map<uint64_t, kv::Backoffer> bo_maps;
@@ -576,13 +641,13 @@ void ResponseIter::handleTask(const CopTask & task)
     size_t idx = 0;
     while (idx < remain_tasks.size())
     {
-        if (cancelled)
+        if (is_cancelled)
             return;
         try
         {
             auto & current_task = remain_tasks[idx];
             auto & bo = bo_maps.try_emplace(current_task.region_id.id, kv::copNextMaxBackoff).first->second;
-            auto new_tasks = handleTaskImpl(bo, current_task);
+            auto new_tasks = handleTaskImpl<is_stream>(bo, current_task);
             if (!new_tasks.empty())
             {
                 remain_tasks.insert(remain_tasks.end(), new_tasks.begin(), new_tasks.end());
@@ -591,14 +656,15 @@ void ResponseIter::handleTask(const CopTask & task)
         catch (const pingcap::Exception & e)
         {
             log->error("coprocessor meets error : ", e.displayText());
-            std::lock_guard<std::mutex> lk(results_mutex);
-            results.push(Result(e));
-            cond_var.notify_one();
+            queue->push(Result(e));
             break;
         }
         idx++;
     }
 }
+
+template void ResponseIter::handleTask<false>(const CopTask &);
+template void ResponseIter::handleTask<true>(const CopTask &);
 
 } // namespace coprocessor
 } // namespace pingcap
