@@ -67,7 +67,7 @@ public:
         throw Exception("not implemented", pingcap::ErrorCodes::UnknownError);
     }
 
-    std::shared_ptr<grpc::ClientReaderWriter<resource_manager::TokenBucketsRequest, resource_manager::TokenBucketsResponse>> acquireTokenBuckets() override
+    resource_manager::TokenBucketsResponse acquireTokenBuckets(const resource_manager::TokenBucketsRequest &) override
     {
         throw Exception("not implemented", pingcap::ErrorCodes::UnknownError);
     }
