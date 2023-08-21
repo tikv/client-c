@@ -76,7 +76,7 @@ public:
 
     resource_manager::DeleteResourceGroupResponse deleteResourceGroup(const resource_manager::DeleteResourceGroupRequest &) override;
 
-    std::shared_ptr<grpc::ClientReaderWriter<resource_manager::TokenBucketsRequest, resource_manager::TokenBucketsResponse>> acquireTokenBuckets() override;
+    resource_manager::TokenBucketsResponse acquireTokenBuckets(const resource_manager::TokenBucketsRequest & req) override;
 
 private:
     void initClusterID();
