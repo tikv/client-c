@@ -52,6 +52,7 @@ struct Request
     uint64_t start_ts;
     std::string data;
     int64_t schema_version;
+    std::string resource_group_name;
 };
 
 using RequestPtr = std::shared_ptr<Request>;

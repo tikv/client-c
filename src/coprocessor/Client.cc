@@ -514,9 +514,11 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
     req.set_schema_ver(task.req->schema_version);
     req.set_data(task.req->data);
     req.set_is_cache_enabled(false);
+    auto * cop_req_context = req.mutable_context();
+    cop_req_context->mutable_resource_control_context()->set_resource_group_name(task.req->resource_group_name);
     for (auto ts : min_commit_ts_pushed.getTimestamps())
     {
-        req.mutable_context()->add_resolved_locks(ts);
+        cop_req_context->add_resolved_locks(ts);
     }
     for (const auto & range : task.ranges)
     {
