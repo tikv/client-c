@@ -80,7 +80,7 @@ struct RegionClient
             }
             if (resp->has_region_error())
             {
-                log->warning("region " + region_id.toString() + " find error: " + resp->region_error().message());
+                log->warning("region " + region_id.toString() + " find error: " + resp->region_error().DebugString());
                 onRegionError(bo, ctx, resp->region_error());
                 continue;
             }

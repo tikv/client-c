@@ -215,9 +215,9 @@ private:
         log->information("thread start.");
         while (true)
         {
-            if (is_cancelled)
+            if (is_cancelled || meet_error)
             {
-                log->information("cop task has been cancelled");
+                log->information("cop task exit because {}", is_cancelled ? " has been cancelled" : " already meet error");
                 return;
             }
             std::unique_lock<std::mutex> lk(task_mutex);
@@ -256,6 +256,7 @@ private:
     std::atomic_int unfinished_thread;
 
     std::atomic_bool is_cancelled = false;
+    std::atomic_bool meet_error = false;
     std::atomic_bool is_opened = false;
 
     const kv::LabelFilter tiflash_label_filter;

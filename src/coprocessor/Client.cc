@@ -596,7 +596,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
     }
 
     bool is_first_resp = true;
-    while (!is_cancelled)
+    while (!is_cancelled && !meet_error)
     {
         resp = std::make_shared<::coprocessor::Response>();
         if (!reader->read(resp.get()))
@@ -643,7 +643,7 @@ void ResponseIter::handleTask(const CopTask & task)
     size_t idx = 0;
     while (idx < remain_tasks.size())
     {
-        if (is_cancelled)
+        if (is_cancelled || meet_error)
             return;
         try
         {
@@ -657,8 +657,9 @@ void ResponseIter::handleTask(const CopTask & task)
         }
         catch (const pingcap::Exception & e)
         {
-            log->error("coprocessor meets error : ", e.displayText());
+            log->error("coprocessor meets error, error message: {}, error code: {}", e.displayText(), e.code());
             queue->push(Result(e));
+            meet_error = true;
             break;
         }
         idx++;
