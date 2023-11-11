@@ -546,7 +546,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
             log->information("get lock and sleep for a while, sleep time is " + std::to_string(before_expired) + "ms.");
             bo.backoffWithMaxSleep(kv::boTxnLockFast, before_expired, Exception(locked.DebugString(), ErrorCodes::LockError));
         }
-        return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, log, task.meta_data, task.before_send, task.connection_id, task.connection_alias);
+        return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, task.connection_id, task.connection_alias, log, task.meta_data, task.before_send);
     };
 
     kv::RegionClient client(cluster, task.region_id);
@@ -559,7 +559,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
         catch (Exception & e)
         {
             bo.backoff(kv::boRegionMiss, e);
-            return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, log, task.meta_data, task.before_send, task.connection_id, task.connection_alias);
+            return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, task.connection_id, task.connection_alias, log, task.meta_data, task.before_send);
         }
         if (resp->has_locked())
             return handle_locked_resp(resp->locked());
@@ -594,7 +594,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
             return handle_unary_cop();
         }
         bo.backoff(kv::boRegionMiss, e);
-        return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, log, task.meta_data, task.before_send, task.connection_id, task.connection_alias);
+        return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, task.connection_id, task.connection_alias, log, task.meta_data, task.before_send);
     }
 
     bool is_first_resp = true;
