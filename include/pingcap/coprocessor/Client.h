@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <cstdint>
 #include <mutex>
 #include <thread>
 
@@ -68,6 +69,8 @@ struct CopTask
     // call before send request, can be used to collect TiFlash metrics.
     std::function<void()> before_send;
     pd::KeyspaceID keyspace_id;
+    uint64_t connection_id;
+    std::string connection_alias;
 };
 
 struct RegionInfo
@@ -271,6 +274,8 @@ std::vector<CopTask> buildCopTasks(
     RequestPtr cop_req,
     kv::StoreType store_type,
     pd::KeyspaceID keyspace_id,
+    uint64_t connection_id,
+    const std::string & connection_alias,
     Logger * log,
     kv::GRPCMetaData meta_data = {},
     std::function<void()> before_send = {});
