@@ -53,7 +53,7 @@ TEST_F(TestCoprocessor, BuildTask)
         kv::StoreType::TiKV,
         pd::NullspaceID,
         0,
-        ""
+        "",
         &Logger::get("pingcap/coprocessor"));
 
     ASSERT_EQ(tasks.size(), 2);
@@ -110,7 +110,7 @@ TEST_F(TestCoprocessor, BuildTaskStream)
         kv::StoreType::TiKV,
         pd::NullspaceID,
         0,
-        ""
+        "",
         &Logger::get("pingcap/coprocessor"));
 
     ASSERT_EQ(tasks.size(), 2);
