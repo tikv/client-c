@@ -25,6 +25,8 @@ std::vector<CopTask> buildCopTasks(
     RequestPtr cop_req,
     kv::StoreType store_type,
     pd::KeyspaceID keyspace_id,
+    uint64_t connection_id,
+    const std::string & connection_alias,
     Logger * log,
     kv::GRPCMetaData meta_data,
     std::function<void()> before_send)
@@ -45,7 +47,7 @@ std::vector<CopTask> buildCopTasks(
         // all ranges belong to same region.
         if (i == ranges.size())
         {
-            tasks.push_back(CopTask{loc.region, ranges, cop_req, store_type, /*partition_index=*/0, meta_data, before_send, keyspace_id});
+            tasks.push_back(CopTask{loc.region, ranges, cop_req, store_type, /*partition_index=*/0, meta_data, before_send, keyspace_id, connection_id, connection_alias});
             break;
         }
 
@@ -57,7 +59,7 @@ std::vector<CopTask> buildCopTasks(
             task_ranges.push_back(KeyRange{bound.start_key, loc.end_key});
             bound.start_key = loc.end_key; // update the last range start key after splitted
         }
-        tasks.push_back(CopTask{loc.region, task_ranges, cop_req, store_type, /*partition_index=*/0, meta_data, before_send, keyspace_id});
+        tasks.push_back(CopTask{loc.region, task_ranges, cop_req, store_type, /*partition_index=*/0, meta_data, before_send, keyspace_id, connection_id, connection_alias});
         ranges.erase(ranges.begin(), ranges.begin() + i);
     }
     log->debug("has " + std::to_string(tasks.size()) + " tasks.");
@@ -544,7 +546,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
             log->information("get lock and sleep for a while, sleep time is " + std::to_string(before_expired) + "ms.");
             bo.backoffWithMaxSleep(kv::boTxnLockFast, before_expired, Exception(locked.DebugString(), ErrorCodes::LockError));
         }
-        return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, log, task.meta_data, task.before_send);
+        return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, task.connection_id, task.connection_alias, log, task.meta_data, task.before_send);
     };
 
     kv::RegionClient client(cluster, task.region_id);
@@ -557,7 +559,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
         catch (Exception & e)
         {
             bo.backoff(kv::boRegionMiss, e);
-            return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, log, task.meta_data, task.before_send);
+            return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, task.connection_id, task.connection_alias, log, task.meta_data, task.before_send);
         }
         if (resp->has_locked())
             return handle_locked_resp(resp->locked());
@@ -592,7 +594,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
             return handle_unary_cop();
         }
         bo.backoff(kv::boRegionMiss, e);
-        return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, log, task.meta_data, task.before_send);
+        return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, task.connection_id, task.connection_alias, log, task.meta_data, task.before_send);
     }
 
     bool is_first_resp = true;
