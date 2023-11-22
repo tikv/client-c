@@ -37,7 +37,6 @@ EmptyLineBeforeAccessModifier: LogicalBlock
 ExperimentalAutoDetectBinPacking: true
 FixNamespaceComments: true
 IndentCaseLabels: false
-IndentWidth: 4
 KeepEmptyLinesAtTheStartOfBlocks: false
 MaxEmptyLinesToKeep: 2
 #PPIndentWidth: 2  # clang-format version 12.0.0 doesn't support yet
