@@ -218,6 +218,7 @@ TxnStatus LockResolver::getTxnStatus(Backoffer & bo, uint64_t txn_id, const std:
 
 void LockResolver::resolveLock(Backoffer & bo, LockPtr lock, TxnStatus & status, std::unordered_set<RegionVerID> & set)
 {
+    log->debug("resolve lock" + lock->toDebugString());
     for (;;)
     {
         auto loc = cluster->region_cache->locateKey(bo, lock->key);
@@ -256,12 +257,14 @@ void LockResolver::resolveLock(Backoffer & bo, LockPtr lock, TxnStatus & status,
         {
             set.insert(loc.region);
         }
+        log->debug("resolve lock done");
         return;
     }
 }
 
 void LockResolver::resolvePessimisticLock(Backoffer & bo, LockPtr lock, std::unordered_set<RegionVerID> & set)
 {
+    log->debug("resolve pessimistic lock" + lock->toDebugString());
     for (;;)
     {
         auto loc = cluster->region_cache->locateKey(bo, lock->key);
@@ -295,12 +298,17 @@ void LockResolver::resolvePessimisticLock(Backoffer & bo, LockPtr lock, std::uno
             log->error("unexpected resolve pessimistic lock err: " + key_errors[0].ShortDebugString());
             throw Exception("unexpected err :" + key_errors[0].ShortDebugString(), ErrorCodes::UnknownError);
         }
+
+        log->debug("resolve pessimistic lock done");
+
         return;
     }
 }
 
 void LockResolver::resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & status)
 {
+    log->debug("resolve lock async" + lock->toDebugString());
+
     AsyncResolveDataPtr resolve_data{};
     resolve_data = checkAllSecondaries(bo, lock, status);
 
@@ -334,6 +342,8 @@ void LockResolver::resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & st
     {
         t.join();
     }
+
+    log->debug("resolve lock async done");
 
     if (errors.load() > 0)
     {

@@ -220,7 +220,8 @@ private:
         {
             if (is_cancelled || meet_error)
             {
-                log->information("cop task exit because {}", is_cancelled ? "has been cancelled" : "already meet error");
+                const char * msg = is_cancelled ? "has been cancelled" : "already meet error";
+                log->information("cop task exit because " + std::string(msg));
                 return;
             }
             std::unique_lock<std::mutex> lk(task_mutex);
