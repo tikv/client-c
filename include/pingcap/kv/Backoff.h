@@ -112,12 +112,12 @@ struct Backoffer
     std::map<BackoffType, BackoffPtr> backoff_map;
     size_t total_sleep; // ms
     size_t max_sleep; // ms
-    BackofferMaps * region_backoff_map;
+    const BackofferMaps * region_backoff_map;
 
-    explicit Backoffer(size_t max_sleep_, BackofferMaps * bo_maps_ = nullptr)
+    explicit Backoffer(size_t max_sleep_, const BackofferMaps * region_backoff_map_ = nullptr)
         : total_sleep(0)
         , max_sleep(max_sleep_)
-        , region_backoff_map(bo_maps_)
+        , region_backoff_map(region_backoff_map_)
     {}
 
     void backoff(BackoffType tp, const Exception & exc);

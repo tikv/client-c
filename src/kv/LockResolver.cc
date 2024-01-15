@@ -326,11 +326,11 @@ void LockResolver::resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & st
         threads.reserve(keys_by_region.size());
         sub_bos.reserve(keys_by_region.size());
     }
-    assert(bo.region_backoff_map);
     for (auto & pair : keys_by_region)
     {
         const auto & region_id = pair.first;
-        sub_bos.emplace_back(region_id.id, bo.region_backoff_map->try_emplace(region_id.id, kv::copNextMaxBackoff, bo.region_backoff_map).first->second);
+        if (bo.region_backoff_map)
+            sub_bos.emplace_back(region_id.id, bo.region_backoff_map->try_emplace(region_id.id, kv::copNextMaxBackoff, bo.region_backoff_map).first->second);
         auto & locks = pair.second;
         threads.emplace_back([&]() {
             try
@@ -428,12 +428,12 @@ AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lo
         threads.reserve(regions.size());
         sub_bos.reserve(regions.size());
     }
-    assert(bo.region_backoff_map);
     for (auto & pair : regions)
     {
         const auto & region_id = pair.first;
         auto & keys = pair.second;
-        sub_bos.emplace_back(region_id.id, bo.region_backoff_map->try_emplace(region_id.id, kv::copNextMaxBackoff, bo.region_backoff_map).first->second);
+        if (bo.region_backoff_map)
+            sub_bos.emplace_back(region_id.id, bo.region_backoff_map->try_emplace(region_id.id, kv::copNextMaxBackoff, bo.region_backoff_map).first->second);
 
         threads.emplace_back([&]() {
             try
@@ -481,12 +481,12 @@ AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lo
 void LockResolver::checkSecondaries(
     Backoffer & bo,
     uint64_t txn_id,
-    std::vector<std::string> & cur_keys,
+    const std::vector<std::string> & cur_keys,
     RegionVerID cur_region_id,
     AsyncResolveDataPtr shared_data)
 {
     ::kvrpcpb::CheckSecondaryLocksRequest check_request;
-    for (auto & key : cur_keys)
+    for (const auto & key : cur_keys)
     {
         auto * k = check_request.add_keys();
         *k = key;
