@@ -441,9 +441,7 @@ AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lo
         if (bo.region_backoff_map)
             sub_bos.emplace_back(region_id.id, bo.region_backoff_map->try_emplace(region_id.id, kv::copNextMaxBackoff, bo.region_backoff_map).first->second);
         else
-        {
             sub_bos.emplace_back(region_id.id, bo);
-        }
 
         threads.emplace_back([&]() {
             try
