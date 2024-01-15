@@ -12,6 +12,7 @@
 #include <limits>
 #include <vector>
 
+
 namespace pingcap
 {
 namespace coprocessor
@@ -640,7 +641,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
 template <bool is_stream>
 void ResponseIter::handleTask(const CopTask & task)
 {
-    std::unordered_map<uint64_t, kv::Backoffer> bo_maps;
+    kv::BackofferMaps bo_maps;
     std::vector<CopTask> remain_tasks({task});
     size_t idx = 0;
     while (idx < remain_tasks.size())
@@ -650,7 +651,7 @@ void ResponseIter::handleTask(const CopTask & task)
         try
         {
             auto & current_task = remain_tasks[idx];
-            auto & bo = bo_maps.try_emplace(current_task.region_id.id, kv::copNextMaxBackoff).first->second;
+            auto & bo = bo_maps.try_emplace(current_task.region_id.id, kv::copNextMaxBackoff, &bo_maps).first->second;
             auto new_tasks = handleTaskImpl<is_stream>(bo, current_task);
             if (!new_tasks.empty())
             {

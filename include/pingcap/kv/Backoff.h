@@ -103,21 +103,26 @@ constexpr int copNextMaxBackoff = 20000;
 constexpr int pessimisticLockMaxBackoff = 20000;
 
 using BackoffPtr = std::shared_ptr<Backoff>;
+struct Backoffer;
+using BackofferMaps = std::unordered_map<uint64_t, Backoffer>;
 
 struct Backoffer
 {
     std::map<BackoffType, BackoffPtr> backoff_map;
     size_t total_sleep; // ms
     size_t max_sleep; // ms
+    BackofferMaps * region_backoff_map;
 
-    explicit Backoffer(size_t max_sleep_)
+    explicit Backoffer(size_t max_sleep_, BackofferMaps * bo_maps_ = nullptr)
         : total_sleep(0)
         , max_sleep(max_sleep_)
+        , region_backoff_map(bo_maps_)
     {}
 
     void backoff(BackoffType tp, const Exception & exc);
     void backoffWithMaxSleep(BackoffType tp, int max_sleep_time, const Exception & exc);
 };
+
 
 } // namespace kv
 } // namespace pingcap

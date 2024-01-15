@@ -320,15 +320,22 @@ void LockResolver::resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & st
     std::tie(keys_by_region, std::ignore) = cluster->region_cache->groupKeysByRegion(bo, resolve_data->keys);
 
     std::vector<std::thread> threads;
+    std::vector<std::pair<uint64_t, Backoffer>> sub_bos;
     std::atomic<int> errors{};
+    {
+        threads.reserve(keys_by_region.size());
+        sub_bos.reserve(keys_by_region.size());
+    }
+    assert(bo.region_backoff_map);
     for (auto & pair : keys_by_region)
     {
         const auto & region_id = pair.first;
+        sub_bos.emplace_back(region_id.id, bo.region_backoff_map->try_emplace(region_id.id, kv::copNextMaxBackoff, bo.region_backoff_map).first->second);
         auto & locks = pair.second;
         threads.emplace_back([&]() {
             try
             {
-                resolveRegionLocks(bo, lock, region_id, locks, status);
+                resolveRegionLocks(sub_bos.back().second, lock, region_id, locks, status);
             }
             catch (Exception & e)
             {
@@ -348,6 +355,15 @@ void LockResolver::resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & st
     if (errors.load() > 0)
     {
         throw Exception("AsyncCommit recovery finished with errors", ErrorCodes::UnknownError);
+    }
+
+    for (auto && [region_id, bo] : sub_bos)
+    {
+        auto [it, ok] = bo.region_backoff_map->try_emplace(region_id, std::move(bo));
+        if (!ok)
+        {
+            it->second = std::move(bo);
+        }
     }
 }
 
@@ -406,15 +422,23 @@ AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lo
     std::tie(regions, std::ignore) = cluster->region_cache->groupKeysByRegion(bo, secondaries);
     auto shared_data = std::make_shared<AsyncResolveData>(status.primary_lock->min_commit_ts(), false);
     std::vector<std::thread> threads;
+    std::vector<std::pair<uint64_t, Backoffer>> sub_bos;
     std::atomic_int8_t errors{0};
+    {
+        threads.reserve(regions.size());
+        sub_bos.reserve(regions.size());
+    }
+    assert(bo.region_backoff_map);
     for (auto & pair : regions)
     {
         const auto & region_id = pair.first;
         auto & keys = pair.second;
+        sub_bos.emplace_back(region_id.id, bo.region_backoff_map->try_emplace(region_id.id, kv::copNextMaxBackoff, bo.region_backoff_map).first->second);
+
         threads.emplace_back([&]() {
             try
             {
-                checkSecondaries(bo, lock->txn_id, keys, region_id, shared_data);
+                checkSecondaries(sub_bos.back().second, lock->txn_id, keys, region_id, shared_data);
             }
             catch (Exception & e)
             {
@@ -440,6 +464,15 @@ AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lo
     if (errors.load() > 0)
     {
         throw Exception("resolveAsyncLock failed", ErrorCodes::UnknownError);
+    }
+
+    for (auto && [region_id, bo] : sub_bos)
+    {
+        auto [it, ok] = bo.region_backoff_map->try_emplace(region_id, std::move(bo));
+        if (!ok)
+        {
+            it->second = std::move(bo);
+        }
     }
 
     return shared_data;
