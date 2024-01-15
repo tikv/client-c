@@ -329,11 +329,10 @@ void LockResolver::resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & st
     }
     for (auto & pair : keys_by_region)
     {
-        const auto & region_id = pair.first;
         Backoffer * backoffer{};
         if (bo.region_backoff_map)
         {
-            backoffer = &bo.region_backoff_map->try_emplace(region_id.id, kv::copNextMaxBackoff, bo.region_backoff_map).first->second;
+            backoffer = &bo.region_backoff_map->try_emplace(pair.first.id, kv::copNextMaxBackoff, bo.region_backoff_map).first->second;
         }
         else
         {
@@ -348,11 +347,10 @@ void LockResolver::resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & st
             backoffer = &extra_backoffer.back();
         }
 
-        auto & locks = pair.second;
         threads.emplace_back([&, backoffer]() {
             try
             {
-                resolveRegionLocks(*backoffer, lock, region_id, locks, status);
+                resolveRegionLocks(*backoffer, lock, pair.first, pair.second, status);
             }
             catch (Exception & e)
             {
@@ -439,12 +437,10 @@ AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lo
     }
     for (auto & pair : regions)
     {
-        const auto & region_id = pair.first;
-        auto & keys = pair.second;
         Backoffer * backoffer{};
         if (bo.region_backoff_map)
         {
-            backoffer = &bo.region_backoff_map->try_emplace(region_id.id, kv::copNextMaxBackoff, bo.region_backoff_map).first->second;
+            backoffer = &bo.region_backoff_map->try_emplace(pair.first.id, kv::copNextMaxBackoff, bo.region_backoff_map).first->second;
         }
         else
         {
@@ -461,7 +457,7 @@ AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lo
         threads.emplace_back([&, backoffer]() {
             try
             {
-                checkSecondaries(*backoffer, lock->txn_id, keys, region_id, shared_data);
+                checkSecondaries(*backoffer, lock->txn_id, pair.second, pair.first, shared_data);
             }
             catch (Exception & e)
             {
