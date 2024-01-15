@@ -7,6 +7,7 @@
 #include <map>
 #include <memory>
 #include <thread>
+#include <unordered_map>
 
 namespace pingcap
 {
