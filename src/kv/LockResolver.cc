@@ -2,8 +2,6 @@
 #include <pingcap/kv/LockResolver.h>
 #include <pingcap/kv/RegionClient.h>
 
-#include <unordered_set>
-
 namespace pingcap
 {
 namespace kv
@@ -305,6 +303,60 @@ void LockResolver::resolvePessimisticLock(Backoffer & bo, LockPtr lock, std::uno
     }
 }
 
+
+static std::pair<std::unordered_map<RegionVerID, Backoffer *>, std::vector<Backoffer>> genInnerBackoffer(
+    Backoffer & bo,
+    const std::unordered_map<RegionVerID, std::vector<std::string>> & keys_by_region)
+{
+    std::vector<Backoffer> data_holder;
+    std::unordered_map<RegionVerID, Backoffer *> res;
+    std::unordered_set<uint64_t> used_region_id;
+
+    data_holder.reserve(keys_by_region.size());
+
+    if (!bo.region_backoff_map)
+    {
+        for (const auto & pair : keys_by_region)
+        {
+            if (res.empty())
+            {
+                res.emplace(pair.first, &bo);
+            }
+            else
+            {
+                data_holder.emplace_back(kv::copNextMaxBackoff);
+                res.emplace(pair.first, &data_holder.back());
+            }
+        }
+        return {std::move(res), std::move(data_holder)};
+    }
+
+
+    for (const auto & pair : keys_by_region)
+    {
+        auto [it, ok] = bo.region_backoff_map->try_emplace(pair.first.id, kv::copNextMaxBackoff, bo.region_backoff_map);
+        if (ok)
+        {
+            res[pair.first] = &it->second;
+        }
+        else
+        {
+            if (used_region_id.count(pair.first.id))
+            {
+                data_holder.emplace_back(kv::copNextMaxBackoff);
+                res.emplace(pair.first, &data_holder.back());
+            }
+            else
+            {
+                res[pair.first] = &it->second;
+            }
+        }
+        used_region_id.emplace(pair.first.id);
+    }
+
+    return {std::move(res), std::move(data_holder)};
+}
+
 void LockResolver::resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & status)
 {
     log->debug("resolve lock async" + lock->toDebugString());
@@ -320,37 +372,16 @@ void LockResolver::resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & st
     std::tie(keys_by_region, std::ignore) = cluster->region_cache->groupKeysByRegion(bo, resolve_data->keys);
 
     std::vector<std::thread> threads;
-    std::vector<Backoffer> extra_backoffer;
     std::atomic<int> errors{};
-    {
-        threads.reserve(keys_by_region.size());
-        if (!bo.region_backoff_map)
-            extra_backoffer.reserve(keys_by_region.size());
-    }
+
+    auto && backoffer_map = genInnerBackoffer(bo, keys_by_region);
+
     for (auto & pair : keys_by_region)
     {
-        Backoffer * backoffer{};
-        if (bo.region_backoff_map)
-        {
-            backoffer = &bo.region_backoff_map->try_emplace(pair.first.id, kv::copNextMaxBackoff, bo.region_backoff_map).first->second;
-        }
-        else
-        {
-            if (extra_backoffer.empty())
-            {
-                extra_backoffer.emplace_back(bo);
-            }
-            else
-            {
-                extra_backoffer.emplace_back(kv::copNextMaxBackoff);
-            }
-            backoffer = &extra_backoffer.back();
-        }
-
-        threads.emplace_back([&, backoffer]() {
+        threads.emplace_back([&]() {
             try
             {
-                resolveRegionLocks(*backoffer, lock, pair.first, pair.second, status);
+                resolveRegionLocks(*backoffer_map.first.find(pair.first)->second, lock, pair.first, pair.second, status);
             }
             catch (Exception & e)
             {
@@ -428,36 +459,16 @@ AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lo
     std::tie(regions, std::ignore) = cluster->region_cache->groupKeysByRegion(bo, secondaries);
     auto shared_data = std::make_shared<AsyncResolveData>(status.primary_lock->min_commit_ts(), false);
     std::vector<std::thread> threads;
-    std::vector<Backoffer> extra_backoffer;
     std::atomic_int8_t errors{0};
-    {
-        threads.reserve(regions.size());
-        if (!bo.region_backoff_map)
-            extra_backoffer.reserve(regions.size());
-    }
+
+    auto && backoffer_map = genInnerBackoffer(bo, regions);
+
     for (auto & pair : regions)
     {
-        Backoffer * backoffer{};
-        if (bo.region_backoff_map)
-        {
-            backoffer = &bo.region_backoff_map->try_emplace(pair.first.id, kv::copNextMaxBackoff, bo.region_backoff_map).first->second;
-        }
-        else
-        {
-            if (extra_backoffer.empty())
-            {
-                extra_backoffer.emplace_back(bo);
-            }
-            else
-            {
-                extra_backoffer.emplace_back(kv::copNextMaxBackoff);
-            }
-            backoffer = &extra_backoffer.back();
-        }
-        threads.emplace_back([&, backoffer]() {
+        threads.emplace_back([&]() {
             try
             {
-                checkSecondaries(*backoffer, lock->txn_id, pair.second, pair.first, shared_data);
+                checkSecondaries(*backoffer_map.first.find(pair.first)->second, lock->txn_id, pair.second, pair.first, shared_data);
             }
             catch (Exception & e)
             {
