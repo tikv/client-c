@@ -331,6 +331,9 @@ void LockResolver::resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & st
         const auto & region_id = pair.first;
         if (bo.region_backoff_map)
             sub_bos.emplace_back(region_id.id, bo.region_backoff_map->try_emplace(region_id.id, kv::copNextMaxBackoff, bo.region_backoff_map).first->second);
+        else
+            sub_bos.emplace_back(region_id.id, bo);
+
         auto & locks = pair.second;
         threads.emplace_back([&]() {
             try
@@ -357,12 +360,15 @@ void LockResolver::resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & st
         throw Exception("AsyncCommit recovery finished with errors", ErrorCodes::UnknownError);
     }
 
-    for (auto && [region_id, bo] : sub_bos)
+    if (bo.region_backoff_map)
     {
-        auto [it, ok] = bo.region_backoff_map->try_emplace(region_id, std::move(bo));
-        if (!ok)
+        for (auto && [region_id, bo] : sub_bos)
         {
-            it->second = std::move(bo);
+            auto [it, ok] = bo.region_backoff_map->try_emplace(region_id, std::move(bo));
+            if (!ok)
+            {
+                it->second = std::move(bo);
+            }
         }
     }
 }
@@ -434,6 +440,10 @@ AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lo
         auto & keys = pair.second;
         if (bo.region_backoff_map)
             sub_bos.emplace_back(region_id.id, bo.region_backoff_map->try_emplace(region_id.id, kv::copNextMaxBackoff, bo.region_backoff_map).first->second);
+        else
+        {
+            sub_bos.emplace_back(region_id.id, bo);
+        }
 
         threads.emplace_back([&]() {
             try
@@ -466,12 +476,15 @@ AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lo
         throw Exception("resolveAsyncLock failed", ErrorCodes::UnknownError);
     }
 
-    for (auto && [region_id, bo] : sub_bos)
+    if (bo.region_backoff_map)
     {
-        auto [it, ok] = bo.region_backoff_map->try_emplace(region_id, std::move(bo));
-        if (!ok)
+        for (auto && [region_id, bo] : sub_bos)
         {
-            it->second = std::move(bo);
+            auto [it, ok] = bo.region_backoff_map->try_emplace(region_id, std::move(bo));
+            if (!ok)
+            {
+                it->second = std::move(bo);
+            }
         }
     }
 
