@@ -8,6 +8,11 @@
 #include "mock_tikv.h"
 #include "test_helper.h"
 
+namespace pingcap::kv
+{
+extern BackoffPtr newBackoff(BackoffType);
+}
+
 namespace pingcap::tests
 {
 using namespace pingcap;
@@ -123,6 +128,13 @@ TEST_F(TestWithLockResolve, testResolveLockBase)
 {
     {
         Backoffer bo(kv::copNextMaxBackoff);
+        for (int i = 0; i <= 12; ++i)
+        {
+            auto t = static_cast<BackoffType>(i);
+            bo.backoff_map.emplace(t, newBackoff(t));
+        }
+        ASSERT_EQ(bo.backoff_map.size(), 13);
+
         auto && new_bo = bo.clone();
         ASSERT_EQ(new_bo.max_sleep, bo.max_sleep);
         ASSERT_EQ(new_bo.total_sleep, bo.total_sleep);
