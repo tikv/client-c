@@ -5,10 +5,13 @@
 #include <pingcap/kv/Snapshot.h>
 #include <pingcap/kv/Txn.h>
 
-#include <iostream>
-
 #include "mock_tikv.h"
 #include "test_helper.h"
+
+namespace pingcap::kv
+{
+extern BackoffPtr newBackoff(BackoffType);
+}
 
 namespace
 {
@@ -52,7 +55,7 @@ TEST_F(TestWithLockResolve, testResolveLockGet)
 
     // and write again, but second region commits failed.
     {
-        fiu_enable("rest commit fail", 1, NULL, FIU_ONETIME);
+        fiu_enable("rest commit fail", 1, nullptr, FIU_ONETIME);
         Txn txn(test_cluster.get());
 
         txn.set("abc", "6");
@@ -97,7 +100,7 @@ TEST_F(TestWithLockResolve, testResolveLockGet)
     }
 
     {
-        fiu_enable("all commit fail", 1, NULL, FIU_ONETIME);
+        fiu_enable("all commit fail", 1, nullptr, FIU_ONETIME);
         Txn txn(test_cluster.get());
 
         txn.set("abc", "6");
@@ -117,6 +120,34 @@ TEST_F(TestWithLockResolve, testResolveLockGet)
         result = snap.Get("abz");
 
         ASSERT_EQ(result, "6");
+    }
+}
+
+TEST_F(TestWithLockResolve, testResolveLockBase)
+{
+    {
+        Backoffer bo(kv::copNextMaxBackoff);
+        for (int i = 0; i <= 12; ++i)
+        {
+            auto t = static_cast<BackoffType>(i);
+            bo.backoff_map.emplace(t, newBackoff(t));
+        }
+        ASSERT_EQ(bo.backoff_map.size(), 13);
+        for (int i = 0; i <= 12; ++i)
+        {
+            auto t = static_cast<BackoffType>(i);
+             bo.backoff(t, {});
+        }
+
+        auto && new_bo = bo.clone();
+        ASSERT_EQ(new_bo.max_sleep, bo.max_sleep);
+        ASSERT_EQ(new_bo.total_sleep, bo.total_sleep);
+        ASSERT_EQ(new_bo.backoff_map.size(), bo.backoff_map.size());
+        for (auto && [k, v] : bo.backoff_map)
+        {
+            ASSERT_NE(v.get(), new_bo.backoff_map.at(k).get());
+            ASSERT_EQ(std::memcmp(v.get(), new_bo.backoff_map.at(k).get(), sizeof(Backoff)), 0);
+        }
     }
 }
 

@@ -274,7 +274,7 @@ private:
     void checkSecondaries(
         Backoffer & bo,
         uint64_t txn_id,
-        std::vector<std::string> & cur_keys,
+        const std::vector<std::string> & cur_keys,
         RegionVerID cur_region_id,
         AsyncResolveDataPtr shared_data);
 
