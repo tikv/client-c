@@ -5,10 +5,7 @@
 #include <pingcap/kv/Snapshot.h>
 #include <pingcap/kv/Txn.h>
 
-#include <iostream>
-
 #include "mock_tikv.h"
-#include "pingcap/kv/Backoff.h"
 #include "test_helper.h"
 
 namespace pingcap::tests
