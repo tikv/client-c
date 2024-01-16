@@ -303,60 +303,6 @@ void LockResolver::resolvePessimisticLock(Backoffer & bo, LockPtr lock, std::uno
     }
 }
 
-
-static std::pair<std::unordered_map<RegionVerID, Backoffer *>, std::vector<Backoffer>> genInnerBackoffer(
-    Backoffer & bo,
-    const std::unordered_map<RegionVerID, std::vector<std::string>> & keys_by_region)
-{
-    std::vector<Backoffer> data_holder;
-    std::unordered_map<RegionVerID, Backoffer *> res;
-    std::unordered_set<uint64_t> used_region_id;
-
-    data_holder.reserve(keys_by_region.size());
-
-    if (!bo.region_backoff_map)
-    {
-        for (const auto & pair : keys_by_region)
-        {
-            if (res.empty())
-            {
-                res.emplace(pair.first, &bo);
-            }
-            else
-            {
-                data_holder.emplace_back(kv::copNextMaxBackoff);
-                res.emplace(pair.first, &data_holder.back());
-            }
-        }
-        return {std::move(res), std::move(data_holder)};
-    }
-
-
-    for (const auto & pair : keys_by_region)
-    {
-        auto [it, ok] = bo.region_backoff_map->try_emplace(pair.first.id, kv::copNextMaxBackoff, bo.region_backoff_map);
-        if (ok)
-        {
-            res[pair.first] = &it->second;
-        }
-        else
-        {
-            if (used_region_id.count(pair.first.id))
-            {
-                data_holder.emplace_back(kv::copNextMaxBackoff);
-                res.emplace(pair.first, &data_holder.back());
-            }
-            else
-            {
-                res[pair.first] = &it->second;
-            }
-        }
-        used_region_id.emplace(pair.first.id);
-    }
-
-    return {std::move(res), std::move(data_holder)};
-}
-
 void LockResolver::resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & status)
 {
     log->debug("resolve lock async" + lock->toDebugString());
@@ -373,15 +319,14 @@ void LockResolver::resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & st
 
     std::vector<std::thread> threads;
     std::atomic<int> errors{};
-
-    auto && backoffer_map = genInnerBackoffer(bo, keys_by_region);
-
+    threads.reserve(keys_by_region.size());
     for (auto & pair : keys_by_region)
     {
         threads.emplace_back([&]() {
             try
             {
-                resolveRegionLocks(*backoffer_map.first.find(pair.first)->second, lock, pair.first, pair.second, status);
+                auto && new_bo = bo.clone();
+                resolveRegionLocks(new_bo, lock, pair.first, pair.second, status);
             }
             catch (Exception & e)
             {
@@ -460,15 +405,14 @@ AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lo
     auto shared_data = std::make_shared<AsyncResolveData>(status.primary_lock->min_commit_ts(), false);
     std::vector<std::thread> threads;
     std::atomic_int8_t errors{0};
-
-    auto && backoffer_map = genInnerBackoffer(bo, regions);
-
+    threads.reserve(regions.size());
     for (auto & pair : regions)
     {
         threads.emplace_back([&]() {
             try
             {
-                checkSecondaries(*backoffer_map.first.find(pair.first)->second, lock->txn_id, pair.second, pair.first, shared_data);
+                auto && new_bo = bo.clone();
+                checkSecondaries(new_bo, lock->txn_id, pair.second, pair.first, shared_data);
             }
             catch (Exception & e)
             {

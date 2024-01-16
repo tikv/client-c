@@ -7,7 +7,6 @@
 #include <map>
 #include <memory>
 #include <thread>
-#include <unordered_map>
 
 namespace pingcap
 {
@@ -104,26 +103,34 @@ constexpr int copNextMaxBackoff = 20000;
 constexpr int pessimisticLockMaxBackoff = 20000;
 
 using BackoffPtr = std::shared_ptr<Backoff>;
-struct Backoffer;
-using BackofferMaps = std::unordered_map<uint64_t, Backoffer>;
 
 struct Backoffer
 {
-    std::map<BackoffType, BackoffPtr> backoff_map;
-    size_t total_sleep; // ms
     size_t max_sleep; // ms
-    BackofferMaps * region_backoff_map;
+    size_t total_sleep; // ms
+    std::map<BackoffType, BackoffPtr> backoff_map;
 
-    explicit Backoffer(size_t max_sleep_, BackofferMaps * region_backoff_map_ = nullptr)
-        : total_sleep(0)
-        , max_sleep(max_sleep_)
-        , region_backoff_map(region_backoff_map_)
+    explicit Backoffer(size_t max_sleep_, size_t total_sleep_ = 0)
+        : max_sleep(max_sleep_)
+        , total_sleep(total_sleep_)
     {}
+
+    Backoffer clone() const
+    {
+        Backoffer res(max_sleep, total_sleep);
+        for (auto && [k, v] : backoff_map)
+        {
+            res.backoff_map.emplace(k, new Backoff(*v));
+        }
+        return res;
+    }
+
+    Backoffer(const Backoffer &) = delete;
+    Backoffer(Backoffer &&) = default;
 
     void backoff(BackoffType tp, const Exception & exc);
     void backoffWithMaxSleep(BackoffType tp, int max_sleep_time, const Exception & exc);
 };
-
 
 } // namespace kv
 } // namespace pingcap
