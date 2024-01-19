@@ -27,7 +27,7 @@ void Cluster::splitRegion(const std::string & split_key)
     region_cache->getRegionByID(bo, RegionVerID(rr.id(), rr.region_epoch().conf_ver(), rr.region_epoch().version()));
 }
 
-void Cluster::startBackgourndTasks()
+void Cluster::startBackgroundTasks()
 {
     thread_pool->start();
     thread_pool->enqueue([this] {

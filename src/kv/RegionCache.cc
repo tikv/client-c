@@ -197,7 +197,7 @@ metapb::Store RegionCache::loadStore(Backoffer & bo, uint64_t id)
         {
             // TODO:: The store may be not ready, it's better to check store's state.
             const auto & store = pd_client->getStore(id);
-            log->information("load store id " + std::to_string(id) + " address %s", store.address());
+            log->information("load store id " + std::to_string(id) + " address " + store.address());
             return store;
         }
         catch (Exception & e)

@@ -533,7 +533,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
 
     auto handle_locked_resp = [&](const ::kvrpcpb::LockInfo & locked) -> std::vector<CopTask> {
         kv::LockPtr lock = std::make_shared<kv::Lock>(locked);
-        log->debug("encounter lock problem: " + locked.DebugString());
+        log->debug("region " + task.region_id.toString() + " encounter lock problem: " + locked.DebugString());
         std::vector<uint64_t> pushed;
         std::vector<kv::LockPtr> locks{lock};
         auto before_expired = cluster->lock_resolver->resolveLocks(bo, task.req->start_ts, locks, pushed);
