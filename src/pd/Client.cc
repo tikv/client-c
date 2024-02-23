@@ -165,6 +165,7 @@ void Client::initLeader()
             {
                 log->warning("failed to update leader, will retry");
                 std::this_thread::sleep_for(std::chrono::seconds(2));
+                // test
             }
             else
             {
