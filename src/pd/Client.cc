@@ -122,7 +122,13 @@ void Client::initClusterID()
                 log->warning("failed to get cluster id by :" + url + " retrying");
                 continue;
             }
+            if (resp.header().has_error())
+            {
+                log->warning("failed to init cluster id: " + resp.header().error().message());
+                continue;
+            }
             cluster_id = resp.header().cluster_id();
+            log->information("init cluster id done: " + std::to_string(cluster_id));
             return;
         };
         std::this_thread::sleep_for(std::chrono::seconds(1));
