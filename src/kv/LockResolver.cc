@@ -2,8 +2,6 @@
 #include <pingcap/kv/LockResolver.h>
 #include <pingcap/kv/RegionClient.h>
 
-#include <unordered_set>
-
 namespace pingcap
 {
 namespace kv
@@ -314,14 +312,14 @@ void LockResolver::resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & st
 
     std::vector<std::thread> threads;
     std::atomic<int> errors{};
+    threads.reserve(keys_by_region.size());
     for (auto & pair : keys_by_region)
     {
-        const auto & region_id = pair.first;
-        auto & locks = pair.second;
         threads.emplace_back([&]() {
             try
             {
-                resolveRegionLocks(bo, lock, region_id, locks, status);
+                auto && new_bo = bo.clone();
+                resolveRegionLocks(new_bo, lock, pair.first, pair.second, status);
             }
             catch (Exception & e)
             {
@@ -403,14 +401,14 @@ AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lo
     auto shared_data = std::make_shared<AsyncResolveData>(status.primary_lock->min_commit_ts(), false);
     std::vector<std::thread> threads;
     std::atomic_int8_t errors{0};
+    threads.reserve(regions.size());
     for (auto & pair : regions)
     {
-        const auto & region_id = pair.first;
-        auto & keys = pair.second;
         threads.emplace_back([&]() {
             try
             {
-                checkSecondaries(bo, lock->txn_id, keys, region_id, shared_data);
+                auto && new_bo = bo.clone();
+                checkSecondaries(new_bo, lock->txn_id, pair.second, pair.first, shared_data);
             }
             catch (Exception & e)
             {
@@ -444,12 +442,12 @@ AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lo
 void LockResolver::checkSecondaries(
     Backoffer & bo,
     uint64_t txn_id,
-    std::vector<std::string> & cur_keys,
+    const std::vector<std::string> & cur_keys,
     RegionVerID cur_region_id,
     AsyncResolveDataPtr shared_data)
 {
     auto check_request = std::make_shared<::kvrpcpb::CheckSecondaryLocksRequest>();
-    for (auto & key : cur_keys)
+    for (const auto & key : cur_keys)
     {
         auto * k = check_request->add_keys();
         *k = key;
