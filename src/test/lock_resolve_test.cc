@@ -127,13 +127,13 @@ TEST_F(TestWithLockResolve, testResolveLockBase)
 {
     {
         Backoffer bo(kv::copNextMaxBackoff);
-        for (int i = 0; i <= 12; ++i)
+        for (int i = 0; i <= 11; ++i)
         {
             auto t = static_cast<BackoffType>(i);
             bo.backoff_map.emplace(t, newBackoff(t));
         }
-        ASSERT_EQ(bo.backoff_map.size(), 13);
-        for (int i = 0; i <= 12; ++i)
+        ASSERT_EQ(bo.backoff_map.size(), 12);
+        for (int i = 0; i <= 11; ++i)
         {
             auto t = static_cast<BackoffType>(i);
              bo.backoff(t, {});
