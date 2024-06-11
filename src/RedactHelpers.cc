@@ -1,10 +1,9 @@
+#include <pingcap/Exception.h>
 #include <pingcap/RedactHelpers.h>
 #include <string.h>
 
 #include <iomanip>
 #include <memory>
-
-#include "pingcap/Exception.h"
 
 namespace pingcap
 {
