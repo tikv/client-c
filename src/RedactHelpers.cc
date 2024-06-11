@@ -4,6 +4,8 @@
 #include <iomanip>
 #include <memory>
 
+#include "pingcap/Exception.h"
+
 namespace pingcap
 {
 
@@ -66,6 +68,8 @@ std::string Redact::keyToDebugString(const char * key, const size_t size)
         auto s = Redact::keyToHexString(key, size);
         return std::string("‹") + s + "›";
     }
+    default:
+        throw Exception(std::string("Should not reach here, v=") + std::to_string(static_cast<int64_t>(v)));
     }
 }
 
