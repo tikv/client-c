@@ -145,7 +145,7 @@ int64_t LockResolver::resolveLocksForWrite(Backoffer & bo, uint64_t caller_start
     return resolveLocks(bo, caller_start_ts, locks, ignored, true);
 }
 
-TxnStatus LockResolver::getTxnStatus(Backoffer & bo, uint64_t txn_id, const std::string & primary, uint64_t caller_start_ts, uint64_t current_ts, bool rollback_if_not_exists, bool force_sync_commit)
+TxnStatus LockResolver::getTxnStatus(Backoffer & bo, uint64_t txn_id, const std::string & primary, uint64_t caller_start_ts, uint64_t current_ts, bool rollback_if_not_exists, bool force_sync_commit, bool is_txn_file)
 {
     TxnStatus * cached_status = getResolved(txn_id);
     if (cached_status != nullptr)
@@ -161,6 +161,7 @@ TxnStatus LockResolver::getTxnStatus(Backoffer & bo, uint64_t txn_id, const std:
     req.set_current_ts(current_ts);
     req.set_rollback_if_not_exist(rollback_if_not_exists);
     req.set_force_sync_commit(force_sync_commit);
+    req.set_is_txn_file(is_txn_file);
     for (;;)
     {
         auto loc = cluster->region_cache->locateKey(bo, primary);
@@ -236,6 +237,7 @@ void LockResolver::resolveLock(Backoffer & bo, LockPtr lock, TxnStatus & status,
                 log->information("resolveLock rollback lock " + lock->toDebugString());
             }
         }
+        req.set_is_txn_file(lock->is_txn_file);
         RegionClient client(cluster, loc.region);
         kvrpcpb::ResolveLockResponse response;
         try
@@ -369,6 +371,7 @@ void LockResolver::resolveRegionLocks(
         auto * k = req.add_keys();
         *k = key;
     }
+    req.set_is_txn_file(lock->is_txn_file);
 
     RegionClient client(cluster, region_id);
     ::kvrpcpb::ResolveLockResponse response;
@@ -497,7 +500,7 @@ TxnStatus LockResolver::getTxnStatusFromLock(Backoffer & bo, LockPtr lock, uint6
     {
         try
         {
-            return getTxnStatus(bo, lock->txn_id, lock->primary, caller_start_ts, current_ts, rollback_if_not_exists, force_sync_commit);
+            return getTxnStatus(bo, lock->txn_id, lock->primary, caller_start_ts, current_ts, rollback_if_not_exists, force_sync_commit, lock->is_txn_file);
         }
         catch (Exception & e)
         {
