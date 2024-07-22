@@ -142,7 +142,13 @@ void Client::initClusterID()
                 log->warning("failed to get cluster id by :" + url + " retrying");
                 continue;
             }
+            if (resp.header().has_error())
+            {
+                log->warning("failed to init cluster id: " + resp.header().error().message());
+                continue;
+            }
             cluster_id = resp.header().cluster_id();
+            log->information("init cluster id done: " + std::to_string(cluster_id));
             return;
         }
         std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -321,7 +327,30 @@ uint64_t Client::getGCSafePoint()
     return response.safe_point();
 }
 
-std::pair<metapb::Region, metapb::Peer> Client::getRegionByKey(const std::string & key)
+uint64_t Client::getGCSafePointV2(KeyspaceID keyspace_id)
+{
+    pdpb::GetGCSafePointV2Request request{};
+    pdpb::GetGCSafePointV2Response response{};
+    request.set_allocated_header(requestHeader());
+    request.set_keyspace_id(keyspace_id);
+    std::string err_msg;
+
+    grpc::ClientContext context;
+
+    context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
+
+    auto status = leaderClient()->stub->GetGCSafePointV2(&context, request, &response);
+    if (!status.ok())
+    {
+        err_msg = "get keyspace_id:" + std::to_string(keyspace_id) + " safe point failed: " + std::to_string(status.error_code()) + ": " + status.error_message();
+        log->error(err_msg);
+        check_leader.store(true);
+        throw Exception(err_msg, status.error_code());
+    }
+    return response.safe_point();
+}
+
+pdpb::GetRegionResponse Client::getRegionByKey(const std::string & key)
 {
     pdpb::GetRegionRequest request{};
     pdpb::GetRegionResponse response{};
@@ -342,12 +371,10 @@ std::pair<metapb::Region, metapb::Peer> Client::getRegionByKey(const std::string
         throw Exception(err_msg, GRPCErrorCode);
     }
 
-    if (!response.has_region())
-        return {};
-    return std::make_pair(response.region(), response.leader());
+    return response;
 }
 
-std::pair<metapb::Region, metapb::Peer> Client::getRegionByID(uint64_t region_id)
+pdpb::GetRegionResponse Client::getRegionByID(uint64_t region_id)
 {
     pdpb::GetRegionByIDRequest request{};
     pdpb::GetRegionResponse response{};
@@ -368,10 +395,7 @@ std::pair<metapb::Region, metapb::Peer> Client::getRegionByID(uint64_t region_id
         throw Exception(err_msg, GRPCErrorCode);
     }
 
-    if (!response.has_region())
-        return {};
-
-    return std::make_pair(response.region(), response.leader());
+    return response;
 }
 
 std::vector<metapb::Store> Client::getAllStores(bool exclude_tombstone)
@@ -481,6 +505,12 @@ bool Client::isClusterBootstrapped()
         return false;
     }
 
+    if (!response.has_header())
+    {
+        log->warning("check cluster bootstrapped failed: header of IsBootstrappedResponse not setup");
+        return false;
+    }
+
     if (response.header().has_error())
     {
         std::string err_msg = ("check cluster bootstrapped failed: " + response.header().error().message());
@@ -489,6 +519,52 @@ bool Client::isClusterBootstrapped()
     }
 
     return response.bootstrapped();
+}
+
+#define RESOURCE_CONTROL_FUNCTION_DEFINITION(FUNC_NAME, GRPC_METHOD, REQUEST_TYPE, RESPONSE_TYPE)                                                                  \
+    ::resource_manager::RESPONSE_TYPE Client::FUNC_NAME(const ::resource_manager::REQUEST_TYPE & request)                                                          \
+    {                                                                                                                                                              \
+        ::resource_manager::RESPONSE_TYPE response;                                                                                                                \
+        grpc::ClientContext context;                                                                                                                               \
+        context.set_deadline(std::chrono::system_clock::now() + pd_timeout);                                                                                       \
+        auto status = leaderClient()->resource_manager_stub->GRPC_METHOD(&context, request, &response);                                                            \
+        if (!status.ok())                                                                                                                                          \
+        {                                                                                                                                                          \
+            std::string err_msg = ("resource manager grpc call failed: " #GRPC_METHOD ". " + std::to_string(status.error_code()) + ": " + status.error_message()); \
+            log->error(err_msg);                                                                                                                                   \
+            check_leader.store(true);                                                                                                                              \
+            throw Exception(err_msg, GRPCErrorCode);                                                                                                               \
+        }                                                                                                                                                          \
+        return response;                                                                                                                                           \
+    }
+
+RESOURCE_CONTROL_FUNCTION_DEFINITION(listResourceGroups, ListResourceGroups, ListResourceGroupsRequest, ListResourceGroupsResponse)
+RESOURCE_CONTROL_FUNCTION_DEFINITION(getResourceGroup, GetResourceGroup, GetResourceGroupRequest, GetResourceGroupResponse)
+RESOURCE_CONTROL_FUNCTION_DEFINITION(addResourceGroup, AddResourceGroup, PutResourceGroupRequest, PutResourceGroupResponse)
+RESOURCE_CONTROL_FUNCTION_DEFINITION(modifyResourceGroup, ModifyResourceGroup, PutResourceGroupRequest, PutResourceGroupResponse)
+RESOURCE_CONTROL_FUNCTION_DEFINITION(deleteResourceGroup, DeleteResourceGroup, DeleteResourceGroupRequest, DeleteResourceGroupResponse)
+
+resource_manager::TokenBucketsResponse Client::acquireTokenBuckets(const resource_manager::TokenBucketsRequest & req)
+{
+    grpc::ClientContext context;
+    context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
+
+    static const std::string err_msg_prefix = "resource manager grpc call failed: AcquireTokenBuckets.";
+    auto stream = leaderClient()->resource_manager_stub->AcquireTokenBuckets(&context);
+    if (!stream->Write(req))
+    {
+        auto status = stream->Finish();
+        throw Exception(err_msg_prefix + " write failed: " + status.error_message(), GRPCErrorCode);
+    }
+
+    resource_manager::TokenBucketsResponse resp;
+    if (!stream->Read(&resp))
+    {
+        auto status = stream->Finish();
+        throw Exception(err_msg_prefix + " read failed: " + status.error_message(), GRPCErrorCode);
+    }
+
+    return resp;
 }
 
 } // namespace pd

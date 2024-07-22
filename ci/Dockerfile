@@ -1,4 +1,4 @@
-FROM ubuntu:21.04
+FROM ubuntu:23.04
 
 RUN apt update -y \
  && apt install -y cmake build-essential \
@@ -23,4 +23,4 @@ ENV PATH $GOPATH/bin:/usr/local/go/bin:$PATH
 
 RUN cd /
 
-RUN git clone https://github.com/tikv/mock-tikv.git && cd mock-tikv && git checkout 388e21d3bab5d3c4d3ce26e643ab7453188b0288 && make failpoint-enable && make
+RUN git clone https://github.com/tikv/mock-tikv.git && cd mock-tikv && git checkout 60d5921028afd72e1aeba880b9052c40e932eef3 && make failpoint-enable && make

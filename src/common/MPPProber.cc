@@ -87,8 +87,7 @@ void MPPProber::scan()
         else
         {
             // Store is dead, we want to check if this store has not used for MAX_OBSOLET_TIME.
-            if (ele.second->last_lookup_timepoint != INVALID_TIME_POINT &&
-                    getElapsed(ele.second->last_lookup_timepoint) > std::chrono::duration_cast<std::chrono::seconds>(MAX_OBSOLET_TIME_LIMIT))
+            if (ele.second->last_lookup_timepoint != INVALID_TIME_POINT && getElapsed(ele.second->last_lookup_timepoint) > std::chrono::duration_cast<std::chrono::seconds>(MAX_OBSOLET_TIME_LIMIT))
                 recovery_stores.push_back(ele.first);
         }
         ele.second->state_lock.unlock();
@@ -124,19 +123,19 @@ void ProbeState::detectAndUpdateState(const std::chrono::seconds & detect_period
 
 bool detectStore(kv::RpcClientPtr & rpc_client, const std::string & store_addr, int rpc_timeout, Logger * log)
 {
-    kv::RpcCall<::mpp::IsAliveRequest> rpc(std::make_shared<::mpp::IsAliveRequest>());
-    try
+    kv::RpcCall<kv::RPC_NAME(IsAlive)> rpc(rpc_client, store_addr);
+    grpc::ClientContext context;
+    rpc.setClientContext(context, rpc_timeout);
+    ::mpp::IsAliveRequest req;
+    ::mpp::IsAliveResponse resp;
+    auto status = rpc.call(&context, req, &resp);
+    if (!status.ok())
     {
-        rpc_client->sendRequest(store_addr, rpc, rpc_timeout, kv::GRPCMetaData{});
-    }
-    catch (const Exception & e)
-    {
-        log->warning("detect failed: " + store_addr + " error: ", e.message());
+        log->warning("detect failed: " + store_addr + " error: ", rpc.errMsg(status));
         return false;
     }
 
-    const auto & resp = rpc.getResp();
-    return resp->available();
+    return resp.available();
 }
 
 } // namespace common

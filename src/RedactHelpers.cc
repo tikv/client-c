@@ -1,15 +1,16 @@
+#include <pingcap/Exception.h>
 #include <pingcap/RedactHelpers.h>
-
 #include <string.h>
+
 #include <iomanip>
 #include <memory>
 
 namespace pingcap
 {
 
-std::atomic<bool> Redact::REDACT_LOG = false;
+std::atomic<RedactMode> Redact::REDACT_LOG = RedactMode::Disable;
 
-void Redact::setRedactLog(bool v)
+void Redact::setRedactLog(RedactMode v)
 {
     Redact::REDACT_LOG.store(v, std::memory_order_relaxed);
 }
@@ -40,7 +41,7 @@ std::string Redact::keyToHexString(const char * key, size_t size)
 {
     // Encode as upper hex string
     std::string buf(size * 2, '\0');
-    char *      pos = buf.data();
+    char * pos = buf.data();
     for (size_t i = 0; i < size; ++i)
     {
         writeHexByteUppercase(static_cast<uint8_t>(key[i]), pos);
@@ -51,10 +52,24 @@ std::string Redact::keyToHexString(const char * key, size_t size)
 
 std::string Redact::keyToDebugString(const char * key, const size_t size)
 {
-    if (Redact::REDACT_LOG.load(std::memory_order_relaxed))
+    const auto v = Redact::REDACT_LOG.load(std::memory_order_relaxed);
+    switch (v)
+    {
+    case RedactMode::Enable:
         return "?";
-
-    return Redact::keyToHexString(key, size);
+    case RedactMode::Disable:
+        // Encode as string
+        return Redact::keyToHexString(key, size);
+    case RedactMode::Marker:
+    {
+        // Note: the `s` must be hexadecimal string so we don't need to care
+        // about escaping here.
+        auto s = Redact::keyToHexString(key, size);
+        return std::string("‹") + s + "›";
+    }
+    default:
+        throw Exception(std::string("Should not reach here, v=") + std::to_string(static_cast<int64_t>(v)));
+    }
 }
 
 } // namespace pingcap

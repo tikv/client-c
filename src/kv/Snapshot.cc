@@ -1,4 +1,5 @@
 #include <pingcap/Exception.h>
+#include <pingcap/Log.h>
 #include <pingcap/kv/Backoff.h>
 #include <pingcap/kv/Scanner.h>
 #include <pingcap/kv/Snapshot.h>
@@ -11,20 +12,19 @@ constexpr int scan_batch_size = 256;
 
 //bool extractLockFromKeyErr()
 
-std::string Snapshot::Get(const std::string & key)
+kvrpcpb::MvccInfo Snapshot::mvccGet(const std::string & key)
 {
     Backoffer bo(GetMaxBackoff);
-    return Get(bo, key);
+    return mvccGet(bo, key);
 }
 
-std::string Snapshot::Get(Backoffer & bo, const std::string & key)
+kvrpcpb::MvccInfo Snapshot::mvccGet(Backoffer & bo, const std::string & key)
 {
     for (;;)
     {
-        auto request = std::make_shared<kvrpcpb::GetRequest>();
-        request->set_key(key);
-        request->set_version(version);
-        ::kvrpcpb::Context * context = request->mutable_context();
+        kvrpcpb::MvccGetByKeyRequest request;
+        request.set_key(key);
+        ::kvrpcpb::Context * context = request.mutable_context();
         context->set_priority(::kvrpcpb::Normal);
         context->set_not_fill_cache(false);
         for (auto ts : min_commit_ts_pushed.getTimestamps())
@@ -35,19 +35,63 @@ std::string Snapshot::Get(Backoffer & bo, const std::string & key)
         auto location = cluster->region_cache->locateKey(bo, key);
         auto region_client = RegionClient(cluster, location.region);
 
-        std::shared_ptr<::kvrpcpb::GetResponse> response;
+        ::kvrpcpb::MvccGetByKeyResponse response;
         try
         {
-            response = region_client.sendReqToRegion(bo, request);
+            region_client.sendReqToRegion<RPC_NAME(MvccGetByKey)>(bo, request, &response);
         }
         catch (Exception & e)
         {
             bo.backoff(boRegionMiss, e);
             continue;
         }
-        if (response->has_error())
+        if (!response.error().empty())
         {
-            auto lock = extractLockFromKeyErr(response->error());
+            Logger * log(&Logger::get("Snapshot::mvccGet"));
+            log->error("reponse error is {}", response.error());
+            continue;
+        }
+        return response.info();
+    }
+}
+
+std::string Snapshot::Get(const std::string & key)
+{
+    Backoffer bo(GetMaxBackoff);
+    return Get(bo, key);
+}
+
+std::string Snapshot::Get(Backoffer & bo, const std::string & key)
+{
+    for (;;)
+    {
+        kvrpcpb::GetRequest request;
+        request.set_key(key);
+        request.set_version(version);
+        ::kvrpcpb::Context * context = request.mutable_context();
+        context->set_priority(::kvrpcpb::Normal);
+        context->set_not_fill_cache(false);
+        for (auto ts : min_commit_ts_pushed.getTimestamps())
+        {
+            context->add_resolved_locks(ts);
+        }
+
+        auto location = cluster->region_cache->locateKey(bo, key);
+        auto region_client = RegionClient(cluster, location.region);
+
+        ::kvrpcpb::GetResponse response;
+        try
+        {
+            region_client.sendReqToRegion<RPC_NAME(KvGet)>(bo, request, &response);
+        }
+        catch (Exception & e)
+        {
+            bo.backoff(boRegionMiss, e);
+            continue;
+        }
+        if (response.has_error())
+        {
+            auto lock = extractLockFromKeyErr(response.error());
             std::vector<LockPtr> locks{lock};
             std::vector<uint64_t> pushed;
             auto before_expired = cluster->lock_resolver->resolveLocks(bo, version, locks, pushed);
@@ -61,11 +105,11 @@ std::string Snapshot::Get(Backoffer & bo, const std::string & key)
                 bo.backoffWithMaxSleep(
                     boTxnLockFast,
                     before_expired,
-                    Exception("key error : " + response->error().ShortDebugString(), LockError));
+                    Exception("key error : " + response.error().ShortDebugString(), LockError));
             }
             continue;
         }
-        return response->value();
+        return response.value();
     }
 }
 

@@ -63,6 +63,7 @@ struct Lock
     bool use_async_commit;
     uint64_t lock_for_update_ts;
     uint64_t min_commit_ts;
+    bool is_txn_file;
 
     explicit Lock(const ::kvrpcpb::LockInfo & l)
         : key(l.key())
@@ -74,6 +75,7 @@ struct Lock
         , use_async_commit(l.use_async_commit())
         , lock_for_update_ts(l.lock_for_update_ts())
         , min_commit_ts(l.min_commit_ts())
+        , is_txn_file(l.is_txn_file())
     {}
 
     std::string toDebugString() const;
@@ -140,7 +142,7 @@ struct AsyncResolveData
     // In this function, resp->locks is the list of locks, and expected is the number of keys. AsyncResolveData.missing_lock will be
     // set to true if the lengths don't match. If the lengths do match, then the locks are added to asyncResolveData.locks
     // and will need to be resolved by the caller.
-    void addKeys(std::shared_ptr<::kvrpcpb::CheckSecondaryLocksResponse> resp, int expected, uint64_t start_ts)
+    void addKeys(::kvrpcpb::CheckSecondaryLocksResponse * resp, int expected, uint64_t start_ts)
     {
         std::lock_guard l(mu);
 
@@ -279,7 +281,7 @@ private:
     void checkSecondaries(
         Backoffer & bo,
         uint64_t txn_id,
-        std::vector<std::string> & cur_keys,
+        const std::vector<std::string> & cur_keys,
         RegionVerID cur_region_id,
         AsyncResolveDataPtr shared_data);
 
@@ -287,7 +289,7 @@ private:
     TxnStatus getTxnStatusFromLock(Backoffer & bo, LockPtr lock, uint64_t caller_start_ts, bool force_sync_commit);
 
 
-    TxnStatus getTxnStatus(Backoffer & bo, uint64_t txn_id, const std::string & primary, uint64_t caller_start_ts, uint64_t current_ts, bool rollback_if_not_exists, bool force_sync_commit);
+    TxnStatus getTxnStatus(Backoffer & bo, uint64_t txn_id, const std::string & primary, uint64_t caller_start_ts, uint64_t current_ts, bool rollback_if_not_exists, bool force_sync_commit, bool is_txn_file);
 
     Cluster * cluster;
     std::shared_mutex mu;

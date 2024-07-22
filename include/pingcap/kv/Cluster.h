@@ -38,7 +38,7 @@ struct Cluster
         , thread_pool(std::make_unique<pingcap::common::FixedThreadPool>(1))
         , mpp_prober(std::make_unique<common::MPPProber>(this))
     {
-        startBackgourndTasks();
+        startBackgroundTasks();
     }
 
     Cluster(const std::vector<std::string> & pd_addrs, const ClusterConfig & config)
@@ -51,7 +51,7 @@ struct Cluster
         , thread_pool(std::make_unique<pingcap::common::FixedThreadPool>(1))
         , mpp_prober(std::make_unique<common::MPPProber>(this))
     {
-        startBackgourndTasks();
+        startBackgroundTasks();
     }
 
     void update(const std::vector<std::string> & pd_addrs, const ClusterConfig & config) const
@@ -71,7 +71,7 @@ struct Cluster
     // Only used by Test and this is not safe !
     void splitRegion(const std::string & split_key);
 
-    void startBackgourndTasks();
+    void startBackgroundTasks();
 };
 
 struct MinCommitTSPushed

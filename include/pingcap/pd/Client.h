@@ -6,6 +6,7 @@
 #include <kvproto/keyspacepb.grpc.pb.h>
 #include <kvproto/keyspacepb.pb.h>
 #include <kvproto/pdpb.grpc.pb.h>
+#include <kvproto/resource_manager.grpc.pb.h>
 #include <pingcap/Config.h>
 #include <pingcap/Log.h>
 #include <pingcap/pd/IClient.h>
@@ -44,9 +45,9 @@ public:
     // only implement a weak get ts.
     uint64_t getTS() override;
 
-    std::pair<metapb::Region, metapb::Peer> getRegionByKey(const std::string & key) override;
+    pdpb::GetRegionResponse getRegionByKey(const std::string & key) override;
 
-    std::pair<metapb::Region, metapb::Peer> getRegionByID(uint64_t region_id) override;
+    pdpb::GetRegionResponse getRegionByID(uint64_t region_id) override;
 
     metapb::Store getStore(uint64_t store_id) override;
 
@@ -56,11 +57,26 @@ public:
 
     uint64_t getGCSafePoint() override;
 
+    uint64_t getGCSafePointV2(KeyspaceID keyspace_id) override;
+
     KeyspaceID getKeyspaceID(const std::string & keyspace_name) override;
 
     bool isMock() override;
 
     std::string getLeaderUrl() override;
+
+    // ResourceControl related.
+    resource_manager::ListResourceGroupsResponse listResourceGroups(const resource_manager::ListResourceGroupsRequest &) override;
+
+    resource_manager::GetResourceGroupResponse getResourceGroup(const resource_manager::GetResourceGroupRequest &) override;
+
+    resource_manager::PutResourceGroupResponse addResourceGroup(const resource_manager::PutResourceGroupRequest &) override;
+
+    resource_manager::PutResourceGroupResponse modifyResourceGroup(const resource_manager::PutResourceGroupRequest &) override;
+
+    resource_manager::DeleteResourceGroupResponse deleteResourceGroup(const resource_manager::DeleteResourceGroupRequest &) override;
+
+    resource_manager::TokenBucketsResponse acquireTokenBuckets(const resource_manager::TokenBucketsRequest & req) override;
 
 private:
     void initClusterID();
@@ -80,6 +96,7 @@ private:
         std::shared_ptr<grpc::Channel> channel;
         std::unique_ptr<pdpb::PD::Stub> stub;
         std::unique_ptr<keyspacepb::Keyspace::Stub> keyspace_stub;
+        std::unique_ptr<resource_manager::ResourceManager::Stub> resource_manager_stub;
         PDConnClient(std::string addr, const ClusterConfig & config)
         {
             if (config.hasTlsConfig())
@@ -92,6 +109,7 @@ private:
             }
             stub = pdpb::PD::NewStub(channel);
             keyspace_stub = keyspacepb::Keyspace::NewStub(channel);
+            resource_manager_stub = resource_manager::ResourceManager::NewStub(channel);
         }
     };
 

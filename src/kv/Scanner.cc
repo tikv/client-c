@@ -63,21 +63,21 @@ void Scanner::getData(Backoffer & bo)
 
 
         auto region_client = RegionClient(snap.cluster, loc.region);
-        auto request = std::make_shared<kvrpcpb::ScanRequest>();
-        request->set_start_key(next_start_key);
-        request->set_end_key(req_end_key);
-        request->set_limit(batch);
-        request->set_version(snap.version);
-        request->set_key_only(false);
+        kvrpcpb::ScanRequest request;
+        request.set_start_key(next_start_key);
+        request.set_end_key(req_end_key);
+        request.set_limit(batch);
+        request.set_version(snap.version);
+        request.set_key_only(false);
 
-        auto * context = request->mutable_context();
+        auto * context = request.mutable_context();
         context->set_priority(::kvrpcpb::Normal);
         context->set_not_fill_cache(false);
 
-        std::shared_ptr<kvrpcpb::ScanResponse> response;
+        kvrpcpb::ScanResponse response;
         try
         {
-            response = region_client.sendReqToRegion(bo, request);
+            region_client.sendReqToRegion<RPC_NAME(KvScan)>(bo, request, &response);
         }
         catch (Exception & e)
         {
@@ -88,9 +88,9 @@ void Scanner::getData(Backoffer & bo)
         // TODO Check safe point.
 
         // TiKV will only return locked keys if there is response level error
-        if (response->has_error())
+        if (response.has_error())
         {
-            auto lock = extractLockFromKeyErr(response->error());
+            auto lock = extractLockFromKeyErr(response.error());
             std::vector<LockPtr> locks{lock};
             std::vector<uint64_t> pushed{};
             auto ms_before_expired = snap.cluster->lock_resolver->resolveLocks(bo, snap.version, locks, pushed);
@@ -104,12 +104,12 @@ void Scanner::getData(Backoffer & bo)
             continue;
         }
 
-        int pairs_size = response->pairs_size();
+        int pairs_size = response.pairs_size();
         idx = 0;
         cache.clear();
         for (int i = 0; i < pairs_size; i++)
         {
-            auto current = response->pairs(i);
+            auto current = response.pairs(i);
             if (current.has_error())
             {
                 auto lock = extractLockFromKeyErr(current.error());

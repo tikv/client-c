@@ -1,5 +1,6 @@
 #pragma once
 
+#include <kvproto/pdpb.pb.h>
 #include <pingcap/Config.h>
 #include <pingcap/Exception.h>
 #include <pingcap/pd/Client.h>
@@ -16,16 +17,18 @@ struct CodecClient : public Client
         : Client(addrs, config)
     {}
 
-    std::pair<metapb::Region, metapb::Peer> getRegionByKey(const std::string & key) override
+    pdpb::GetRegionResponse getRegionByKey(const std::string & key) override
     {
-        auto [region, leader] = Client::getRegionByKey(encodeBytes(key));
-        return std::make_pair(processRegionResult(region), leader);
+        auto resp = Client::getRegionByKey(encodeBytes(key));
+        processRegionResult(*resp.mutable_region());
+        return resp;
     }
 
-    std::pair<metapb::Region, metapb::Peer> getRegionByID(uint64_t region_id) override
+    pdpb::GetRegionResponse getRegionByID(uint64_t region_id) override
     {
-        auto [region, leader] = Client::getRegionByID(region_id);
-        return std::make_pair(processRegionResult(region), leader);
+        auto resp = Client::getRegionByID(region_id);
+        processRegionResult(*resp.mutable_region());
+        return resp;
     }
 
     static metapb::Region processRegionResult(metapb::Region & region)

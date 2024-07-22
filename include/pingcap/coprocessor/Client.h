@@ -1,12 +1,13 @@
 #pragma once
+#include <pingcap/common/MPMCQueue.h>
 #include <pingcap/kv/Cluster.h>
 #include <pingcap/kv/RegionCache.h>
 #include <pingcap/kv/RegionClient.h>
 
 #include <atomic>
 #include <condition_variable>
+#include <cstdint>
 #include <mutex>
-#include <queue>
 #include <thread>
 
 namespace pingcap
@@ -52,6 +53,7 @@ struct Request
     uint64_t start_ts;
     std::string data;
     int64_t schema_version;
+    std::string resource_group_name;
 };
 
 using RequestPtr = std::shared_ptr<Request>;
@@ -67,6 +69,8 @@ struct CopTask
     // call before send request, can be used to collect TiFlash metrics.
     std::function<void()> before_send;
     pd::KeyspaceID keyspace_id;
+    uint64_t connection_id;
+    std::string connection_alias;
 };
 
 struct RegionInfo
@@ -97,6 +101,8 @@ struct BatchCopTask
     uint64_t store_id;
 };
 
+/// A iterator dedicated to send coprocessor(stream) request and receive responses.
+/// All functions are thread-safe.
 class ResponseIter
 {
 public:
@@ -104,6 +110,7 @@ public:
     {
         std::shared_ptr<::coprocessor::Response> resp;
         Exception error;
+        bool finished{false};
 
         Result() = default;
         explicit Result(std::shared_ptr<::coprocessor::Response> resp_)
@@ -112,118 +119,151 @@ public:
         explicit Result(const Exception & err)
             : error(err)
         {}
+        explicit Result(bool finished_)
+            : finished(finished_)
+        {}
 
         const std::string & data() const { return resp->data(); }
     };
 
-    ResponseIter(std::vector<CopTask> && tasks_,
+    ResponseIter(std::unique_ptr<common::IMPMCQueue<Result>> && queue_,
+                 std::vector<CopTask> && tasks_,
                  kv::Cluster * cluster_,
                  int concurrency_,
                  Logger * log_,
+                 int timeout_ = kv::copTimeout,
                  const kv::LabelFilter & tiflash_label_filter_ = kv::labelFilterInvalid)
-        : tasks(std::move(tasks_))
+        : queue(std::move(queue_))
+        , tasks(std::move(tasks_))
         , cluster(cluster_)
         , concurrency(concurrency_)
+        , timeout(timeout_)
         , unfinished_thread(0)
-        , cancelled(false)
         , tiflash_label_filter(tiflash_label_filter_)
         , log(log_)
     {}
 
     ~ResponseIter()
     {
-        cancelled = true;
+        is_cancelled = true;
         for (auto & worker_thread : worker_threads)
         {
             worker_thread.join();
         }
     }
 
-    // send all tasks.
+    template <bool is_stream>
     void open()
     {
+        bool old_val = false;
+        if (!is_opened.compare_exchange_strong(old_val, true))
+            return;
+
         unfinished_thread = concurrency;
         for (int i = 0; i < concurrency; i++)
         {
-            std::thread worker(&ResponseIter::thread, this);
+            std::thread worker(&ResponseIter::thread<is_stream>, this);
             worker_threads.push_back(std::move(worker));
         }
+
         log->debug("coprocessor has " + std::to_string(tasks.size()) + " tasks.");
     }
 
     void cancel()
     {
-        cancelled = true;
-        cond_var.notify_all();
+        bool old_val = false;
+        if (!is_cancelled.compare_exchange_strong(old_val, true))
+            return;
+        queue->cancel();
+    }
+
+    std::pair<Result, bool> nonBlockingNext()
+    {
+        assert(is_opened);
+        Result res;
+        switch (queue->tryPop(res))
+        {
+        case common::MPMCQueueResult::OK:
+            return {std::move(res), true};
+        case common::MPMCQueueResult::CANCELLED:
+        case common::MPMCQueueResult::FINISHED:
+            return {Result(true), false};
+        case common::MPMCQueueResult::EMPTY:
+            return {Result(), false};
+        default:
+            __builtin_unreachable();
+        }
     }
 
     std::pair<Result, bool> next()
     {
-        std::unique_lock<std::mutex> lk(results_mutex);
-        cond_var.wait(lk, [this] { return unfinished_thread == 0 || cancelled || !results.empty(); });
-        if (cancelled)
+        assert(is_opened);
+        Result res;
+        switch (queue->pop(res))
         {
-            return std::make_pair(Result(), false);
-        }
-        if (!results.empty())
-        {
-            auto ret = std::make_pair(results.front(), true);
-            results.pop();
-            return ret;
-        }
-        else
-        {
-            return std::make_pair(Result(), false);
+        case common::MPMCQueueResult::OK:
+            return {std::move(res), true};
+        case common::MPMCQueueResult::CANCELLED:
+        case common::MPMCQueueResult::FINISHED:
+            return {Result(true), false};
+        default:
+            __builtin_unreachable();
         }
     }
 
 private:
+    template <bool is_stream>
     void thread()
     {
         log->information("thread start.");
         while (true)
         {
-            if (cancelled)
+            if (is_cancelled || meet_error)
             {
-                log->information("cop task has been cancelled");
-                unfinished_thread--;
-                cond_var.notify_one();
+                const char * msg = is_cancelled ? "has been cancelled" : "already meet error";
+                log->information("cop task exit because " + std::string(msg));
                 return;
             }
-            std::unique_lock<std::mutex> lk(results_mutex);
+            std::unique_lock<std::mutex> lk(task_mutex);
             if (tasks.size() == task_index)
             {
-                unfinished_thread--;
                 lk.unlock();
-                cond_var.notify_one();
+                if (unfinished_thread.fetch_sub(1) == 1)
+                    queue->finish();
                 return;
             }
             const CopTask & task = tasks[task_index];
             task_index++;
             lk.unlock();
-            handleTask(task);
+            handleTask<is_stream>(task);
         }
     }
 
+    template <bool is_stream>
     std::vector<CopTask> handleTaskImpl(kv::Backoffer & bo, const CopTask & task);
+    template <bool is_stream>
     void handleTask(const CopTask & task);
 
+    std::unique_ptr<common::IMPMCQueue<Result>> queue;
+
+    std::mutex task_mutex;
     size_t task_index = 0;
     const std::vector<CopTask> tasks;
+
     std::vector<std::thread> worker_threads;
 
     kv::Cluster * cluster;
-    int concurrency;
+    const int concurrency;
+    const int timeout;
     kv::MinCommitTSPushed min_commit_ts_pushed;
 
-    std::mutex results_mutex;
-
-    std::queue<Result> results;
-
     std::atomic_int unfinished_thread;
-    std::atomic_bool cancelled;
-    std::condition_variable cond_var;
-    kv::LabelFilter tiflash_label_filter;
+
+    std::atomic_bool is_cancelled = false;
+    std::atomic_bool meet_error = false;
+    std::atomic_bool is_opened = false;
+
+    const kv::LabelFilter tiflash_label_filter;
 
     Logger * log;
 };
@@ -235,6 +275,8 @@ std::vector<CopTask> buildCopTasks(
     RequestPtr cop_req,
     kv::StoreType store_type,
     pd::KeyspaceID keyspace_id,
+    uint64_t connection_id,
+    const std::string & connection_alias,
     Logger * log,
     kv::GRPCMetaData meta_data = {},
     std::function<void()> before_send = {});

@@ -2,6 +2,7 @@
 
 #include <kvproto/errorpb.pb.h>
 #include <kvproto/metapb.pb.h>
+#include <kvproto/pdpb.pb.h>
 #include <pingcap/Log.h>
 #include <pingcap/kv/Backoff.h>
 #include <pingcap/pd/Client.h>
@@ -84,11 +85,19 @@ struct Region
 {
     metapb::Region meta;
     metapb::Peer leader_peer;
+    std::vector<metapb::Peer> pending_peers;
     std::atomic_uint work_tiflash_peer_idx;
 
     Region(const metapb::Region & meta_, const metapb::Peer & peer_)
         : meta(meta_)
         , leader_peer(peer_)
+        , work_tiflash_peer_idx(0)
+    {}
+
+    Region(const metapb::Region & meta_, const metapb::Peer & peer_, const std::vector<metapb::Peer> & pending_peers_)
+        : meta(meta_)
+        , leader_peer(peer_)
+        , pending_peers(pending_peers_)
         , work_tiflash_peer_idx(0)
     {}
 
@@ -195,7 +204,10 @@ public:
 
     Store getStore(Backoffer & bo, uint64_t id);
 
-    std::vector<uint64_t> getAllValidTiFlashStores(Backoffer & bo, const RegionVerID & region_id, const Store & current_store, const LabelFilter & label_filter);
+    // Return values:
+    // 1. all stores of peers of this region
+    // 2. stores of non pending peers of this region
+    std::pair<std::vector<uint64_t>, std::vector<uint64_t>> getAllValidTiFlashStores(Backoffer & bo, const RegionVerID & region_id, const Store & current_store, const LabelFilter & label_filter);
 
     std::pair<std::unordered_map<RegionVerID, std::vector<std::string>>, RegionVerID>
     groupKeysByRegion(Backoffer & bo,

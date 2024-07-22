@@ -27,6 +27,10 @@ struct Snapshot
     std::string Get(const std::string & key);
     std::string Get(Backoffer & bo, const std::string & key);
 
+    kvrpcpb::MvccInfo mvccGet(const std::string & key);
+
+    kvrpcpb::MvccInfo mvccGet(Backoffer & bo, const std::string & key);
+
     Scanner Scan(const std::string & begin, const std::string & end);
 };
 
