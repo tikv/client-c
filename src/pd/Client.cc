@@ -116,7 +116,7 @@ pdpb::GetMembersResponse Client::getMembers(const std::string & url)
     auto status = client->stub->GetMembers(&context, pdpb::GetMembersRequest{}, &resp);
     if (!status.ok())
     {
-        std::string err_msg = "get member failed: " + std::to_string(status.error_code()) + ": " + status.error_message();
+        std::string err_msg = "get member from " + url + " failed: " + std::to_string(status.error_code()) + ": " + status.error_message();
         log->error(err_msg);
         return {};
     }
@@ -202,7 +202,7 @@ void Client::switchLeader(const ::google::protobuf::RepeatedPtrField<std::string
         return;
     }
 
-    log->debug("switch leader from " + old_leader + " to " + leader);
+    log->information("switch leader from " + old_leader + " to " + leader);
     getOrCreateGRPCConn(leader);
 }
 
