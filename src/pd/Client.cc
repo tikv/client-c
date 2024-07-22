@@ -208,6 +208,7 @@ void Client::switchLeader(const ::google::protobuf::RepeatedPtrField<std::string
         return;
     }
 
+    log->information("switch leader from " + old_leader + " to " + leader);
     getOrCreateGRPCConn(leader);
 }
 
