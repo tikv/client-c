@@ -2,6 +2,8 @@
 #include <pingcap/SetThreadName.h>
 #include <pingcap/pd/Client.h>
 
+#include <deque>
+
 
 namespace pingcap
 {
