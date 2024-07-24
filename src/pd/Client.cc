@@ -5,6 +5,7 @@
 #include <pingcap/pd/Client.h>
 
 #include <chrono>
+#include <deque>
 #include <mutex>
 
 namespace pingcap
@@ -82,9 +83,10 @@ bool Client::isMock()
     return false;
 }
 
+// Now, once the client is created, it will never be modified. So we don't need to worry about the lifetime of the client.
 std::shared_ptr<Client::PDConnClient> Client::getOrCreateGRPCConn(const std::string & addr)
 {
-    std::lock_guard<std::mutex> lk(channel_map_mutex);
+    std::lock_guard lk(channel_map_mutex);
     auto it = channel_map.find(addr);
     if (it != channel_map.end())
     {
@@ -190,8 +192,10 @@ void Client::updateLeader()
         if (!resp.has_header() || resp.leader().client_urls_size() == 0)
         {
             log->warning("failed to get cluster id by :" + url);
+            failed_urls.insert(url);
             continue;
         }
+        failed_urls.erase(url);
         updateURLs(resp.members());
         switchLeader(resp.leader().client_urls());
         return;
@@ -213,16 +217,26 @@ void Client::switchLeader(const ::google::protobuf::RepeatedPtrField<std::string
 
 void Client::updateURLs(const ::google::protobuf::RepeatedPtrField<::pdpb::Member> & members)
 {
-    std::vector<std::string> tmp_urls;
+    std::deque<std::string> tmp_urls;
     for (const auto & member : members)
     {
         auto client_urls = member.client_urls();
         for (auto & client_url : client_urls)
         {
-            tmp_urls.push_back(client_url);
+            // Check if the URL is in the failed_urls list
+            if (failed_urls.count(client_url) > 0)
+            {
+                // If it is, add it to the end of the list
+                tmp_urls.push_back(client_url);
+            }
+            else
+            {
+                // If it is not, add it to the front of the list
+                tmp_urls.push_front(client_url);
+            }
         }
     }
-    urls = tmp_urls;
+    urls = std::vector<std::string>(tmp_urls.begin(), tmp_urls.end());
 }
 
 void Client::leaderLoop()
@@ -283,9 +297,10 @@ uint64_t Client::getTS()
 
     grpc::ClientContext context;
 
+    auto leader_client = leaderClient();
     context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
 
-    auto stream = leaderClient()->stub->Tso(&context);
+    auto stream = leader_client->stub->Tso(&context);
     if (!stream->Write(request))
     {
         std::string err_msg = ("Send TsoRequest failed");
@@ -313,9 +328,10 @@ uint64_t Client::getGCSafePoint()
 
     grpc::ClientContext context;
 
+    auto leader_client = leaderClient();
     context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
 
-    auto status = leaderClient()->stub->GetGCSafePoint(&context, request, &response);
+    auto status = leader_client->stub->GetGCSafePoint(&context, request, &response);
     if (!status.ok())
     {
         err_msg = "get safe point failed: " + std::to_string(status.error_code()) + ": " + status.error_message();
@@ -335,10 +351,11 @@ std::pair<metapb::Region, metapb::Peer> Client::getRegionByKey(const std::string
 
     grpc::ClientContext context;
 
+    auto leader_client = leaderClient();
     context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
     request.set_region_key(key);
 
-    auto status = leaderClient()->stub->GetRegion(&context, request, &response);
+    auto status = leader_client->stub->GetRegion(&context, request, &response);
     if (!status.ok())
     {
         std::string err_msg = ("get region failed: " + std::to_string(status.error_code()) + " : " + status.error_message());
@@ -362,9 +379,10 @@ std::pair<metapb::Region, metapb::Peer> Client::getRegionByID(uint64_t region_id
 
     grpc::ClientContext context;
 
+    auto leader_client = leaderClient();
     context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
 
-    auto status = leaderClient()->stub->GetRegionByID(&context, request, &response);
+    auto status = leader_client->stub->GetRegionByID(&context, request, &response);
     if (!status.ok())
     {
         std::string err_msg = ("get region by id failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
@@ -388,9 +406,11 @@ std::vector<metapb::Store> Client::getAllStores(bool exclude_tombstone)
     req.set_exclude_tombstone_stores(exclude_tombstone);
 
     grpc::ClientContext context;
+
+    auto leader_client = leaderClient();
     context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
 
-    auto status = leaderClient()->stub->GetAllStores(&context, req, &resp);
+    auto status = leader_client->stub->GetAllStores(&context, req, &resp);
     if (!status.ok())
     {
         std::string err_msg = ("get all stores failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
@@ -416,9 +436,10 @@ metapb::Store Client::getStore(uint64_t store_id)
 
     grpc::ClientContext context;
 
+    auto leader_client = this->leaderClient();
     context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
 
-    auto status = leaderClient()->stub->GetStore(&context, request, &response);
+    auto status = leader_client->stub->GetStore(&context, request, &response);
     if (!status.ok())
     {
         std::string err_msg = ("get store failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
@@ -439,9 +460,10 @@ KeyspaceID Client::getKeyspaceID(const std::string & keyspace_name)
 
     grpc::ClientContext context;
 
+    auto leader_client = this->leaderClient();
     context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
 
-    auto status = leaderClient()->keyspace_stub->LoadKeyspace(&context, request, &response);
+    auto status = leader_client->keyspace_stub->LoadKeyspace(&context, request, &response);
     if (!status.ok())
     {
         std::string err_msg = ("get keyspace id failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
@@ -475,9 +497,10 @@ bool Client::isClusterBootstrapped()
 
     grpc::ClientContext context;
 
+    auto leader_client = leaderClient();
     context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
 
-    auto status = leaderClient()->stub->IsBootstrapped(&context, request, &response);
+    auto status = leader_client->stub->IsBootstrapped(&context, request, &response);
     if (!status.ok())
     {
         std::string msg = ("check cluster bootstrapped failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
