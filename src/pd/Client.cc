@@ -186,17 +186,17 @@ void Client::initLeader()
 void Client::updateLeader()
 {
     std::unique_lock lk(leader_mutex);
-    std::vector<std::string> failed_urls;
     for (const auto & url : urls)
     {
         auto resp = getMembers(url);
         if (!resp.has_header() || resp.leader().client_urls_size() == 0)
         {
             log->warning("failed to get cluster id by :" + url);
-            failed_urls.push_back(url);
+            failed_urls.insert(url);
             continue;
         }
-        updateURLs(resp.members(), failed_urls);
+        failed_urls.erase(url);
+        updateURLs(resp.members());
         switchLeader(resp.leader().client_urls());
         return;
     }
@@ -216,7 +216,7 @@ void Client::switchLeader(const ::google::protobuf::RepeatedPtrField<std::string
     getOrCreateGRPCConn(leader);
 }
 
-void Client::updateURLs(const ::google::protobuf::RepeatedPtrField<::pdpb::Member> & members, const std::vector<std::string> & failed_urls)
+void Client::updateURLs(const ::google::protobuf::RepeatedPtrField<::pdpb::Member> & members)
 {
     std::deque<std::string> tmp_urls;
     for (const auto & member : members)
@@ -225,7 +225,7 @@ void Client::updateURLs(const ::google::protobuf::RepeatedPtrField<::pdpb::Membe
         for (auto & client_url : client_urls)
         {
             // Check if the URL is in the failed_urls list
-            if (std::find(failed_urls.begin(), failed_urls.end(), client_url) != failed_urls.end())
+            if (failed_urls.count(client_url) > 0)
             {
                 // If it is, add it to the end of the list
                 tmp_urls.push_back(client_url);
