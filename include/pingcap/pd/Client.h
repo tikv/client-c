@@ -100,6 +100,7 @@ private:
     std::unordered_map<std::string, std::shared_ptr<PDConnClient>> channel_map;
 
     std::vector<std::string> urls;
+    std::unordered_set<std::string> failed_urls;
 
     uint64_t cluster_id;
 
