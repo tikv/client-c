@@ -5,8 +5,8 @@
 #include <pingcap/pd/Client.h>
 
 #include <chrono>
+#include <deque>
 #include <mutex>
-#include <shared_mutex>
 
 namespace pingcap
 {
@@ -186,19 +186,17 @@ void Client::initLeader()
 void Client::updateLeader()
 {
     std::unique_lock lk(leader_mutex);
-    for (auto it = urls.begin(); it != urls.end();)
+    std::vector<std::string> failed_urls;
+    for (const auto & url : urls)
     {
-        const auto & url = *it;
         auto resp = getMembers(url);
         if (!resp.has_header() || resp.leader().client_urls_size() == 0)
         {
-            log->warning("failed to get cluster id by :" + *it);
-            // move the failed url to the end of the list
-            it = urls.erase(it);
-            urls.push_back(url);
+            log->warning("failed to get cluster id by :" + url);
+            failed_urls.push_back(url);
             continue;
         }
-        updateURLs(resp.members());
+        updateURLs(resp.members(), failed_urls);
         switchLeader(resp.leader().client_urls());
         return;
     }
@@ -218,18 +216,28 @@ void Client::switchLeader(const ::google::protobuf::RepeatedPtrField<std::string
     getOrCreateGRPCConn(leader);
 }
 
-void Client::updateURLs(const ::google::protobuf::RepeatedPtrField<::pdpb::Member> & members)
+void Client::updateURLs(const ::google::protobuf::RepeatedPtrField<::pdpb::Member> & members, const std::vector<std::string> & failed_urls)
 {
-    std::vector<std::string> tmp_urls;
+    std::deque<std::string> tmp_urls;
     for (const auto & member : members)
     {
         auto client_urls = member.client_urls();
         for (auto & client_url : client_urls)
         {
-            tmp_urls.push_back(client_url);
+            // Check if the URL is in the failed_urls list
+            if (std::find(failed_urls.begin(), failed_urls.end(), client_url) != failed_urls.end())
+            {
+                // If it is, add it to the end of the list
+                tmp_urls.push_back(client_url);
+            }
+            else
+            {
+                // If it is not, add it to the front of the list
+                tmp_urls.push_front(client_url);
+            }
         }
     }
-    urls = tmp_urls;
+    urls = std::vector<std::string>(tmp_urls.begin(), tmp_urls.end());
 }
 
 void Client::leaderLoop()

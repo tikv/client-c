@@ -85,7 +85,7 @@ private:
 
     void initLeader();
 
-    void updateURLs(const ::google::protobuf::RepeatedPtrField<::pdpb::Member> & members);
+    void updateURLs(const ::google::protobuf::RepeatedPtrField<::pdpb::Member> & members, const std::vector<std::string> & failed_urls);
 
     void leaderLoop();
 
