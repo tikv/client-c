@@ -44,6 +44,7 @@ struct KeyRange
     KeyRange & operator=(KeyRange &&) = default;
 
     bool operator<(const KeyRange & rhs) const { return start_key < rhs.start_key; }
+
 };
 using KeyRanges = std::vector<KeyRange>;
 
@@ -281,6 +282,21 @@ std::vector<CopTask> buildCopTasks(
     kv::GRPCMetaData meta_data = {},
     std::function<void()> before_send = {});
 
+
+/*
+centralized_schedule is a parameter that controls the distribution of regions across BatchCopTasks.
+
+When set to false (default):
+- Regions are distributed as evenly as possible among BatchCopTasks
+- This balances the workload across tasks
+
+When set to true:
+- Regions are concentrated into as few BatchCopTasks as possible
+- This is currently only used for ANN (Approximate Nearest Neighbor) queries in vector search
+
+The centralized scheduling approach can potentially improve performance for certain types of queries
+by reducing the number of tasks and minimizing coordination overhead.
+*/
 std::vector<BatchCopTask> buildBatchCopTasks(
     kv::Backoffer & bo,
     kv::Cluster * cluster,
@@ -290,7 +306,8 @@ std::vector<BatchCopTask> buildBatchCopTasks(
     const std::vector<KeyRanges> & ranges_for_each_physical_table,
     kv::StoreType store_type,
     const kv::LabelFilter & label_filter,
-    Logger * log);
+    Logger * log,
+    bool centralized_schedule = false);
 
 namespace details
 {
