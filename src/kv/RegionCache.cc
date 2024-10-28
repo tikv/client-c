@@ -9,7 +9,7 @@ namespace kv
 {
 // load_balance is an option, becase if store fail, it may cause batchCop fail.
 // For now, label_filter only works for tiflash.
-RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id, const StoreType store_type, bool load_balance, const LabelFilter & tiflash_label_filter)
+RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id, const StoreType store_type, bool load_balance, const LabelFilter & tiflash_label_filter, const std::unordered_set<uint64_t> * store_id_blacklist)
 {
     for (;;)
     {
@@ -52,6 +52,9 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
                 bo.backoff(boRegionMiss,
                            Exception("miss store, region id is: " + std::to_string(id.id) + " store id is: " + std::to_string(peer.store_id()),
                                      StoreNotReady));
+                continue;
+            }
+            if (store_id_blacklist && store_id_blacklist->count(store.id) > 0) {
                 continue;
             }
             if (store_type == StoreType::TiFlash)

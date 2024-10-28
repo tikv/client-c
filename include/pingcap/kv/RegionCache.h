@@ -184,7 +184,7 @@ public:
         , log(&Logger::get("pingcap.tikv"))
     {}
 
-    RPCContextPtr getRPCContext(Backoffer & bo, const RegionVerID & id, StoreType store_type, bool load_balance, const LabelFilter & tiflash_label_filter);
+    RPCContextPtr getRPCContext(Backoffer & bo, const RegionVerID & id, StoreType store_type, bool load_balance, const LabelFilter & tiflash_label_filter, const std::unordered_set<uint64_t> * store_id_blacklist = nullptr);
 
     bool updateLeader(const RegionVerID & region_id, const metapb::Peer & leader);
 

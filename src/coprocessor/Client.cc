@@ -410,6 +410,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
     bool is_partition_table_scan,
     const std::vector<int64_t> & physical_table_ids,
     const std::vector<KeyRanges> & ranges_for_each_physical_table,
+    const std::unordered_set<uint64_t> * store_id_blacklist,
     kv::StoreType store_type,
     const kv::LabelFilter & label_filter,
     Logger * log,
@@ -452,7 +453,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         for (const auto & cop_task : cop_tasks)
         {
             // In order to avoid send copTask to unavailable TiFlash node, disable load_balance here.
-            auto rpc_context = cluster->region_cache->getRPCContext(bo, cop_task.region_id, store_type, /*load_balance=*/false, label_filter);
+            auto rpc_context = cluster->region_cache->getRPCContext(bo, cop_task.region_id, store_type, /*load_balance=*/false, label_filter, store_id_blacklist);
 
 
             // When rpcCtx is nil, it's not only attributed to the miss region, but also
@@ -477,6 +478,17 @@ std::vector<BatchCopTask> buildBatchCopTasks(
             // If all stores are in pending state, we use `all_stores` as fallback.
             if (!non_pending_stores.empty())
                 all_stores = non_pending_stores;
+
+            if (store_id_blacklist != nullptr) {
+                auto origin_size = all_stores.size();
+                all_stores.erase(std::remove_if(all_stores.begin(), all_stores.end(), [&](int x) {
+                    return store_id_blacklist->find(x) != store_id_blacklist->end();
+                }), all_stores.end());
+                if (origin_size != all_stores.size()) {
+                    auto s = "blacklist peer removed, region=" + cop_task.region_id.toString() + ", origin_store_size=" + std::to_string(origin_size) + ", current_store_size=" + std::to_string(all_stores.size()) + ", current_store_id=" + std::to_string(rpc_context->store.id);
+                    log->information(s);
+                }
+            }
 
             if (auto iter = store_task_map.find(rpc_context->addr); iter == store_task_map.end())
             {

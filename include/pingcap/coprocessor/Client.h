@@ -304,6 +304,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
     bool is_partition_table_scan,
     const std::vector<int64_t> & physical_table_ids,
     const std::vector<KeyRanges> & ranges_for_each_physical_table,
+    const std::unordered_set<uint64_t> * store_id_blacklist,
     kv::StoreType store_type,
     const kv::LabelFilter & label_filter,
     Logger * log,
