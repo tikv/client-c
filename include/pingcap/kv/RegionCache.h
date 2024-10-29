@@ -207,7 +207,7 @@ public:
     // Return values:
     // 1. all stores of peers of this region
     // 2. stores of non pending peers of this region
-    std::pair<std::vector<uint64_t>, std::vector<uint64_t>> getAllValidTiFlashStores(Backoffer & bo, const RegionVerID & region_id, const Store & current_store, const LabelFilter & label_filter);
+    std::pair<std::vector<uint64_t>, std::vector<uint64_t>> getAllValidTiFlashStores(Backoffer & bo, const RegionVerID & region_id, const Store & current_store, const LabelFilter & label_filter, const std::unordered_set<uint64_t> * store_id_blacklist = nullptr);
 
     std::pair<std::unordered_map<RegionVerID, std::vector<std::string>>, RegionVerID>
     groupKeysByRegion(Backoffer & bo,

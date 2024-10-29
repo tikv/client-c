@@ -468,7 +468,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                 // Then `splitRegion` will reloads these regions.
                 continue;
             }
-            auto [all_stores, non_pending_stores] = cluster->region_cache->getAllValidTiFlashStores(bo, cop_task.region_id, rpc_context->store, label_filter);
+            auto [all_stores, non_pending_stores] = cluster->region_cache->getAllValidTiFlashStores(bo, cop_task.region_id, rpc_context->store, label_filter, store_id_blacklist);
 
             // There are pending store for this region, need to refresh region cache until this region is ok.
             if (all_stores.size() != non_pending_stores.size())
@@ -478,17 +478,6 @@ std::vector<BatchCopTask> buildBatchCopTasks(
             // If all stores are in pending state, we use `all_stores` as fallback.
             if (!non_pending_stores.empty())
                 all_stores = non_pending_stores;
-
-            if (store_id_blacklist != nullptr) {
-                auto origin_size = all_stores.size();
-                all_stores.erase(std::remove_if(all_stores.begin(), all_stores.end(), [&](int x) {
-                    return store_id_blacklist->find(x) != store_id_blacklist->end();
-                }), all_stores.end());
-                if (origin_size != all_stores.size()) {
-                    auto s = "blacklist peer removed, region=" + cop_task.region_id.toString() + ", origin_store_size=" + std::to_string(origin_size) + ", current_store_size=" + std::to_string(all_stores.size()) + ", current_store_id=" + std::to_string(rpc_context->store.id);
-                    log->information(s);
-                }
-            }
 
             if (auto iter = store_task_map.find(rpc_context->addr); iter == store_task_map.end())
             {
