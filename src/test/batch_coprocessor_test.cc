@@ -143,6 +143,7 @@ TEST_F(TestBatchCoprocessor, BuildTask1)
             is_partition_table,
             table_ids,
             ranges_for_each_physical_table,
+            nullptr,
             kv::StoreType::TiKV,
             kv::labelFilterNoTiFlashWriteNode,
             log);
@@ -190,6 +191,7 @@ TEST_F(TestBatchCoprocessor, BuildTaskPartitionTable)
         is_partition_table,
         table_ids,
         ranges_for_each_physical_table,
+        nullptr,
         kv::StoreType::TiKV,
         kv::labelFilterNoTiFlashWriteNode,
         log);
@@ -261,6 +263,7 @@ TEST_F(TestBatchCoprocessor, BuildTask3)
             is_partition_table,
             table_ids,
             ranges_for_each_physical_table,
+            nullptr,
             kv::StoreType::TiKV,
             kv::labelFilterNoTiFlashWriteNode,
             log);
