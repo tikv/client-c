@@ -244,7 +244,7 @@ Store RegionCache::getStore(Backoffer & bo, uint64_t id)
 
 std::pair<std::vector<uint64_t>, std::vector<uint64_t>> RegionCache::getAllValidTiFlashStores(Backoffer & bo, const RegionVerID & region_id, const Store & current_store, const LabelFilter & label_filter, const std::unordered_set<uint64_t> * store_id_blocklist)
 {
-    auto remove_blacklist = [](const std::unordered_set<uint64_t> * store_id_blocklist, std::vector<uint64_t> & stores, const RegionVerID & region_id, Logger * log) {
+    auto remove_blocklist = [](const std::unordered_set<uint64_t> * store_id_blocklist, std::vector<uint64_t> & stores, const RegionVerID & region_id, Logger * log) {
         if (store_id_blocklist != nullptr)
         {
             auto origin_size = stores.size();
@@ -254,7 +254,7 @@ std::pair<std::vector<uint64_t>, std::vector<uint64_t>> RegionCache::getAllValid
                          stores.end());
             if (log != nullptr && origin_size != stores.size())
             {
-                auto s = "blacklist peer removed, region=" + region_id.toString() + ", origin_store_size=" + std::to_string(origin_size) + ", current_store_size=" + std::to_string(stores.size());
+                auto s = "blocklist peer removed, region=" + region_id.toString() + ", origin_store_size=" + std::to_string(origin_size) + ", current_store_size=" + std::to_string(stores.size());
                 log->information(s);
             }
         }
@@ -265,7 +265,7 @@ std::pair<std::vector<uint64_t>, std::vector<uint64_t>> RegionCache::getAllValid
     if (cached_region == nullptr)
     {
         all_stores.emplace_back(current_store.id);
-        remove_blacklist(store_id_blocklist, all_stores, region_id, log);
+        remove_blocklist(store_id_blocklist, all_stores, region_id, log);
         return std::make_pair(all_stores, non_pending_stores);
     }
 
@@ -288,8 +288,8 @@ std::pair<std::vector<uint64_t>, std::vector<uint64_t>> RegionCache::getAllValid
             non_pending_stores.emplace_back(peer.store_id());
     }
 
-    remove_blacklist(store_id_blocklist, all_stores, region_id, log);
-    remove_blacklist(store_id_blocklist, non_pending_stores, region_id, nullptr);
+    remove_blocklist(store_id_blocklist, all_stores, region_id, log);
+    remove_blocklist(store_id_blocklist, non_pending_stores, region_id, nullptr);
     return std::make_pair(all_stores, non_pending_stores);
 }
 

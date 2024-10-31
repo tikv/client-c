@@ -136,7 +136,7 @@ std::map<uint64_t, kv::Store> filterAliveStores(kv::Cluster * cluster, const std
     }
     return alive_stores;
 }
-std::vector<BatchCopTask> balanceBatchCopTasks(kv::Cluster * cluster, kv::RegionCachePtr & cache, std::vector<BatchCopTask> && original_tasks, bool is_mpp, const kv::LabelFilter & label_filter,  Poco::Logger * log, bool centralized_schedule = false)
+std::vector<BatchCopTask> balanceBatchCopTasks(kv::Cluster * cluster, kv::RegionCachePtr & cache, std::vector<BatchCopTask> && original_tasks, bool is_mpp, const kv::LabelFilter & label_filter, Poco::Logger * log, bool centralized_schedule = false)
 {
     if (original_tasks.empty())
     {
@@ -249,8 +249,8 @@ std::vector<BatchCopTask> balanceBatchCopTasks(kv::Cluster * cluster, kv::Region
     {
         static constexpr uint64_t INVALID_STORE_ID = std::numeric_limits<uint64_t>::max();
 
-        if (!centralized_schedule)   //the default load balance strategy: average region number
-        {               
+        if (!centralized_schedule) //the default load balance strategy: average region number
+        {
             double avg_store_per_region = 1.0 * total_region_candidate_num / total_remaining_region_num;
             auto find_next_store = [&](const std::vector<uint64_t> & candidate_stores) -> uint64_t {
                 uint64_t store_id = INVALID_STORE_ID;
@@ -320,23 +320,26 @@ std::vector<BatchCopTask> balanceBatchCopTasks(kv::Cluster * cluster, kv::Region
                 log->warning("Some regions are not used when trying to balance batch cop task, give up balancing");
                 return std::move(original_tasks);
             }
-        }       
+        }
         else
-        {  // the centralilzed load balance strategy used by vector search query
+        { // the centralilzed load balance strategy used by vector search query
             auto find_next_store = [&]() -> uint64_t {
                 uint64_t store_id = INVALID_STORE_ID;
                 size_t max_candidate_regions = 0;
-                
+
                 auto check_store = [&](uint64_t sid) {
-                    if (auto iter = store_candidate_region_map.find(sid); iter != store_candidate_region_map.end()) {
+                    if (auto iter = store_candidate_region_map.find(sid); iter != store_candidate_region_map.end())
+                    {
                         size_t candidate_regions = iter->second.size();
-                        if (candidate_regions > max_candidate_regions) {
+                        if (candidate_regions > max_candidate_regions)
+                        {
                             store_id = sid;
                             max_candidate_regions = candidate_regions;
                         }
                     }
                 };
-                for (const auto & [sid, _] : store_candidate_region_map) {
+                for (const auto & [sid, _] : store_candidate_region_map)
+                {
                     // fine the stores has max candidate regions
                     check_store(sid);
                 }
@@ -348,10 +351,10 @@ std::vector<BatchCopTask> balanceBatchCopTasks(kv::Cluster * cluster, kv::Region
             {
                 if (store_id == INVALID_STORE_ID)
                     break;
-                
+
                 // add all region_infos to store_task_map for current store_id
-                auto& current_store_regions = store_candidate_region_map[store_id];
-                for (const auto& [task_key, region_info] : current_store_regions)
+                auto & current_store_regions = store_candidate_region_map[store_id];
+                for (const auto & [task_key, region_info] : current_store_regions)
                 {
                     store_task_map[store_id].region_infos.emplace_back(region_info);
                     total_remaining_region_num -= 1;
@@ -381,8 +384,8 @@ std::vector<BatchCopTask> balanceBatchCopTasks(kv::Cluster * cluster, kv::Region
             {
                 log->warning("Some regions are not used when trying to balance batch cop task, give up balancing");
                 return std::move(original_tasks);
-            }            
-        } 
+            }
+        }
     }
 
     std::vector<BatchCopTask> ret;
@@ -493,7 +496,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                     .partition_index = cop_task.partition_index,
                 });
                 batch_cop_task.store_id = rpc_context->store.id;
-                store_task_map[rpc_context->addr] = std::move(batch_cop_task);                
+                store_task_map[rpc_context->addr] = std::move(batch_cop_task);
             }
             else
             {

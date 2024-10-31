@@ -5,7 +5,8 @@
 
 namespace pingcap
 {
-enum class RedactMode {
+enum class RedactMode
+{
     Disable,
     Enable,
     Marker,

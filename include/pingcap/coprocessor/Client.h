@@ -44,7 +44,6 @@ struct KeyRange
     KeyRange & operator=(KeyRange &&) = default;
 
     bool operator<(const KeyRange & rhs) const { return start_key < rhs.start_key; }
-
 };
 using KeyRanges = std::vector<KeyRange>;
 
