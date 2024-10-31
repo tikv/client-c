@@ -155,6 +155,13 @@ std::vector<BatchCopTask> balanceBatchCopTasks(kv::Cluster * cluster, kv::Region
     {
         for (const auto & task : original_tasks)
         {
+            if (task.region_infos.empty())
+                throw Exception("no region in batch cop task", ErrorCodes::CoprocessorError);
+            if (task.region_infos[0].all_stores.empty())
+            {
+                // Only true when all stores are blocked, in which case will not call balanceBatchCopTasks though.
+                throw Exception("no region in batch cop task, region_id=" + task.region_infos[0].region_id.toString(), ErrorCodes::CoprocessorError);
+            }
             auto task_store_id = task.region_infos[0].all_stores[0];
             BatchCopTask new_batch_task;
             new_batch_task.store_addr = task.store_addr;
@@ -457,7 +464,6 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         {
             // In order to avoid send copTask to unavailable TiFlash node, disable load_balance here.
             auto rpc_context = cluster->region_cache->getRPCContext(bo, cop_task.region_id, store_type, /*load_balance=*/false, label_filter, store_id_blocklist);
-
 
             // When rpcCtx is nil, it's not only attributed to the miss region, but also
             // some TiFlash stores crash and can't be recovered.

@@ -303,4 +303,44 @@ TEST_F(TestBatchCoprocessor, BuildTask3)
     }
 }
 
+TEST_F(TestBatchCoprocessor, BuildTaskBlocklist)
+{
+    Backoffer bo(copBuildTaskMaxBackoff);
+
+    control_cluster->splitRegion("a");
+    control_cluster->splitRegion("b");
+    control_cluster->splitRegion("z");
+
+    std::shared_ptr<pingcap::coprocessor::Request>
+        req = std::make_shared<pingcap::coprocessor::Request>();
+    req->tp = pingcap::coprocessor::DAG;
+    req->start_ts = test_cluster->pd_client->getTS();
+
+    std::vector<coprocessor::KeyRanges> ranges_for_each_physical_table{
+        coprocessor::KeyRanges{{"a", "z"}},
+    };
+
+    const bool is_partition_table = false;
+    const std::vector<int64_t> table_ids{-1};
+    {
+        std::unordered_set<uint64_t> st = {mock_kv_cluster->stores[0].id};
+        std::vector<coprocessor::BatchCopTask> batch_cop_tasks;
+        auto f = [&]() {
+            batch_cop_tasks = coprocessor::buildBatchCopTasks(
+                bo,
+                test_cluster.get(),
+                /*is_mpp=*/false,
+                is_partition_table,
+                table_ids,
+                ranges_for_each_physical_table,
+                &st,
+                kv::StoreType::TiKV,
+                kv::labelFilterNoTiFlashWriteNode,
+                log);
+        };
+        // Because the only store is blocked, so we will fail eith an excaption here.
+        EXPECT_ANY_THROW(f());
+    }
+}
+
 } // namespace pingcap::tests
