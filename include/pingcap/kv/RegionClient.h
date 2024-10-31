@@ -58,7 +58,7 @@ struct RegionClient
                 // If the region is not found in cache, it must be out
                 // of date and already be cleaned up. We can skip the
                 // RPC by returning RegionError directly.
-                auto s = store_id_blacklist != nullptr ? ", filter_size=" + std::to_string(store_id_blacklist->size()) + "." : std::string(".");
+                auto s = store_id_blacklist != nullptr ? ", store_filter_size=" + std::to_string(store_id_blacklist->size()) + "." : std::string(".");
                 throw Exception("Region epoch not match after retries: Region " + region_id.toString() + " not in region cache" + s, RegionEpochNotMatch);
             }
             RpcCall<T> rpc(cluster->rpc_client, ctx->addr);
