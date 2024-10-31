@@ -410,7 +410,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
     bool is_partition_table_scan,
     const std::vector<int64_t> & physical_table_ids,
     const std::vector<KeyRanges> & ranges_for_each_physical_table,
-    const std::unordered_set<uint64_t> * store_id_blacklist,
+    const std::unordered_set<uint64_t> * store_id_blocklist,
     kv::StoreType store_type,
     const kv::LabelFilter & label_filter,
     Logger * log,
@@ -453,7 +453,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         for (const auto & cop_task : cop_tasks)
         {
             // In order to avoid send copTask to unavailable TiFlash node, disable load_balance here.
-            auto rpc_context = cluster->region_cache->getRPCContext(bo, cop_task.region_id, store_type, /*load_balance=*/false, label_filter, store_id_blacklist);
+            auto rpc_context = cluster->region_cache->getRPCContext(bo, cop_task.region_id, store_type, /*load_balance=*/false, label_filter, store_id_blocklist);
 
 
             // When rpcCtx is nil, it's not only attributed to the miss region, but also
@@ -468,7 +468,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                 // Then `splitRegion` will reloads these regions.
                 continue;
             }
-            auto [all_stores, non_pending_stores] = cluster->region_cache->getAllValidTiFlashStores(bo, cop_task.region_id, rpc_context->store, label_filter, store_id_blacklist);
+            auto [all_stores, non_pending_stores] = cluster->region_cache->getAllValidTiFlashStores(bo, cop_task.region_id, rpc_context->store, label_filter, store_id_blocklist);
 
             // There are pending store for this region, need to refresh region cache until this region is ok.
             if (all_stores.size() != non_pending_stores.size())

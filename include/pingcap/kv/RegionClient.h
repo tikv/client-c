@@ -44,7 +44,7 @@ struct RegionClient
                          int timeout = dailTimeout,
                          StoreType store_type = StoreType::TiKV,
                          const kv::GRPCMetaData & meta_data = {},
-                         const std::unordered_set<uint64_t> * store_id_blacklist = nullptr)
+                         const std::unordered_set<uint64_t> * store_id_blocklist = nullptr)
     {
         if (store_type == kv::StoreType::TiFlash && tiflash_label_filter == kv::labelFilterInvalid)
         {
@@ -52,13 +52,13 @@ struct RegionClient
         }
         for (;;)
         {
-            RPCContextPtr ctx = cluster->region_cache->getRPCContext(bo, region_id, store_type, /*load_balance=*/true, tiflash_label_filter, store_id_blacklist);
+            RPCContextPtr ctx = cluster->region_cache->getRPCContext(bo, region_id, store_type, /*load_balance=*/true, tiflash_label_filter, store_id_blocklist);
             if (ctx == nullptr)
             {
                 // If the region is not found in cache, it must be out
                 // of date and already be cleaned up. We can skip the
                 // RPC by returning RegionError directly.
-                auto s = store_id_blacklist != nullptr ? ", store_filter_size=" + std::to_string(store_id_blacklist->size()) + "." : std::string(".");
+                auto s = store_id_blocklist != nullptr ? ", store_filter_size=" + std::to_string(store_id_blocklist->size()) + "." : std::string(".");
                 throw Exception("Region epoch not match after retries: Region " + region_id.toString() + " not in region cache" + s, RegionEpochNotMatch);
             }
             RpcCall<T> rpc(cluster->rpc_client, ctx->addr);
