@@ -136,7 +136,7 @@ std::map<uint64_t, kv::Store> filterAliveStores(kv::Cluster * cluster, const std
     }
     return alive_stores;
 }
-std::vector<BatchCopTask> balanceBatchCopTasks(kv::Cluster * cluster, kv::RegionCachePtr & cache, std::vector<BatchCopTask> && original_tasks, bool is_mpp, const kv::LabelFilter & label_filter,  Poco::Logger * log, bool centralized_schedule = false)
+std::vector<BatchCopTask> balanceBatchCopTasks(kv::Cluster * cluster, kv::RegionCachePtr & cache, std::vector<BatchCopTask> && original_tasks, bool is_mpp, const kv::LabelFilter & label_filter, Poco::Logger * log, bool centralized_schedule = false)
 {
     if (original_tasks.empty())
     {
@@ -155,6 +155,13 @@ std::vector<BatchCopTask> balanceBatchCopTasks(kv::Cluster * cluster, kv::Region
     {
         for (const auto & task : original_tasks)
         {
+            if (task.region_infos.empty())
+                throw Exception("no region in batch cop task", ErrorCodes::CoprocessorError);
+            if (task.region_infos[0].all_stores.empty())
+            {
+                // Only true when all stores are blocked, in which case will not call balanceBatchCopTasks though.
+                throw Exception("no region in batch cop task, region_id=" + task.region_infos[0].region_id.toString(), ErrorCodes::CoprocessorError);
+            }
             auto task_store_id = task.region_infos[0].all_stores[0];
             BatchCopTask new_batch_task;
             new_batch_task.store_addr = task.store_addr;
@@ -249,8 +256,8 @@ std::vector<BatchCopTask> balanceBatchCopTasks(kv::Cluster * cluster, kv::Region
     {
         static constexpr uint64_t INVALID_STORE_ID = std::numeric_limits<uint64_t>::max();
 
-        if (!centralized_schedule)   //the default load balance strategy: average region number
-        {               
+        if (!centralized_schedule) //the default load balance strategy: average region number
+        {
             double avg_store_per_region = 1.0 * total_region_candidate_num / total_remaining_region_num;
             auto find_next_store = [&](const std::vector<uint64_t> & candidate_stores) -> uint64_t {
                 uint64_t store_id = INVALID_STORE_ID;
@@ -320,23 +327,26 @@ std::vector<BatchCopTask> balanceBatchCopTasks(kv::Cluster * cluster, kv::Region
                 log->warning("Some regions are not used when trying to balance batch cop task, give up balancing");
                 return std::move(original_tasks);
             }
-        }       
+        }
         else
-        {  // the centralilzed load balance strategy used by vector search query
+        { // the centralilzed load balance strategy used by vector search query
             auto find_next_store = [&]() -> uint64_t {
                 uint64_t store_id = INVALID_STORE_ID;
                 size_t max_candidate_regions = 0;
-                
+
                 auto check_store = [&](uint64_t sid) {
-                    if (auto iter = store_candidate_region_map.find(sid); iter != store_candidate_region_map.end()) {
+                    if (auto iter = store_candidate_region_map.find(sid); iter != store_candidate_region_map.end())
+                    {
                         size_t candidate_regions = iter->second.size();
-                        if (candidate_regions > max_candidate_regions) {
+                        if (candidate_regions > max_candidate_regions)
+                        {
                             store_id = sid;
                             max_candidate_regions = candidate_regions;
                         }
                     }
                 };
-                for (const auto & [sid, _] : store_candidate_region_map) {
+                for (const auto & [sid, _] : store_candidate_region_map)
+                {
                     // fine the stores has max candidate regions
                     check_store(sid);
                 }
@@ -348,10 +358,10 @@ std::vector<BatchCopTask> balanceBatchCopTasks(kv::Cluster * cluster, kv::Region
             {
                 if (store_id == INVALID_STORE_ID)
                     break;
-                
+
                 // add all region_infos to store_task_map for current store_id
-                auto& current_store_regions = store_candidate_region_map[store_id];
-                for (const auto& [task_key, region_info] : current_store_regions)
+                auto & current_store_regions = store_candidate_region_map[store_id];
+                for (const auto & [task_key, region_info] : current_store_regions)
                 {
                     store_task_map[store_id].region_infos.emplace_back(region_info);
                     total_remaining_region_num -= 1;
@@ -381,8 +391,8 @@ std::vector<BatchCopTask> balanceBatchCopTasks(kv::Cluster * cluster, kv::Region
             {
                 log->warning("Some regions are not used when trying to balance batch cop task, give up balancing");
                 return std::move(original_tasks);
-            }            
-        } 
+            }
+        }
     }
 
     std::vector<BatchCopTask> ret;
@@ -410,6 +420,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
     bool is_partition_table_scan,
     const std::vector<int64_t> & physical_table_ids,
     const std::vector<KeyRanges> & ranges_for_each_physical_table,
+    const std::unordered_set<uint64_t> * store_id_blocklist,
     kv::StoreType store_type,
     const kv::LabelFilter & label_filter,
     Logger * log,
@@ -452,8 +463,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         for (const auto & cop_task : cop_tasks)
         {
             // In order to avoid send copTask to unavailable TiFlash node, disable load_balance here.
-            auto rpc_context = cluster->region_cache->getRPCContext(bo, cop_task.region_id, store_type, /*load_balance=*/false, label_filter);
-
+            auto rpc_context = cluster->region_cache->getRPCContext(bo, cop_task.region_id, store_type, /*load_balance=*/false, label_filter, store_id_blocklist);
 
             // When rpcCtx is nil, it's not only attributed to the miss region, but also
             // some TiFlash stores crash and can't be recovered.
@@ -467,7 +477,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                 // Then `splitRegion` will reloads these regions.
                 continue;
             }
-            auto [all_stores, non_pending_stores] = cluster->region_cache->getAllValidTiFlashStores(bo, cop_task.region_id, rpc_context->store, label_filter);
+            auto [all_stores, non_pending_stores] = cluster->region_cache->getAllValidTiFlashStores(bo, cop_task.region_id, rpc_context->store, label_filter, store_id_blocklist);
 
             // There are pending store for this region, need to refresh region cache until this region is ok.
             if (all_stores.size() != non_pending_stores.size())
@@ -492,7 +502,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                     .partition_index = cop_task.partition_index,
                 });
                 batch_cop_task.store_id = rpc_context->store.id;
-                store_task_map[rpc_context->addr] = std::move(batch_cop_task);                
+                store_task_map[rpc_context->addr] = std::move(batch_cop_task);
             }
             else
             {

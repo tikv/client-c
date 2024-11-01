@@ -137,7 +137,7 @@ TEST_F(TestWithLockResolve, testResolveLockBase)
         for (int i = 0; i <= 12; ++i)
         {
             auto t = static_cast<BackoffType>(i);
-             bo.backoff(t, {});
+            bo.backoff(t, {});
         }
 
         auto && new_bo = bo.clone();

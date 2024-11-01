@@ -44,7 +44,6 @@ struct KeyRange
     KeyRange & operator=(KeyRange &&) = default;
 
     bool operator<(const KeyRange & rhs) const { return start_key < rhs.start_key; }
-
 };
 using KeyRanges = std::vector<KeyRange>;
 
@@ -304,6 +303,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
     bool is_partition_table_scan,
     const std::vector<int64_t> & physical_table_ids,
     const std::vector<KeyRanges> & ranges_for_each_physical_table,
+    const std::unordered_set<uint64_t> * store_id_blocklist,
     kv::StoreType store_type,
     const kv::LabelFilter & label_filter,
     Logger * log,
