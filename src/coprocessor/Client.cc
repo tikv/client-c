@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cstdint>
 #include <limits>
+#include <string>
 #include <vector>
 
 namespace pingcap
@@ -738,7 +739,7 @@ void ResponseIter::handleTask(const CopTask & task)
         }
         catch (const pingcap::Exception & e)
         {
-            log->error("coprocessor meets error, error message: {}, error code: {}", e.displayText(), e.code());
+            log->error("coprocessor meets error, error message: " + e.displayText() + ", error code: " + std::to_string(e.code()));
             queue->push(Result(e));
             meet_error = true;
             break;
