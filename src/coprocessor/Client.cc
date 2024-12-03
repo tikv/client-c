@@ -623,7 +623,9 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
         }
         if (before_expired > 0)
         {
-            log->information("get lock and sleep for a while, sleep time is " + std::to_string(before_expired) + "ms.");
+            log->information("encounter lock and sleep for a while, region_id=" + task.region_id.toString() + //
+                             " req_start_ts=" + std::to_string(task.req->start_ts) + " lock_version=" + std::to_string(lock->txn_id) + //
+                             " sleep time is " + std::to_string(before_expired) + "ms.");
             bo.backoffWithMaxSleep(kv::boTxnLockFast, before_expired, Exception("encounter lock, region_id=" + task.region_id.toString() + " " + locked.DebugString(), ErrorCodes::LockError));
         }
         return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, task.connection_id, task.connection_alias, log, task.meta_data, task.before_send);
