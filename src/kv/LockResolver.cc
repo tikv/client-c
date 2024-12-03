@@ -101,7 +101,7 @@ int64_t LockResolver::resolveLocks(
                     return before_txn_expired.value();
                 }
             }
-            else
+            else // status.ttl != 0
             {
                 auto before_txn_expired_time = cluster->oracle->untilExpired(lock->txn_id, status.ttl);
                 before_txn_expired.update(before_txn_expired_time);
