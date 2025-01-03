@@ -186,7 +186,7 @@ struct RegionClient
                     }
                 }                
                 // No response msg.
-                stream_reader->no_resp = true;                
+                stream_reader->no_resp = true;
                 return stream_reader;
             }
             else if (status.error_code() == ::grpc::StatusCode::UNIMPLEMENTED)
