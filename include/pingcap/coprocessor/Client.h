@@ -109,6 +109,7 @@ public:
     struct Result
     {
         std::shared_ptr<::coprocessor::Response> resp;
+        bool same_zone{true};
         Exception error;
         bool finished{false};
 
@@ -122,6 +123,10 @@ public:
         explicit Result(bool finished_)
             : finished(finished_)
         {}
+        Result(std::shared_ptr<::coprocessor::Response> resp_, bool same_zone_)
+            : resp(resp_)
+            , same_zone(same_zone_)
+        {}
 
         const std::string & data() const { return resp->data(); }
     };
@@ -132,7 +137,8 @@ public:
                  int concurrency_,
                  Logger * log_,
                  int timeout_ = kv::copTimeout,
-                 const kv::LabelFilter & tiflash_label_filter_ = kv::labelFilterInvalid)
+                 const kv::LabelFilter & tiflash_label_filter_ = kv::labelFilterInvalid,
+                 const std::string source_zone_label_ = "")
         : queue(std::move(queue_))
         , tasks(std::move(tasks_))
         , cluster(cluster_)
@@ -140,6 +146,7 @@ public:
         , timeout(timeout_)
         , unfinished_thread(0)
         , tiflash_label_filter(tiflash_label_filter_)
+        , source_zone_label(source_zone_label_)
         , log(log_)
     {}
 
@@ -264,6 +271,7 @@ private:
     std::atomic_bool is_opened = false;
 
     const kv::LabelFilter tiflash_label_filter;
+    const std::string source_zone_label;
 
     Logger * log;
 };
