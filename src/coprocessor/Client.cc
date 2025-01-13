@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cstdint>
 #include <limits>
+#include <string>
 #include <vector>
 
 namespace pingcap
@@ -117,6 +118,7 @@ std::vector<LocationKeyRanges> splitKeyRangesByLocations(
     return res;
 }
 
+
 std::map<uint64_t, kv::Store> filterAliveStores(kv::Cluster * cluster, const std::map<uint64_t, kv::Store> & stores, Logger * log)
 {
     std::map<uint64_t, kv::Store> alive_stores;
@@ -135,8 +137,7 @@ std::map<uint64_t, kv::Store> filterAliveStores(kv::Cluster * cluster, const std
     }
     return alive_stores;
 }
-
-std::vector<BatchCopTask> balanceBatchCopTasks(kv::Cluster * cluster, kv::RegionCachePtr & cache, std::vector<BatchCopTask> && original_tasks, bool is_mpp, const kv::LabelFilter & label_filter, Poco::Logger * log)
+std::vector<BatchCopTask> balanceBatchCopTasks(kv::Cluster * cluster, kv::RegionCachePtr & cache, std::vector<BatchCopTask> && original_tasks, bool is_mpp, const kv::LabelFilter & label_filter, Poco::Logger * log, bool centralized_schedule = false)
 {
     if (original_tasks.empty())
     {
@@ -155,6 +156,13 @@ std::vector<BatchCopTask> balanceBatchCopTasks(kv::Cluster * cluster, kv::Region
     {
         for (const auto & task : original_tasks)
         {
+            if (task.region_infos.empty())
+                throw Exception("no region in batch cop task", ErrorCodes::CoprocessorError);
+            if (task.region_infos[0].all_stores.empty())
+            {
+                // Only true when all stores are blocked, in which case will not call balanceBatchCopTasks though.
+                throw Exception("no region in batch cop task, region_id=" + task.region_infos[0].region_id.toString(), ErrorCodes::CoprocessorError);
+            }
             auto task_store_id = task.region_infos[0].all_stores[0];
             BatchCopTask new_batch_task;
             new_batch_task.store_addr = task.store_addr;
@@ -247,75 +255,144 @@ std::vector<BatchCopTask> balanceBatchCopTasks(kv::Cluster * cluster, kv::Region
 
     if (total_remaining_region_num > 0)
     {
-        double avg_store_per_region = 1.0 * total_region_candidate_num / total_remaining_region_num;
         static constexpr uint64_t INVALID_STORE_ID = std::numeric_limits<uint64_t>::max();
-        auto find_next_store = [&](const std::vector<uint64_t> & candidate_stores) -> uint64_t {
-            uint64_t store_id = INVALID_STORE_ID;
-            double weighted_region_num = std::numeric_limits<double>::max();
-            if (!candidate_stores.empty())
-            {
-                for (const auto candidate_sid : candidate_stores)
+
+        if (!centralized_schedule) //the default load balance strategy: average region number
+        {
+            double avg_store_per_region = 1.0 * total_region_candidate_num / total_remaining_region_num;
+            auto find_next_store = [&](const std::vector<uint64_t> & candidate_stores) -> uint64_t {
+                uint64_t store_id = INVALID_STORE_ID;
+                double weighted_region_num = std::numeric_limits<double>::max();
+                if (!candidate_stores.empty())
                 {
-                    if (auto iter = store_candidate_region_map.find(candidate_sid); iter != store_candidate_region_map.end())
+                    for (const auto candidate_sid : candidate_stores)
+                    {
+                        if (auto iter = store_candidate_region_map.find(candidate_sid); iter != store_candidate_region_map.end())
+                        {
+                            if (double num = 1.0 * iter->second.size() / avg_store_per_region
+                                    + store_task_map[candidate_sid].region_infos.size();
+                                num < weighted_region_num)
+                            {
+                                store_id = candidate_sid;
+                                weighted_region_num = num;
+                            }
+                        }
+                    }
+                    if (store_id != INVALID_STORE_ID)
+                        return store_id;
+                }
+                for (const auto & store_task : store_task_map)
+                {
+                    if (auto iter = store_candidate_region_map.find(store_task.first); iter != store_candidate_region_map.end())
                     {
                         if (double num = 1.0 * iter->second.size() / avg_store_per_region
-                                + store_task_map[candidate_sid].region_infos.size();
+                                + store_task.second.region_infos.size();
                             num < weighted_region_num)
                         {
-                            store_id = candidate_sid;
+                            store_id = store_task.first;
                             weighted_region_num = num;
                         }
                     }
                 }
-                if (store_id != INVALID_STORE_ID)
-                    return store_id;
-            }
-            for (const auto & store_task : store_task_map)
+                return store_id;
+            };
+            uint64_t store_id = find_next_store({});
+            while (total_remaining_region_num > 0)
             {
-                if (auto iter = store_candidate_region_map.find(store_task.first); iter != store_candidate_region_map.end())
+                if (store_id == INVALID_STORE_ID)
+                    break;
+                auto first_iter = store_candidate_region_map[store_id].begin();
+                const auto task_key = first_iter->first; // copy
+                const auto region_info = first_iter->second; // copy
+                store_task_map[store_id].region_infos.emplace_back(region_info);
+                total_remaining_region_num -= 1;
+
+                for (const auto other_store_id : region_info.all_stores)
                 {
-                    if (double num = 1.0 * iter->second.size() / avg_store_per_region
-                            + store_task.second.region_infos.size();
-                        num < weighted_region_num)
+                    if (auto iter = store_candidate_region_map.find(other_store_id); iter != store_candidate_region_map.end())
                     {
-                        store_id = store_task.first;
-                        weighted_region_num = num;
+                        iter->second.erase(task_key);
+                        total_region_candidate_num -= 1;
+                        if (iter->second.empty())
+                            store_candidate_region_map.erase(iter);
                     }
                 }
-            }
-            return store_id;
-        };
-
-        uint64_t store_id = find_next_store({});
-        while (total_remaining_region_num > 0)
-        {
-            if (store_id == INVALID_STORE_ID)
-                break;
-            auto first_iter = store_candidate_region_map[store_id].begin();
-            const auto task_key = first_iter->first; // copy
-            const auto region_info = first_iter->second; // copy
-            store_task_map[store_id].region_infos.emplace_back(region_info);
-            total_remaining_region_num -= 1;
-            for (const auto other_store_id : region_info.all_stores)
-            {
-                if (auto iter = store_candidate_region_map.find(other_store_id); iter != store_candidate_region_map.end())
+                if (total_remaining_region_num > 0)
                 {
-                    iter->second.erase(task_key);
-                    total_region_candidate_num -= 1;
-                    if (iter->second.empty())
-                        store_candidate_region_map.erase(iter);
+                    avg_store_per_region = 1.0 * total_region_candidate_num / total_remaining_region_num;
+                    store_id = find_next_store(region_info.all_stores);
                 }
             }
             if (total_remaining_region_num > 0)
             {
-                avg_store_per_region = 1.0 * total_region_candidate_num / total_remaining_region_num;
-                store_id = find_next_store(region_info.all_stores);
+                log->warning("Some regions are not used when trying to balance batch cop task, give up balancing");
+                return std::move(original_tasks);
             }
         }
-        if (total_remaining_region_num > 0)
-        {
-            log->warning("Some regions are not used when trying to balance batch cop task, give up balancing");
-            return std::move(original_tasks);
+        else
+        { // the centralilzed load balance strategy used by vector search query
+            auto find_next_store = [&]() -> uint64_t {
+                uint64_t store_id = INVALID_STORE_ID;
+                size_t max_candidate_regions = 0;
+
+                auto check_store = [&](uint64_t sid) {
+                    if (auto iter = store_candidate_region_map.find(sid); iter != store_candidate_region_map.end())
+                    {
+                        size_t candidate_regions = iter->second.size();
+                        if (candidate_regions > max_candidate_regions)
+                        {
+                            store_id = sid;
+                            max_candidate_regions = candidate_regions;
+                        }
+                    }
+                };
+                for (const auto & [sid, _] : store_candidate_region_map)
+                {
+                    // fine the stores has max candidate regions
+                    check_store(sid);
+                }
+                return store_id;
+            };
+
+            uint64_t store_id = find_next_store();
+            while (total_remaining_region_num > 0)
+            {
+                if (store_id == INVALID_STORE_ID)
+                    break;
+
+                // add all region_infos to store_task_map for current store_id
+                auto & current_store_regions = store_candidate_region_map[store_id];
+                for (const auto & [task_key, region_info] : current_store_regions)
+                {
+                    store_task_map[store_id].region_infos.emplace_back(region_info);
+                    total_remaining_region_num -= 1;
+                    // remove the region from other store
+                    for (const auto other_store_id : region_info.all_stores)
+                    {
+                        if (other_store_id != store_id)
+                        {
+                            if (auto iter = store_candidate_region_map.find(other_store_id); iter != store_candidate_region_map.end())
+                            {
+                                iter->second.erase(task_key);
+                                total_region_candidate_num -= 1;
+                                if (iter->second.empty())
+                                    store_candidate_region_map.erase(iter);
+                            }
+                        }
+                    }
+                }
+                store_candidate_region_map.erase(store_id);
+
+                if (total_remaining_region_num > 0)
+                {
+                    store_id = find_next_store();
+                }
+            }
+            if (total_remaining_region_num > 0)
+            {
+                log->warning("Some regions are not used when trying to balance batch cop task, give up balancing");
+                return std::move(original_tasks);
+            }
         }
     }
 
@@ -344,9 +421,11 @@ std::vector<BatchCopTask> buildBatchCopTasks(
     bool is_partition_table_scan,
     const std::vector<int64_t> & physical_table_ids,
     const std::vector<KeyRanges> & ranges_for_each_physical_table,
+    const std::unordered_set<uint64_t> * store_id_blocklist,
     kv::StoreType store_type,
     const kv::LabelFilter & label_filter,
-    Logger * log)
+    Logger * log,
+    bool centralized_schedule)
 {
     int retry_num = 0;
     auto start = std::chrono::steady_clock::now();
@@ -354,6 +433,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
     int64_t batch_cop_task_elapsed = 0;
     int64_t balance_elapsed = 0;
     auto & cache = cluster->region_cache;
+
     assert(physical_table_ids.size() == ranges_for_each_physical_table.size());
 
     while (true) // for `need_retry`
@@ -384,7 +464,8 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         for (const auto & cop_task : cop_tasks)
         {
             // In order to avoid send copTask to unavailable TiFlash node, disable load_balance here.
-            auto rpc_context = cluster->region_cache->getRPCContext(bo, cop_task.region_id, store_type, /*load_balance=*/false, label_filter);
+            auto rpc_context = cluster->region_cache->getRPCContext(bo, cop_task.region_id, store_type, /*load_balance=*/false, label_filter, store_id_blocklist);
+
             // When rpcCtx is nil, it's not only attributed to the miss region, but also
             // some TiFlash stores crash and can't be recovered.
             // That is not an error that can be easily recovered, so we regard this error
@@ -397,7 +478,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                 // Then `splitRegion` will reloads these regions.
                 continue;
             }
-            auto [all_stores, non_pending_stores] = cluster->region_cache->getAllValidTiFlashStores(bo, cop_task.region_id, rpc_context->store, label_filter);
+            auto [all_stores, non_pending_stores] = cluster->region_cache->getAllValidTiFlashStores(bo, cop_task.region_id, rpc_context->store, label_filter, store_id_blocklist);
 
             // There are pending store for this region, need to refresh region cache until this region is ok.
             if (all_stores.size() != non_pending_stores.size())
@@ -462,12 +543,11 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         };
         if (log->getLevel() >= Poco::Message::PRIO_INFORMATION)
             log->information(tasks_to_str("Before region balance:", batch_cop_tasks));
-        batch_cop_tasks = details::balanceBatchCopTasks(cluster, cache, std::move(batch_cop_tasks), is_mpp, label_filter, log);
+        batch_cop_tasks = details::balanceBatchCopTasks(cluster, cache, std::move(batch_cop_tasks), is_mpp, label_filter, log, centralized_schedule);
         if (log->getLevel() >= Poco::Message::PRIO_INFORMATION)
             log->information(tasks_to_str("After region balance:", batch_cop_tasks));
         auto balance_end = std::chrono::steady_clock::now();
         balance_elapsed += std::chrono::duration_cast<std::chrono::milliseconds>(balance_end - balance_start).count();
-
         // For partition table, we need to move region info from task.region_infos to task.table_regions.
         if (is_partition_table_scan)
         {
@@ -533,7 +613,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
 
     auto handle_locked_resp = [&](const ::kvrpcpb::LockInfo & locked) -> std::vector<CopTask> {
         kv::LockPtr lock = std::make_shared<kv::Lock>(locked);
-        log->debug("encounter lock problem: " + locked.DebugString());
+        log->debug("region " + task.region_id.toString() + " encounter lock problem: " + locked.DebugString());
         std::vector<uint64_t> pushed;
         std::vector<kv::LockPtr> locks{lock};
         auto before_expired = cluster->lock_resolver->resolveLocks(bo, task.req->start_ts, locks, pushed);
@@ -543,8 +623,10 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
         }
         if (before_expired > 0)
         {
-            log->information("get lock and sleep for a while, sleep time is " + std::to_string(before_expired) + "ms.");
-            bo.backoffWithMaxSleep(kv::boTxnLockFast, before_expired, Exception(locked.DebugString(), ErrorCodes::LockError));
+            log->information("encounter lock and sleep for a while, region_id=" + task.region_id.toString() + //
+                             " req_start_ts=" + std::to_string(task.req->start_ts) + " lock_version=" + std::to_string(lock->txn_id) + //
+                             " sleep time is " + std::to_string(before_expired) + "ms.");
+            bo.backoffWithMaxSleep(kv::boTxnLockFast, before_expired, Exception("encounter lock, region_id=" + task.region_id.toString() + " " + locked.DebugString(), ErrorCodes::LockError));
         }
         return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, task.connection_id, task.connection_alias, log, task.meta_data, task.before_send);
     };
@@ -552,9 +634,10 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
     kv::RegionClient client(cluster, task.region_id);
     auto handle_unary_cop = [&]() -> std::vector<CopTask> {
         auto resp = std::make_shared<::coprocessor::Response>();
+        bool same_zone_req = true;
         try
         {
-            client.sendReqToRegion<kv::RPC_NAME(Coprocessor)>(bo, req, resp.get(), tiflash_label_filter, timeout, task.store_type, task.meta_data);
+            client.sendReqToRegion<kv::RPC_NAME(Coprocessor)>(bo, req, resp.get(), tiflash_label_filter, timeout, task.store_type, task.meta_data, nullptr, source_zone_label, &same_zone_req);
         }
         catch (Exception & e)
         {
@@ -572,7 +655,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
 
         fiu_do_on("sleep_before_push_result", { std::this_thread::sleep_for(1s); });
 
-        queue->push(Result(resp));
+        queue->push(Result(resp, same_zone_req));
         return {};
     };
 
@@ -581,9 +664,10 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
 
     auto resp = std::make_shared<::coprocessor::Response>();
     std::unique_ptr<kv::RegionClient::StreamReader<::coprocessor::Response>> reader;
+    bool same_zone_req = true;
     try
     {
-        reader = client.sendStreamReqToRegion<kv::RPC_NAME(CoprocessorStream), ::coprocessor::Request, ::coprocessor::Response>(bo, req, tiflash_label_filter, timeout, task.store_type, task.meta_data);
+        reader = client.sendStreamReqToRegion<kv::RPC_NAME(CoprocessorStream), ::coprocessor::Request, ::coprocessor::Response>(bo, req, tiflash_label_filter, timeout, task.store_type, task.meta_data, source_zone_label, &same_zone_req);
     }
     catch (Exception & e)
     {
@@ -627,7 +711,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
 
         fiu_do_on("sleep_before_push_result", { std::this_thread::sleep_for(1s); });
 
-        queue->push(Result(resp));
+        queue->push(Result(resp, same_zone_req));
     }
 
     auto status = reader->finish();
@@ -647,10 +731,10 @@ void ResponseIter::handleTask(const CopTask & task)
     {
         if (is_cancelled || meet_error)
             return;
+        const auto & current_task = remain_tasks[idx];
+        auto & bo = bo_maps.try_emplace(current_task.region_id.id, kv::copNextMaxBackoff).first->second;
         try
         {
-            auto & current_task = remain_tasks[idx];
-            auto & bo = bo_maps.try_emplace(current_task.region_id.id, kv::copNextMaxBackoff).first->second;
             auto new_tasks = handleTaskImpl<is_stream>(bo, current_task);
             if (!new_tasks.empty())
             {
@@ -659,7 +743,7 @@ void ResponseIter::handleTask(const CopTask & task)
         }
         catch (const pingcap::Exception & e)
         {
-            log->error("coprocessor meets error, error message: {}, error code: {}", e.displayText(), e.code());
+            log->error("coprocessor meets error, error_message=" + e.displayText() + " error_code=" + std::to_string(e.code()) + " region_id=" + current_task.region_id.toString());
             queue->push(Result(e));
             meet_error = true;
             break;

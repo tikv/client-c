@@ -24,7 +24,12 @@ struct BankCase
     std::thread check_thread;
 
     BankCase(Cluster * cluster_, int account_cnt_, int con_)
-        : cluster(cluster_), batch_size(100), stop(false), account_cnt(account_cnt_), start(account_cnt_ / batch_size), concurrency(con_)
+        : cluster(cluster_)
+        , batch_size(100)
+        , stop(false)
+        , account_cnt(account_cnt_)
+        , start(account_cnt_ / batch_size)
+        , concurrency(con_)
     {}
 
     void close()
@@ -51,6 +56,7 @@ struct BankCase
     {
         std::cerr << "bank case start to init\n";
         std::vector<std::thread> threads;
+        threads.reserve(concurrency);
         for (int i = 0; i < concurrency; i++)
         {
             threads.push_back(std::thread([&]() {
@@ -127,6 +133,7 @@ struct BankCase
     {
         std::cerr << "bank case start to execute\n";
         std::vector<std::thread> threads;
+        threads.reserve(concurrency);
         for (int i = 0; i < concurrency; i++)
         {
             threads.push_back(std::thread([&]() {
@@ -163,7 +170,7 @@ struct BankCase
         bool exists;
         std::tie(rest, exists) = txn.get(bank_key(from));
         assert(exists);
-        if (rest == "")
+        if (rest.empty())
             return;
         int rest_money = std::stoi(rest);
         int money = generator() % rest_money;
@@ -172,7 +179,7 @@ struct BankCase
 
         std::tie(rest, exists) = txn.get(bank_key(to));
         assert(exists);
-        if (rest == "")
+        if (rest.empty())
             return;
 
         rest_money = std::stoi(rest);
@@ -203,7 +210,7 @@ struct BankCase
     {
         char buff[12] = "";
         assert(idx < 10000 && idx >= 0);
-        std::sprintf(buff, "%04d", idx);
+        std::snprintf(buff, sizeof(buff), "%04d", idx);
         return "bankkey_" + std::string(buff);
     }
     std::string bank_value(int money) { return std::to_string(money); }

@@ -2,8 +2,6 @@
 #include <pingcap/kv/LockResolver.h>
 #include <pingcap/kv/RegionClient.h>
 
-#include <unordered_set>
-
 namespace pingcap
 {
 namespace kv
@@ -103,7 +101,7 @@ int64_t LockResolver::resolveLocks(
                     return before_txn_expired.value();
                 }
             }
-            else
+            else // status.ttl != 0
             {
                 auto before_txn_expired_time = cluster->oracle->untilExpired(lock->txn_id, status.ttl);
                 before_txn_expired.update(before_txn_expired_time);
@@ -147,7 +145,7 @@ int64_t LockResolver::resolveLocksForWrite(Backoffer & bo, uint64_t caller_start
     return resolveLocks(bo, caller_start_ts, locks, ignored, true);
 }
 
-TxnStatus LockResolver::getTxnStatus(Backoffer & bo, uint64_t txn_id, const std::string & primary, uint64_t caller_start_ts, uint64_t current_ts, bool rollback_if_not_exists, bool force_sync_commit)
+TxnStatus LockResolver::getTxnStatus(Backoffer & bo, uint64_t txn_id, const std::string & primary, uint64_t caller_start_ts, uint64_t current_ts, bool rollback_if_not_exists, bool force_sync_commit, bool is_txn_file)
 {
     TxnStatus * cached_status = getResolved(txn_id);
     if (cached_status != nullptr)
@@ -163,6 +161,7 @@ TxnStatus LockResolver::getTxnStatus(Backoffer & bo, uint64_t txn_id, const std:
     req.set_current_ts(current_ts);
     req.set_rollback_if_not_exist(rollback_if_not_exists);
     req.set_force_sync_commit(force_sync_commit);
+    req.set_is_txn_file(is_txn_file);
     for (;;)
     {
         auto loc = cluster->region_cache->locateKey(bo, primary);
@@ -218,6 +217,7 @@ TxnStatus LockResolver::getTxnStatus(Backoffer & bo, uint64_t txn_id, const std:
 
 void LockResolver::resolveLock(Backoffer & bo, LockPtr lock, TxnStatus & status, std::unordered_set<RegionVerID> & set)
 {
+    log->debug("resolve lock" + lock->toDebugString());
     for (;;)
     {
         auto loc = cluster->region_cache->locateKey(bo, lock->key);
@@ -237,6 +237,7 @@ void LockResolver::resolveLock(Backoffer & bo, LockPtr lock, TxnStatus & status,
                 log->information("resolveLock rollback lock " + lock->toDebugString());
             }
         }
+        req.set_is_txn_file(lock->is_txn_file);
         RegionClient client(cluster, loc.region);
         kvrpcpb::ResolveLockResponse response;
         try
@@ -256,12 +257,14 @@ void LockResolver::resolveLock(Backoffer & bo, LockPtr lock, TxnStatus & status,
         {
             set.insert(loc.region);
         }
+        log->debug("resolve lock done");
         return;
     }
 }
 
 void LockResolver::resolvePessimisticLock(Backoffer & bo, LockPtr lock, std::unordered_set<RegionVerID> & set)
 {
+    log->debug("resolve pessimistic lock" + lock->toDebugString());
     for (;;)
     {
         auto loc = cluster->region_cache->locateKey(bo, lock->key);
@@ -295,12 +298,17 @@ void LockResolver::resolvePessimisticLock(Backoffer & bo, LockPtr lock, std::uno
             log->error("unexpected resolve pessimistic lock err: " + key_errors[0].ShortDebugString());
             throw Exception("unexpected err :" + key_errors[0].ShortDebugString(), ErrorCodes::UnknownError);
         }
+
+        log->debug("resolve pessimistic lock done");
+
         return;
     }
 }
 
 void LockResolver::resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & status)
 {
+    log->debug("resolve lock async" + lock->toDebugString());
+
     AsyncResolveDataPtr resolve_data{};
     resolve_data = checkAllSecondaries(bo, lock, status);
 
@@ -313,14 +321,14 @@ void LockResolver::resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & st
 
     std::vector<std::thread> threads;
     std::atomic<int> errors{};
+    threads.reserve(keys_by_region.size());
     for (auto & pair : keys_by_region)
     {
-        const auto & region_id = pair.first;
-        auto & locks = pair.second;
         threads.emplace_back([&]() {
             try
             {
-                resolveRegionLocks(bo, lock, region_id, locks, status);
+                auto && new_bo = bo.clone();
+                resolveRegionLocks(new_bo, lock, pair.first, pair.second, status);
             }
             catch (Exception & e)
             {
@@ -334,6 +342,8 @@ void LockResolver::resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & st
     {
         t.join();
     }
+
+    log->debug("resolve lock async done");
 
     if (errors.load() > 0)
     {
@@ -361,6 +371,7 @@ void LockResolver::resolveRegionLocks(
         auto * k = req.add_keys();
         *k = key;
     }
+    req.set_is_txn_file(lock->is_txn_file);
 
     RegionClient client(cluster, region_id);
     ::kvrpcpb::ResolveLockResponse response;
@@ -397,14 +408,14 @@ AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lo
     auto shared_data = std::make_shared<AsyncResolveData>(status.primary_lock->min_commit_ts(), false);
     std::vector<std::thread> threads;
     std::atomic_int8_t errors{0};
+    threads.reserve(regions.size());
     for (auto & pair : regions)
     {
-        const auto & region_id = pair.first;
-        auto & keys = pair.second;
         threads.emplace_back([&]() {
             try
             {
-                checkSecondaries(bo, lock->txn_id, keys, region_id, shared_data);
+                auto && new_bo = bo.clone();
+                checkSecondaries(new_bo, lock->txn_id, pair.second, pair.first, shared_data);
             }
             catch (Exception & e)
             {
@@ -438,12 +449,12 @@ AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lo
 void LockResolver::checkSecondaries(
     Backoffer & bo,
     uint64_t txn_id,
-    std::vector<std::string> & cur_keys,
+    const std::vector<std::string> & cur_keys,
     RegionVerID cur_region_id,
     AsyncResolveDataPtr shared_data)
 {
     ::kvrpcpb::CheckSecondaryLocksRequest check_request;
-    for (auto & key : cur_keys)
+    for (const auto & key : cur_keys)
     {
         auto * k = check_request.add_keys();
         *k = key;
@@ -489,7 +500,7 @@ TxnStatus LockResolver::getTxnStatusFromLock(Backoffer & bo, LockPtr lock, uint6
     {
         try
         {
-            return getTxnStatus(bo, lock->txn_id, lock->primary, caller_start_ts, current_ts, rollback_if_not_exists, force_sync_commit);
+            return getTxnStatus(bo, lock->txn_id, lock->primary, caller_start_ts, current_ts, rollback_if_not_exists, force_sync_commit, lock->is_txn_file);
         }
         catch (Exception & e)
         {

@@ -109,6 +109,7 @@ public:
     struct Result
     {
         std::shared_ptr<::coprocessor::Response> resp;
+        bool same_zone{true};
         Exception error;
         bool finished{false};
 
@@ -122,6 +123,10 @@ public:
         explicit Result(bool finished_)
             : finished(finished_)
         {}
+        Result(std::shared_ptr<::coprocessor::Response> resp_, bool same_zone_)
+            : resp(resp_)
+            , same_zone(same_zone_)
+        {}
 
         const std::string & data() const { return resp->data(); }
     };
@@ -132,7 +137,8 @@ public:
                  int concurrency_,
                  Logger * log_,
                  int timeout_ = kv::copTimeout,
-                 const kv::LabelFilter & tiflash_label_filter_ = kv::labelFilterInvalid)
+                 const kv::LabelFilter & tiflash_label_filter_ = kv::labelFilterInvalid,
+                 const std::string source_zone_label_ = "")
         : queue(std::move(queue_))
         , tasks(std::move(tasks_))
         , cluster(cluster_)
@@ -140,6 +146,7 @@ public:
         , timeout(timeout_)
         , unfinished_thread(0)
         , tiflash_label_filter(tiflash_label_filter_)
+        , source_zone_label(source_zone_label_)
         , log(log_)
     {}
 
@@ -220,7 +227,8 @@ private:
         {
             if (is_cancelled || meet_error)
             {
-                log->information("cop task exit because {}", is_cancelled ? "has been cancelled" : "already meet error");
+                const char * msg = is_cancelled ? "has been cancelled" : "already meet error";
+                log->information("cop task exit because " + std::string(msg));
                 return;
             }
             std::unique_lock<std::mutex> lk(task_mutex);
@@ -263,6 +271,7 @@ private:
     std::atomic_bool is_opened = false;
 
     const kv::LabelFilter tiflash_label_filter;
+    const std::string source_zone_label;
 
     Logger * log;
 };
@@ -280,6 +289,21 @@ std::vector<CopTask> buildCopTasks(
     kv::GRPCMetaData meta_data = {},
     std::function<void()> before_send = {});
 
+
+/*
+centralized_schedule is a parameter that controls the distribution of regions across BatchCopTasks.
+
+When set to false (default):
+- Regions are distributed as evenly as possible among BatchCopTasks
+- This balances the workload across tasks
+
+When set to true:
+- Regions are concentrated into as few BatchCopTasks as possible
+- This is currently only used for ANN (Approximate Nearest Neighbor) queries in vector search
+
+The centralized scheduling approach can potentially improve performance for certain types of queries
+by reducing the number of tasks and minimizing coordination overhead.
+*/
 std::vector<BatchCopTask> buildBatchCopTasks(
     kv::Backoffer & bo,
     kv::Cluster * cluster,
@@ -287,9 +311,11 @@ std::vector<BatchCopTask> buildBatchCopTasks(
     bool is_partition_table_scan,
     const std::vector<int64_t> & physical_table_ids,
     const std::vector<KeyRanges> & ranges_for_each_physical_table,
+    const std::unordered_set<uint64_t> * store_id_blocklist,
     kv::StoreType store_type,
     const kv::LabelFilter & label_filter,
-    Logger * log);
+    Logger * log,
+    bool centralized_schedule = false);
 
 namespace details
 {

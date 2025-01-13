@@ -9,7 +9,7 @@ namespace kv
 {
 // load_balance is an option, becase if store fail, it may cause batchCop fail.
 // For now, label_filter only works for tiflash.
-RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id, const StoreType store_type, bool load_balance, const LabelFilter & tiflash_label_filter)
+RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id, const StoreType store_type, bool load_balance, const LabelFilter & tiflash_label_filter, const std::unordered_set<uint64_t> * store_id_blocklist)
 {
     for (;;)
     {
@@ -52,6 +52,10 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
                 bo.backoff(boRegionMiss,
                            Exception("miss store, region id is: " + std::to_string(id.id) + " store id is: " + std::to_string(peer.store_id()),
                                      StoreNotReady));
+                continue;
+            }
+            if (store_id_blocklist && store_id_blocklist->count(store.id) > 0)
+            {
                 continue;
             }
             if (store_type == StoreType::TiFlash)
@@ -197,7 +201,7 @@ metapb::Store RegionCache::loadStore(Backoffer & bo, uint64_t id)
         {
             // TODO:: The store may be not ready, it's better to check store's state.
             const auto & store = pd_client->getStore(id);
-            log->information("load store id " + std::to_string(id) + " address %s", store.address());
+            log->information("load store id " + std::to_string(id) + " address " + store.address());
             return store;
         }
         catch (Exception & e)
@@ -238,14 +242,30 @@ Store RegionCache::getStore(Backoffer & bo, uint64_t id)
     return reloadStore(store);
 }
 
-std::pair<std::vector<uint64_t>, std::vector<uint64_t>> RegionCache::getAllValidTiFlashStores(Backoffer & bo, const RegionVerID & region_id, const Store & current_store, const LabelFilter & label_filter)
+std::pair<std::vector<uint64_t>, std::vector<uint64_t>> RegionCache::getAllValidTiFlashStores(Backoffer & bo, const RegionVerID & region_id, const Store & current_store, const LabelFilter & label_filter, const std::unordered_set<uint64_t> * store_id_blocklist)
 {
+    auto remove_blocklist = [](const std::unordered_set<uint64_t> * store_id_blocklist, std::vector<uint64_t> & stores, const RegionVerID & region_id, Logger * log) {
+        if (store_id_blocklist != nullptr)
+        {
+            auto origin_size = stores.size();
+            stores.erase(std::remove_if(stores.begin(), stores.end(), [&](int x) {
+                             return store_id_blocklist->find(x) != store_id_blocklist->end();
+                         }),
+                         stores.end());
+            if (log != nullptr && origin_size != stores.size())
+            {
+                auto s = "blocklist peer removed, region=" + region_id.toString() + ", origin_store_size=" + std::to_string(origin_size) + ", current_store_size=" + std::to_string(stores.size());
+                log->information(s);
+            }
+        }
+    };
     std::vector<uint64_t> all_stores;
     std::vector<uint64_t> non_pending_stores;
     RegionPtr cached_region = getRegionByIDFromCache(region_id);
     if (cached_region == nullptr)
     {
         all_stores.emplace_back(current_store.id);
+        remove_blocklist(store_id_blocklist, all_stores, region_id, log);
         return std::make_pair(all_stores, non_pending_stores);
     }
 
@@ -267,6 +287,9 @@ std::pair<std::vector<uint64_t>, std::vector<uint64_t>> RegionCache::getAllValid
         if (!is_pending)
             non_pending_stores.emplace_back(peer.store_id());
     }
+
+    remove_blocklist(store_id_blocklist, all_stores, region_id, log);
+    remove_blocklist(store_id_blocklist, non_pending_stores, region_id, nullptr);
     return std::make_pair(all_stores, non_pending_stores);
 }
 
