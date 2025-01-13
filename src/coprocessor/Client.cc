@@ -634,9 +634,10 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
     kv::RegionClient client(cluster, task.region_id);
     auto handle_unary_cop = [&]() -> std::vector<CopTask> {
         auto resp = std::make_shared<::coprocessor::Response>();
+        bool same_zone_req = true;
         try
         {
-            client.sendReqToRegion<kv::RPC_NAME(Coprocessor)>(bo, req, resp.get(), tiflash_label_filter, timeout, task.store_type, task.meta_data);
+            client.sendReqToRegion<kv::RPC_NAME(Coprocessor)>(bo, req, resp.get(), tiflash_label_filter, timeout, task.store_type, task.meta_data, nullptr, source_zone_label, &same_zone_req);
         }
         catch (Exception & e)
         {
@@ -654,7 +655,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
 
         fiu_do_on("sleep_before_push_result", { std::this_thread::sleep_for(1s); });
 
-        queue->push(Result(resp));
+        queue->push(Result(resp, same_zone_req));
         return {};
     };
 
@@ -663,9 +664,10 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
 
     auto resp = std::make_shared<::coprocessor::Response>();
     std::unique_ptr<kv::RegionClient::StreamReader<::coprocessor::Response>> reader;
+    bool same_zone_req = true;
     try
     {
-        reader = client.sendStreamReqToRegion<kv::RPC_NAME(CoprocessorStream), ::coprocessor::Request, ::coprocessor::Response>(bo, req, tiflash_label_filter, timeout, task.store_type, task.meta_data);
+        reader = client.sendStreamReqToRegion<kv::RPC_NAME(CoprocessorStream), ::coprocessor::Request, ::coprocessor::Response>(bo, req, tiflash_label_filter, timeout, task.store_type, task.meta_data, source_zone_label, &same_zone_req);
     }
     catch (Exception & e)
     {
@@ -709,7 +711,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
 
         fiu_do_on("sleep_before_push_result", { std::this_thread::sleep_for(1s); });
 
-        queue->push(Result(resp));
+        queue->push(Result(resp, same_zone_req));
     }
 
     auto status = reader->finish();

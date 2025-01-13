@@ -257,6 +257,7 @@ private:
 };
 
 using RegionCachePtr = std::unique_ptr<RegionCache>;
+static const std::string DCLabelKey = "zone";
 static const std::string EngineLabelKey = "engine";
 static const std::string EngineLabelTiFlash = "tiflash";
 static const std::string EngineRoleLabelKey = "engine_role";
