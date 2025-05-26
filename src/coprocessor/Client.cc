@@ -465,7 +465,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         if (filter_alive_tiflash_stores)
         {
             bool has_force_get_all_stores = false;
-            while (true)
+            while (alive_tiflash_stores.empty())
             {
                 // TODO: Need find a way to drop store info in RegionCache. Otherwise we may have meanless probing of WN.
                 // We don't directly drop the cached store info in RegionCache here, because the current mechanism of RegionCache is to
