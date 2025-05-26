@@ -15,7 +15,7 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo,
         bool load_balance,
         const LabelFilter & tiflash_label_filter,
         const std::unordered_set<uint64_t> * store_id_blocklist,
-        std::map<uint64_t, kv::Store> * alive_stores)
+        std::map<uint64_t, kv::Store> * alive_tiflash_stores)
 {
     for (;;)
     {
@@ -26,50 +26,53 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo,
         const auto & meta = region->meta;
         std::vector<metapb::Peer> peers;
         size_t start_index = 0;
-        std::vector<uint64_t> all_stores;
+        std::vector<uint64_t> rpc_ctx_all_stores;
         if (store_type == StoreType::TiKV)
         {
-            // only access to the leader
+            // Only access to the leader
             peers.push_back(region->leader_peer);
+            rpc_ctx_all_stores.push_back(region->leader_peer.store_id());
         }
         else
         {
             std::vector<uint64_t> non_pending_stores;
-            std::tie(all_stores, non_pending_stores) = getTiFlashStoresByFilter(bo, region, tiflash_label_filter, store_id_blocklist);
+            std::tie(rpc_ctx_all_stores, non_pending_stores) = getTiFlashStoresByFilter(bo, region, tiflash_label_filter, store_id_blocklist);
 
-            // There are pending store for this region, need to refresh region cache until this region is ok.
-            if (all_stores.size() != non_pending_stores.size())
+            // Pending stores exist for this region, need to refresh region cache until this region is ok.
+            if (rpc_ctx_all_stores.size() != non_pending_stores.size())
                 dropRegion(id);
 
-            if (alive_stores != nullptr)
+            if (alive_tiflash_stores != nullptr)
             {
-                auto filter_alive_stores = [alive_stores](const std::vector<uint64_t> & stores) {
+                auto filter_alive_tiflash_stores = [alive_tiflash_stores](const std::vector<uint64_t> & stores) {
                     std::vector<uint64_t> tmp_filter_stores;
                     tmp_filter_stores.reserve(stores.size());
                     for (const auto id : stores)
                     {
-                        if (alive_stores->find(id) != alive_stores->end())
+                        if (alive_tiflash_stores->find(id) != alive_tiflash_stores->end())
                             tmp_filter_stores.push_back(id);
                     }
                     return tmp_filter_stores;
                 };
-                all_stores = filter_alive_stores(all_stores);
-                non_pending_stores = filter_alive_stores(non_pending_stores);
+                rpc_ctx_all_stores = filter_alive_tiflash_stores(rpc_ctx_all_stores);
+                non_pending_stores = filter_alive_tiflash_stores(non_pending_stores);
             }
 
-            // Use non_pending_stores to dispatch this task, so no need to wait tiflash replica sync from tikv.
-            // If all stores are in pending state, we use `all_stores` as fallback.
+            // Use non_pending_stores to dispatch this task by default.
+            // If all stores are in pending state, we use `rpc_ctx_all_stores` as fallback.
             if (!non_pending_stores.empty())
-                all_stores = non_pending_stores;
+                rpc_ctx_all_stores = non_pending_stores;
 
 
-            if (!all_stores.empty())
+            if (!rpc_ctx_all_stores.empty())
             {
-                peers = selectPeers(bo, meta, [&all_stores](uint64_t cur_store_id) {
-                        for (const auto id : all_stores)
-                        if (id == cur_store_id)
-                        return true;
-                        return false;
+                peers = selectPeers(bo, meta, [&rpc_ctx_all_stores](uint64_t cur_store_id) {
+                            for (const auto id : rpc_ctx_all_stores)
+                            {
+                                if (id == cur_store_id)
+                                    return true;
+                            }
+                            return false;
                         });
 
                 if (load_balance)
@@ -103,7 +106,7 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo,
                 // set the index for next access in order to balance the workload among all tiflash peers
                 region->work_tiflash_peer_idx.store(peer_index);
             }
-            return std::make_shared<RPCContext>(id, meta, peer, store, store.addr, all_stores);
+            return std::make_shared<RPCContext>(id, meta, peer, store, store.addr, rpc_ctx_all_stores);
         }
         dropRegion(id);
         bo.backoff(boRegionMiss, Exception("region miss, region id is: " + std::to_string(id.id), RegionUnavailable));
@@ -293,6 +296,14 @@ Store RegionCache::getStore(Backoffer & bo, uint64_t id)
     return reloadStore(store);
 }
 
+void RegionCache::forceGetAllStores()
+{
+    const auto all_stores = pd_client->getAllStores(/*exclude_tombstone=*/false);
+    std::lock_guard<std::mutex> lock(store_mutex);
+    for (const auto & store_pb : all_stores)
+        reloadStore(store_pb);
+}
+
 std::pair<std::vector<uint64_t>, std::vector<uint64_t>> RegionCache::getTiFlashStoresByFilter(
         Backoffer & bo,
         const RegionPtr & cached_region,
@@ -324,7 +335,7 @@ std::pair<std::vector<uint64_t>, std::vector<uint64_t>> RegionCache::getTiFlashS
     };
 
     // Get others tiflash store ids
-    // TODO: client-go also check region cache TTL.
+    // TODO: Add TTL support for region cache, just like client-go.
     auto peers = selectTiFlashPeers(bo, cached_region->meta, label_filter);
     for (const auto & peer : peers)
     {

@@ -193,7 +193,7 @@ public:
             bool load_balance,
             const LabelFilter & tiflash_label_filter,
             const std::unordered_set<uint64_t> * store_id_blocklist = nullptr,
-            std::map<uint64_t, kv::Store> * alive_stores = nullptr);
+            std::map<uint64_t, kv::Store> * alive_tiflash_stores = nullptr);
 
     bool updateLeader(const RegionVerID & region_id, const metapb::Peer & leader);
 
@@ -212,6 +212,7 @@ public:
     RegionPtr getRegionByID(Backoffer & bo, const RegionVerID & id);
 
     Store getStore(Backoffer & bo, uint64_t id);
+    void forceGetAllStores();
 
     // Return values:
     // 1. all stores of peers of this region

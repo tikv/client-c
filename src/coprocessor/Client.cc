@@ -460,39 +460,51 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         std::map<std::string, BatchCopTask> store_task_map;
         bool need_retry = false;
 
-        // Put this loop after details::splitKeyRangesByLocations(), because details::splitKeyRangesByLocations()
-        // will load new region and new store. So we can always use latest store info to detect store aliveness.
         std::map<uint64_t, kv::Store> alive_tiflash_stores;
+        bool has_force_get_all_stores = false;
         while (true)
         {
-            // TODO: need to find a way to erase store from region cache when it's down or scale-in.
-            // Otherwise we will keep probing dead stores every 1 hour.
+            // TODO: Need find a way to drop store info in RegionCache. Otherwise we may have meanless probing of WN.
+            // We don't directly drop the cached store info in RegionCache here, because the current mechanism of RegionCache is to
+            // cache store information by looking up the store corresponding to region.peer from PD.
+            // Therefore, the removal mechanism should also be consistent: only when all cached regions on a store have been dropped should the
+            // cached store info be removed. Otherwise, it may lead to inconsistencies between RegionCache::region and RegionCache::store.
             auto tiflash_stores = cache->getAllTiFlashStores(label_filter, /*exclude_tombstone =*/true);
             log->information(stores_to_str("before filter alive stores: ", tiflash_stores));
             alive_tiflash_stores = details::filterAliveStores(cluster, tiflash_stores, log);
             log->information(stores_to_str("after filter alive stores: ", alive_tiflash_stores));
             if (alive_tiflash_stores.empty())
             {
-                log->warning("no alive tiflash, cannot dispatch BatchCopTask, retrying", ErrorCodes::CoprocessorError);
-                bo.backoff(kv::boTiFlashRPC, Exception("Cannot find region with TiFlash peer"));
+                if (!has_force_get_all_stores)
+                {
+                    // Get all stores immediately first time.
+                    log->warning("no alive tiflash, cannot dispatch BatchCopTask, force get all stores from pd", ErrorCodes::CoprocessorError);
+                    has_force_get_all_stores = true;
+                    cache->forceGetAllStores();
+                }
+                else
+                {
+                    // Backoff and get all stores.
+                    log->warning("no alive tiflash, cannot dispatch BatchCopTask, retrying", ErrorCodes::CoprocessorError);
+                    bo.backoff(kv::boTiFlashRPC, Exception("Cannot find region with TiFlash peer"));
+                    cache->forceGetAllStores();
+                }
             }
         }
 
         for (const auto & cop_task : cop_tasks)
         {
-            // In order to avoid send copTask to unavailable TiFlash node, disable load_balance here.
+            // In getRPCContext(), region will be dropped when we cannot get valid store.
+            // And in details::splitKeyRangesByLocations(), will load new region and new store.
+            // So if the first try of getRPCContext() failed, the second try loop will use the newest region cache to do it again.
             auto rpc_context = cluster->region_cache->getRPCContext(bo,
                     cop_task.region_id,
                     store_type,
-                    /*load_balance=*/false,
+                    /*load_balance=*/is_mpp,
                     label_filter,
                     store_id_blocklist,
                     &alive_tiflash_stores);
 
-            // When rpcCtx is nil, it's not only attributed to the miss region, but also
-            // some TiFlash stores crash and can't be recovered.
-            // That is not an error that can be easily recovered, so we regard this error
-            // same as rpc error.
             if (rpc_context == nullptr)
             {
                 need_retry = true;
