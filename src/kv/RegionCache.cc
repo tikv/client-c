@@ -30,8 +30,13 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo,
         if (store_type == StoreType::TiKV)
         {
             // Only access to the leader
-            peers.push_back(region->leader_peer);
-            rpc_ctx_all_stores.push_back(region->leader_peer.store_id());
+            const auto & leader = region->leader_peer;
+            if (store_id_blocklist == nullptr ||
+                    store_id_blocklist->find(leader.store_id()) == store_id_blocklist->end())
+            {
+                peers.push_back(leader);
+                rpc_ctx_all_stores.push_back(leader.store_id());
+            }
         }
         else
         {
@@ -62,7 +67,6 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo,
             // If all stores are in pending state, we use `rpc_ctx_all_stores` as fallback.
             if (!non_pending_stores.empty())
                 rpc_ctx_all_stores = non_pending_stores;
-
 
             if (!rpc_ctx_all_stores.empty())
             {

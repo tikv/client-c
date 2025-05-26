@@ -138,7 +138,7 @@ std::map<uint64_t, kv::Store> filterAliveStores(kv::Cluster * cluster, const std
 }
 
 std::vector<BatchCopTask> balanceBatchCopTasks(
-        const std::map<uint64_t, kv::Store> & alive_tiflash_stores,
+        const std::map<uint64_t, kv::Store> * alive_tiflash_stores,
         const std::vector<BatchCopTask> & original_tasks,
         bool is_mpp,
         Poco::Logger * log,
@@ -157,7 +157,7 @@ std::vector<BatchCopTask> balanceBatchCopTasks(
     }
 
     std::map<uint64_t, BatchCopTask> store_task_map;
-    if (!is_mpp)
+    if (alive_tiflash_stores == nullptr)
     {
         for (const auto & task : original_tasks)
         {
@@ -178,7 +178,7 @@ std::vector<BatchCopTask> balanceBatchCopTasks(
     }
     else
     {
-        for (const auto & store : alive_tiflash_stores)
+        for (const auto & store : *alive_tiflash_stores)
         {
             auto store_id = store.first;
             BatchCopTask new_batch_task;
@@ -433,6 +433,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
             msg += " " + std::to_string(ele.first) + ":" + ele.second.addr;
         return msg;
     };
+    const bool filter_alive_tiflash_stores = (store_type == kv::StoreType::TiFlash);
 
     while (true) // for `need_retry`
     {
@@ -461,33 +462,36 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         bool need_retry = false;
 
         std::map<uint64_t, kv::Store> alive_tiflash_stores;
-        bool has_force_get_all_stores = false;
-        while (true)
+        if (filter_alive_tiflash_stores)
         {
-            // TODO: Need find a way to drop store info in RegionCache. Otherwise we may have meanless probing of WN.
-            // We don't directly drop the cached store info in RegionCache here, because the current mechanism of RegionCache is to
-            // cache store information by looking up the store corresponding to region.peer from PD.
-            // Therefore, the removal mechanism should also be consistent: only when all cached regions on a store have been dropped should the
-            // cached store info be removed. Otherwise, it may lead to inconsistencies between RegionCache::region and RegionCache::store.
-            auto tiflash_stores = cache->getAllTiFlashStores(label_filter, /*exclude_tombstone =*/true);
-            log->information(stores_to_str("before filter alive stores: ", tiflash_stores));
-            alive_tiflash_stores = details::filterAliveStores(cluster, tiflash_stores, log);
-            log->information(stores_to_str("after filter alive stores: ", alive_tiflash_stores));
-            if (alive_tiflash_stores.empty())
+            bool has_force_get_all_stores = false;
+            while (true)
             {
-                if (!has_force_get_all_stores)
+                // TODO: Need find a way to drop store info in RegionCache. Otherwise we may have meanless probing of WN.
+                // We don't directly drop the cached store info in RegionCache here, because the current mechanism of RegionCache is to
+                // cache store information by looking up the store corresponding to region.peer from PD.
+                // Therefore, the removal mechanism should also be consistent: only when all cached regions on a store have been dropped should the
+                // cached store info be removed. Otherwise, it may lead to inconsistencies between RegionCache::region and RegionCache::store.
+                auto tiflash_stores = cache->getAllTiFlashStores(label_filter, /*exclude_tombstone =*/true);
+                log->information(stores_to_str("before filter alive stores: ", tiflash_stores));
+                alive_tiflash_stores = details::filterAliveStores(cluster, tiflash_stores, log);
+                log->information(stores_to_str("after filter alive stores: ", alive_tiflash_stores));
+                if (alive_tiflash_stores.empty())
                 {
-                    // Get all stores immediately first time.
-                    log->warning("no alive tiflash, cannot dispatch BatchCopTask, force get all stores from pd", ErrorCodes::CoprocessorError);
-                    has_force_get_all_stores = true;
-                    cache->forceGetAllStores();
-                }
-                else
-                {
-                    // Backoff and get all stores.
-                    log->warning("no alive tiflash, cannot dispatch BatchCopTask, retrying", ErrorCodes::CoprocessorError);
-                    bo.backoff(kv::boTiFlashRPC, Exception("Cannot find region with TiFlash peer"));
-                    cache->forceGetAllStores();
+                    if (!has_force_get_all_stores)
+                    {
+                        // Get all stores immediately first time.
+                        log->warning("no alive tiflash, cannot dispatch BatchCopTask, force get all stores from pd", ErrorCodes::CoprocessorError);
+                        has_force_get_all_stores = true;
+                        cache->forceGetAllStores();
+                    }
+                    else
+                    {
+                        // Backoff and get all stores.
+                        log->warning("no alive tiflash, cannot dispatch BatchCopTask, retrying", ErrorCodes::CoprocessorError);
+                        bo.backoff(kv::boTiFlashRPC, Exception("Cannot find region with TiFlash peer"));
+                        cache->forceGetAllStores();
+                    }
                 }
             }
         }
@@ -503,7 +507,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                     /*load_balance=*/is_mpp,
                     label_filter,
                     store_id_blocklist,
-                    &alive_tiflash_stores);
+                    filter_alive_tiflash_stores ? &alive_tiflash_stores : nullptr);
 
             if (rpc_context == nullptr)
             {
@@ -569,7 +573,12 @@ std::vector<BatchCopTask> buildBatchCopTasks(
 
         if (log->getLevel() >= Poco::Message::PRIO_INFORMATION)
             log->information(tasks_to_str("Before region balance:", batch_cop_tasks));
-        batch_cop_tasks = details::balanceBatchCopTasks(alive_tiflash_stores, batch_cop_tasks, is_mpp, log, centralized_schedule);
+        batch_cop_tasks = details::balanceBatchCopTasks(
+                filter_alive_tiflash_stores ? &alive_tiflash_stores : nullptr,
+                batch_cop_tasks,
+                is_mpp,
+                log,
+                centralized_schedule);
         if (log->getLevel() >= Poco::Message::PRIO_INFORMATION)
             log->information(tasks_to_str("After region balance:", batch_cop_tasks));
 
