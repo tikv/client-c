@@ -37,6 +37,10 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo,
                 peers.push_back(leader);
                 rpc_ctx_all_stores.push_back(leader.store_id());
             }
+            else
+            {
+                log->warning("blocklist remove leader peer for region: " + id.toString());
+            }
         }
         else
         {
@@ -300,7 +304,7 @@ Store RegionCache::getStore(Backoffer & bo, uint64_t id)
     return reloadStore(store);
 }
 
-void RegionCache::forceGetAllStores()
+void RegionCache::forceReloadAllStores()
 {
     const auto all_stores = pd_client->getAllStores(/*exclude_tombstone=*/false);
     std::lock_guard<std::mutex> lock(store_mutex);

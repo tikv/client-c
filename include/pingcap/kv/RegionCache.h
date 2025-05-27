@@ -212,7 +212,7 @@ public:
     RegionPtr getRegionByID(Backoffer & bo, const RegionVerID & id);
 
     Store getStore(Backoffer & bo, uint64_t id);
-    void forceGetAllStores();
+    void forceReloadAllStores();
 
     // Return values:
     // 1. all stores of peers of this region

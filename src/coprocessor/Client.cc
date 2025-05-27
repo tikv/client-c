@@ -474,6 +474,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                 // cached store info be removed. Otherwise, it may lead to inconsistencies between RegionCache::region and RegionCache::store.
                 auto tiflash_stores = cache->getAllTiFlashStores(label_filter, /*exclude_tombstone =*/true);
                 log->information(stores_to_str("before filter alive stores: ", tiflash_stores));
+                // filter by the mpp_prober
                 alive_tiflash_stores = details::filterAliveStores(cluster, tiflash_stores, log);
                 log->information(stores_to_str("after filter alive stores: ", alive_tiflash_stores));
                 if (alive_tiflash_stores.empty())
@@ -483,14 +484,14 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                         // Get all stores immediately first time.
                         log->warning("no alive tiflash, cannot dispatch BatchCopTask, force get all stores from pd", ErrorCodes::CoprocessorError);
                         has_force_get_all_stores = true;
-                        cache->forceGetAllStores();
+                        cache->forceReloadAllStores();
                     }
                     else
                     {
                         // Backoff and get all stores.
                         log->warning("no alive tiflash, cannot dispatch BatchCopTask, retrying", ErrorCodes::CoprocessorError);
                         bo.backoff(kv::boTiFlashRPC, Exception("No alive tiflash WN"));
-                        cache->forceGetAllStores();
+                        cache->forceReloadAllStores();
                     }
                 }
             }
