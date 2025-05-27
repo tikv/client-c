@@ -490,7 +490,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                     {
                         // Backoff and get all stores.
                         log->warning("no alive tiflash, cannot dispatch BatchCopTask, retrying", ErrorCodes::CoprocessorError);
-                        bo.backoff(kv::boTiFlashRPC, Exception("No alive tiflash WN"));
+                        bo.backoff(kv::boTiFlashRPC, Exception("No alive tiflash stores"));
                         cache->forceReloadAllStores();
                     }
                 }
