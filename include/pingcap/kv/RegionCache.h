@@ -22,14 +22,16 @@ enum class StoreType
 
 struct Store
 {
-    const uint64_t id;
-    const std::string addr;
-    const std::string peer_addr;
-    const std::map<std::string, std::string> labels;
-    const StoreType store_type;
-    const ::metapb::StoreState state;
+    uint64_t id;
+    std::string addr;
+    std::string peer_addr;
+    std::map<std::string, std::string> labels;
+    StoreType store_type;
+    ::metapb::StoreState state;
 
-    Store(uint64_t id_, const std::string & addr_, const std::string & peer_addr_, const std::map<std::string, std::string> & labels_, StoreType store_type_, const ::metapb::StoreState state_)
+    Store(uint64_t id_, const std::string & addr_, const std::string & peer_addr_,
+            const std::map<std::string, std::string> & labels_, StoreType store_type_,
+            const ::metapb::StoreState state_)
         : id(id_)
         , addr(addr_)
         , peer_addr(peer_addr_)
@@ -229,6 +231,29 @@ public:
 
     std::map<uint64_t, Store> getAllTiFlashStores(const LabelFilter & label_filter, bool exclude_tombstone);
 
+    void updateCachePeriodically()
+    {
+        while (!stopped.load())
+        {
+            // TODO: Also update region cache periodically.
+            forceReloadAllStores();
+
+            {
+                std::unique_lock lock(update_cache_mu);
+                // Update store cache evenry 2 mins.
+                update_cache_cv.wait_for(lock, std::chrono::minutes(2), [this]() {
+                    return stopped.load();
+                });
+            }
+        }
+    }
+
+    void stop()
+    {
+        stopped.store(true);
+        std::lock_guard lock(update_cache_mu);
+        update_cache_cv.notify_all();
+    }
 private:
     RegionPtr loadRegionByKey(Backoffer & bo, const std::string & key);
 
@@ -238,7 +263,7 @@ private:
 
     metapb::Store loadStore(Backoffer & bo, uint64_t id);
 
-    Store reloadStore(const metapb::Store & store);
+    Store reloadStoreWithoutLock(const metapb::Store & store);
 
     RegionPtr searchCachedRegion(const std::string & key);
 
@@ -269,6 +294,10 @@ private:
     const std::string tiflash_engine_value;
 
     Logger * log;
+
+    std::atomic<bool> stopped = false;
+    std::mutex update_cache_mu;
+    std::condition_variable update_cache_cv;
 };
 
 using RegionCachePtr = std::unique_ptr<RegionCache>;

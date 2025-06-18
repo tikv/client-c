@@ -99,6 +99,7 @@ struct BatchCopTask
     kv::StoreType store_type;
 
     uint64_t store_id;
+    std::map<std::string, std::string> labels;
 };
 
 /// A iterator dedicated to send coprocessor(stream) request and receive responses.
