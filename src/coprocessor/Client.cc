@@ -610,7 +610,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         }
 
         for (auto & batch_cop_task : batch_cop_tasks)
-            batch_cop_task.labels = cluster->region_cache->getStore(bo, batch_cop_task.store_id).labels;
+            batch_cop_task.store_labels = cluster->region_cache->getStore(bo, batch_cop_task.store_id).labels;
 
         auto end = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();

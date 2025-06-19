@@ -240,7 +240,7 @@ public:
 
             {
                 std::unique_lock lock(update_cache_mu);
-                // Update store cache evenry 2 mins.
+                // Update store cache every 2 mins.
                 update_cache_cv.wait_for(lock, std::chrono::minutes(2), [this]() {
                     return stopped.load();
                 });
