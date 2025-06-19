@@ -101,6 +101,9 @@ private:
     std::atomic<bool> stopped;
     FailedStoreMap failed_stores;
     std::mutex store_lock;
+
+    std::mutex scan_mu;
+    std::condition_variable scan_cv;
 };
 } // namespace common
 } // namespace pingcap

@@ -33,6 +33,9 @@ void Cluster::startBackgroundTasks()
     thread_pool->enqueue([this] {
         this->mpp_prober->run();
     });
+    thread_pool->enqueue([this] {
+        this->region_cache->updateCachePeriodically();
+    });
 }
 
 } // namespace kv
