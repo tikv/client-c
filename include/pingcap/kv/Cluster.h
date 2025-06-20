@@ -65,7 +65,8 @@ struct Cluster
     ~Cluster()
     {
         mpp_prober->stop();
-        region_cache->stop();
+        if (region_cache)
+            region_cache->stop();
         thread_pool->stop();
     }
 
