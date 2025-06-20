@@ -31,11 +31,16 @@ void Cluster::startBackgroundTasks()
 {
     thread_pool->start();
     thread_pool->enqueue([this] {
-        this->mpp_prober->run();
+        mpp_prober->run();
     });
-    thread_pool->enqueue([this] {
-        this->region_cache->updateCachePeriodically();
-    });
+    if (region_cache)
+    {
+        // region_cache may not be inited if pd addr is not setup.
+        // So skip update region cache periodically.
+        thread_pool->enqueue([this] {
+            region_cache->updateCachePeriodically();
+        });
+    }
 }
 
 } // namespace kv
