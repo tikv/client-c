@@ -67,6 +67,57 @@ std::vector<CopTask> buildCopTasks(
     return tasks;
 }
 
+std::vector<CopTask> buildCopTaskForFullText(
+    kv::Backoffer & bo,
+    kv::Cluster * cluster,
+    KeyRanges ranges,
+    RequestPtr cop_req,
+    kv::StoreType store_type,
+    pd::KeyspaceID keyspace_id,
+    uint64_t connection_id,
+    const std::string & connection_alias,
+    Logger * log,
+    kv::GRPCMetaData meta_data,
+    std::function<void()> before_send,
+    int64_t tableID,
+    int64_t indexID,
+    std::string executor_id)
+{
+    log->debug("build " + std::to_string(ranges.size()) + " ranges.");
+    std::vector<CopTask> tasks;
+    while (!ranges.empty())
+    {
+        auto loc = cluster->shard_cache->locateKey(tableID, indexID, ranges[0].start_key);
+
+        size_t i;
+        for (i = 0; i < ranges.size(); i++)
+        {
+            const auto & range = ranges[i];
+            if (!(loc->contains(range.end_key) || loc->endKey() == range.end_key))
+                break;
+        }
+        // all ranges belong to same region.
+        if (i == ranges.size())
+        {
+            tasks.push_back(CopTask{{loc->shard.id, loc->shard.epoch, 0}, ranges, cop_req, store_type, /*partition_index=*/0, meta_data, before_send, keyspace_id, connection_id, connection_alias, true, loc->addr[0], executor_id});
+            break;
+        }
+
+        KeyRanges task_ranges(ranges.begin(), ranges.begin() + i);
+        // Split the last range if it is overlapped with the region
+        auto & bound = ranges[i];
+        if (loc->contains(bound.start_key))
+        {
+            task_ranges.push_back(KeyRange{bound.start_key, loc->endKey()});
+            bound.start_key = loc->endKey(); // update the last range start key after splitted
+        }
+        tasks.push_back(CopTask{{loc->shard.id, loc->shard.epoch, 0}, task_ranges, cop_req, store_type, /*partition_index=*/0, meta_data, before_send, keyspace_id, connection_id, connection_alias, true, loc->addr[0], executor_id});
+        ranges.erase(ranges.begin(), ranges.begin() + i);
+    }
+    log->debug("has " + std::to_string(tasks.size()) + " tasks.");
+    return tasks;
+}
+
 
 namespace details
 {
@@ -596,6 +647,22 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
     req.set_schema_ver(task.req->schema_version);
     req.set_data(task.req->data);
     req.set_is_cache_enabled(false);
+
+    if (task.fulltext)
+    {
+        auto * shard_info = req.mutable_table_shard_infos();
+        auto * shard_info_item = shard_info->Add();
+        auto * shard_infos = shard_info_item->add_shard_infos();
+        shard_infos->set_shard_id(task.region_id.id);
+        shard_infos->set_shard_epoch(task.region_id.conf_ver);
+        for (auto const & range : task.ranges)
+        {
+            auto * pb_range = shard_infos->add_ranges();
+            range.setKeyRange(pb_range);
+        }
+        shard_info_item->set_executor_id(task.executor_id);
+    }
+
     auto * cop_req_context = req.mutable_context();
     cop_req_context->mutable_resource_control_context()->set_resource_group_name(task.req->resource_group_name);
     for (auto ts : min_commit_ts_pushed.getTimestamps())
@@ -637,7 +704,14 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
         bool same_zone_req = true;
         try
         {
-            client.sendReqToRegion<kv::RPC_NAME(Coprocessor)>(bo, req, resp.get(), tiflash_label_filter, timeout, task.store_type, task.meta_data, nullptr, source_zone_label, &same_zone_req);
+            if (task.fulltext)
+            {
+                client.sendReqToShard<kv::RPC_NAME(Coprocessor)>(bo, req, resp.get(), tiflash_label_filter, timeout, task.store_type, task.meta_data, task.addr);
+            }
+            else
+            {
+                client.sendReqToRegion<kv::RPC_NAME(Coprocessor)>(bo, req, resp.get(), tiflash_label_filter, timeout, task.store_type, task.meta_data, nullptr, source_zone_label, &same_zone_req);
+            }
         }
         catch (Exception & e)
         {
