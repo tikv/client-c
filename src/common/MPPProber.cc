@@ -55,7 +55,14 @@ void MPPProber::run()
             });
         }
 
-        scan();
+        try
+        {
+            scan();
+        }
+        catch (...)
+        {
+            log->warning(getCurrentExceptionMsg("MPPProber scan failed: "));
+        }
     }
 }
 
