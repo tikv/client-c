@@ -55,7 +55,7 @@ public:
     bool empty() const { return code() == 0 && message().empty(); }
 };
 
-std::string getCurrentExceptionMsg(const std::string & prefix_msg)
+inline std::string getCurrentExceptionMsg(const std::string & prefix_msg)
 {
     std::string msg = prefix_msg;
     try
