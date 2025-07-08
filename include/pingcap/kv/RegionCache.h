@@ -236,7 +236,15 @@ public:
         while (!stopped.load())
         {
             // TODO: Also update region cache periodically.
-            forceReloadAllStores();
+            try
+            {
+                forceReloadAllStores();
+            }
+            catch (...)
+            {
+                auto msg = getCurrentExceptionMsg("failed to reload all stores periodically: ");
+                log->warning(msg);
+            }
 
             {
                 std::unique_lock lock(update_cache_mu);
