@@ -242,8 +242,7 @@ public:
             }
             catch (...)
             {
-                auto msg = getCurrentExceptionMsg("failed to reload all stores periodically: ");
-                log->warning(msg);
+                log->warning(getCurrentExceptionMsg("failed to reload all stores periodically: "));
             }
 
             {
