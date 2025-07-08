@@ -1,4 +1,6 @@
 #include <pingcap/common/FixedThreadPool.h>
+#include <pingcap/Exception.h>
+#include <pingcap/Log.h>
 
 namespace pingcap
 {
@@ -15,6 +17,7 @@ void FixedThreadPool::start()
 
 void FixedThreadPool::loop()
 {
+    auto & log = Logger::get("pingcap/fixed_thread_pool");
     while (true)
     {
         Task task;
@@ -30,7 +33,15 @@ void FixedThreadPool::loop()
             task = tasks.front();
             tasks.pop();
         }
-        task();
+
+        try
+        {
+            task();
+        }
+        catch (...)
+        {
+            log.warning(getCurrentExceptionMsg("FixedThreadPool task failed: "));
+        }
     }
 }
 

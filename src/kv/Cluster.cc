@@ -30,6 +30,7 @@ void Cluster::splitRegion(const std::string & split_key)
 void Cluster::startBackgroundTasks()
 {
     thread_pool->start();
+
     thread_pool->enqueue([this] {
         mpp_prober->run();
     });
