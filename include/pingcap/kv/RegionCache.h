@@ -3,11 +3,17 @@
 #include <kvproto/errorpb.pb.h>
 #include <kvproto/metapb.pb.h>
 #include <kvproto/pdpb.pb.h>
+#include <kvproto/tici.grpc.pb.h>
+#include <kvproto/tici.pb.h>
 #include <pingcap/Log.h>
 #include <pingcap/kv/Backoff.h>
 #include <pingcap/pd/Client.h>
 
+#include <cstdint>
 #include <map>
+#include <memory>
+#include <shared_mutex>
+#include <string>
 #include <unordered_map>
 
 namespace pingcap
@@ -322,5 +328,203 @@ bool labelFilterAllTiFlashNode(const std::map<std::string, std::string> & labels
 bool labelFilterAllNode(const std::map<std::string, std::string> &);
 bool labelFilterInvalid(const std::map<std::string, std::string> &);
 
+struct Shard
+{
+    uint64_t id;
+    std::string start_key;
+    std::string end_key;
+    uint64_t epoch;
+    Shard(uint64_t id_, const std::string & start_key_, const std::string & end_key_, uint64_t epoch_)
+        : id(id_)
+        , start_key(start_key_)
+        , end_key(end_key_)
+        , epoch(epoch_)
+    {}
+
+    std::string toString() const
+    {
+        return "Shard{id: " + std::to_string(id) + ", start_key: " + start_key + ", end_key: " + end_key + ", epoch: " + std::to_string(epoch) + "}";
+    }
+};
+
+struct ShardEpoch
+{
+    uint64_t id;
+    uint64_t epoch;
+    ShardEpoch() = default;
+    ShardEpoch(uint64_t id_, uint64_t epoch_)
+        : id(id_)
+        , epoch(epoch_)
+    {}
+};
+
+struct ShardWithAddr
+{
+    Shard shard;
+    std::vector<std::string> addr;
+    ShardWithAddr(const Shard & shard_, const std::vector<std::string> & addr_)
+        : shard(shard_)
+        , addr(addr_)
+    {}
+    std::string toString() const
+    {
+        return "ShardWithAddr{shard: " + shard.toString() + ", addr: [" + google::protobuf::JoinStrings(addr, ", ") + "]}";
+    }
+
+    bool contains(const std::string & key) const
+    {
+        return key >= shard.start_key && (key < shard.end_key || shard.end_key.empty());
+    }
+
+    std::string startKey() const
+    {
+        return shard.start_key;
+    }
+    std::string endKey() const
+    {
+        return shard.end_key;
+    }
+
+    uint64_t epoch() const
+    {
+        return shard.epoch;
+    }
+};
+
+using ShardPtr = std::shared_ptr<ShardWithAddr>;
+
+class TiCIClient
+{
+public:
+    explicit TiCIClient(const std::string & addr)
+        : channel(grpc::CreateChannel(addr, grpc::InsecureChannelCredentials()))
+        , stub(tici::MetaService::NewStub(channel))
+    {
+        if (!channel)
+        {
+            throw std::runtime_error("Failed to create gRPC channel to " + addr);
+        }
+    }
+
+    std::vector<ShardWithAddr> scanRanges(
+        int64_t tableID,
+        int64_t indexID,
+        const std::vector<std::string> & key_ranges,
+        int64_t limit)
+    {
+        tici::GetShardLocalCacheResponse response{};
+        tici::GetShardLocalCacheRequest request{};
+        grpc::ClientContext context;
+
+        request.set_table_id(tableID);
+        request.set_index_id(indexID);
+        request.set_limit(limit);
+        for (size_t i = 0; i < key_ranges.size(); i += 2)
+        {
+            auto * add_key_range = request.add_key_ranges();
+            add_key_range->set_start_key(key_ranges[i]);
+            add_key_range->set_end_key(key_ranges[i + 1]);
+        }
+
+        auto status = stub->GetShardLocalCacheInfo(&context, request, &response);
+        if (!status.ok())
+        {
+            std::string err_msg = ("get region failed: " + std::to_string(status.error_code()) + " : " + status.error_message());
+            throw Exception(err_msg, GRPCErrorCode);
+        }
+
+        if (response.status() != 0)
+        {
+            std::string err_msg = ("get region failed: " + std::to_string(response.status()));
+            throw Exception(err_msg, GRPCErrorCode);
+        }
+
+        std::vector<ShardWithAddr> result;
+        for (const auto & shard_addr : response.shard_local_cache_infos())
+        {
+            const auto & shard = shard_addr.shard();
+            ShardWithAddr shard_with_addr(
+                Shard(shard.shard_id(), shard.start_key(), shard.end_key(), shard.epoch()),
+                std::vector<std::string>(shard_addr.local_cache_addrs().begin(), shard_addr.local_cache_addrs().end()));
+            result.push_back(shard_with_addr);
+        }
+        return result;
+    }
+
+private:
+    std::shared_ptr<grpc::Channel> channel;
+    std::unique_ptr<tici::MetaService::Stub> stub;
+};
+
+class ShardCache
+{
+public:
+    explicit ShardCache(const std::string & addr)
+        : tici_client(std::make_shared<TiCIClient>(addr))
+    {
+    }
+    ShardPtr locateKey(int64_t tableID, int64_t indexID, const std::string & key)
+    {
+        //auto shard = searchCachedShard(key);
+        //if (shard != nullptr)
+        //{
+        //    return shard;
+        //}
+        auto shard = loadShardByKey(tableID, indexID, key);
+        // insertShardToCache(shard);
+        return shard;
+    }
+
+private:
+    ShardPtr searchCachedShard(const std::string & key)
+    {
+        std::shared_lock<std::shared_mutex> lock(shard_mutex);
+        auto it = shards_map.upper_bound(key);
+        if (it != shards_map.end() && it->second->contains(key))
+        {
+            return it->second;
+        }
+        // An empty string is considered to be the largest string in order.
+        if (shards_map.begin() != shards_map.end() && shards_map.begin()->second->contains(key))
+        {
+            return shards_map.begin()->second;
+        }
+        return nullptr;
+    };
+
+    ShardPtr loadShardByKey(int64_t tableID, int64_t indexID, const std::string & key)
+    {
+        auto shards = tici_client->scanRanges(tableID, indexID, {key, ""}, 1);
+        Logger::get("pingcap.tikv").information("load shard by key: " + key + ", tableID: " + std::to_string(tableID) + ", indexID: " + std::to_string(indexID) + ", result: " + std::to_string(shards.size()));
+        if (shards.size() != 1)
+        {
+            std::string err_msg = ("shards size not 1 ");
+            throw Exception(err_msg, GRPCErrorCode);
+        }
+        return std::make_shared<ShardWithAddr>(shards[0]);
+    };
+
+    void insertShardToCache(ShardPtr shard)
+    {
+        std::unique_lock<std::shared_mutex> lock(shard_mutex);
+        for (auto it = shards_map.upper_bound(shard->startKey()); it != shards_map.end();)
+        {
+            if (it->second->endKey() <= shard->endKey())
+            {
+                it = shards_map.erase(it);
+            }
+            else
+            {
+                break;
+            }
+        }
+        shards_map[shard->endKey()] = shard;
+    }
+
+    std::map<std::string, ShardPtr> shards_map;
+    std::shared_ptr<TiCIClient> tici_client;
+    std::shared_mutex shard_mutex;
+};
+using ShardCachePtr = std::unique_ptr<ShardCache>;
 } // namespace kv
 } // namespace pingcap

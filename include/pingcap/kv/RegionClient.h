@@ -5,6 +5,8 @@
 #include <pingcap/kv/RegionCache.h>
 #include <pingcap/kv/Rpc.h>
 
+#include <memory>
+
 namespace pingcap
 {
 namespace kv
@@ -88,11 +90,51 @@ struct RegionClient
                 onRegionError(bo, ctx, resp->region_error());
                 continue;
             }
-            if (same_zone_flag && source_zone_label != "") {
+            if (same_zone_flag && source_zone_label != "")
+            {
                 auto iter = ctx->store.labels.find(DCLabelKey);
-                if (iter != ctx->store.labels.end()) {
+                if (iter != ctx->store.labels.end())
+                {
                     *same_zone_flag = iter->second == source_zone_label;
                 }
+            }
+            return;
+        }
+    }
+
+    template <typename T, typename REQ, typename RESP>
+    void sendReqToShard(Backoffer & bo,
+                        REQ & req,
+                        RESP * resp,
+                        const LabelFilter & tiflash_label_filter = kv::labelFilterInvalid,
+                        int timeout = dailTimeout,
+                        StoreType store_type = StoreType::TiKV,
+                        const kv::GRPCMetaData & meta_data = {},
+                        std::string addr = "")
+    {
+        for (;;)
+        {
+            RpcCall<T> rpc(cluster->rpc_client, addr);
+
+            grpc::ClientContext context;
+            rpc.setClientContext(context, timeout, meta_data);
+
+            auto status = rpc.call(&context, req, resp);
+            if (!status.ok())
+            {
+                if (status.error_code() == ::grpc::StatusCode::UNIMPLEMENTED)
+                {
+                    // The rpc is not implemented on this service.
+                    throw Exception("rpc is not implemented: " + rpc.errMsg(status), GRPCNotImplemented);
+                }
+                std::string err_msg = rpc.errMsg(status);
+                log->warning(err_msg);
+                continue;
+            }
+            if (resp->has_region_error())
+            {
+                log->warning("region " + region_id.toString() + " find error: " + resp->region_error().DebugString());
+                continue;
             }
             return;
         }
@@ -179,12 +221,14 @@ struct RegionClient
             auto status = stream_reader->reader->Finish();
             if (status.ok())
             {
-                if (same_zone_flag && source_zone_label != "") {
+                if (same_zone_flag && source_zone_label != "")
+                {
                     auto iter = ctx->store.labels.find(DCLabelKey);
-                    if (iter != ctx->store.labels.end()) {
+                    if (iter != ctx->store.labels.end())
+                    {
                         *same_zone_flag = iter->second == source_zone_label;
                     }
-                }                
+                }
                 // No response msg.
                 stream_reader->no_resp = true;
                 return stream_reader;

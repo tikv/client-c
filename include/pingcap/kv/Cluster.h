@@ -4,11 +4,14 @@
 #include <pingcap/common/FixedThreadPool.h>
 #include <pingcap/common/MPPProber.h>
 #include <pingcap/kv/LockResolver.h>
+#include <pingcap/kv/RegionCache.h>
 #include <pingcap/kv/Rpc.h>
 #include <pingcap/pd/Client.h>
 #include <pingcap/pd/CodecClient.h>
 #include <pingcap/pd/MockPDClient.h>
 #include <pingcap/pd/Oracle.h>
+
+#include <memory>
 
 namespace pingcap
 {
@@ -21,6 +24,7 @@ struct Cluster
 {
     pd::ClientPtr pd_client;
     RegionCachePtr region_cache;
+    ShardCachePtr shard_cache;
     RpcClientPtr rpc_client;
 
     pd::OraclePtr oracle;
@@ -44,6 +48,7 @@ struct Cluster
     Cluster(const std::vector<std::string> & pd_addrs, const ClusterConfig & config)
         : pd_client(std::make_shared<pd::CodecClient>(pd_addrs, config))
         , region_cache(std::make_unique<RegionCache>(pd_client, config))
+        , shard_cache(std::make_unique<ShardCache>("127.0.0.1:50061"))
         , rpc_client(std::make_unique<RpcClient>(config))
         , oracle(std::make_unique<pd::Oracle>(pd_client, std::chrono::milliseconds(oracle_update_interval)))
         , lock_resolver(std::make_unique<LockResolver>(this))
