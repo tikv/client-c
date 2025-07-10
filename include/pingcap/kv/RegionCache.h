@@ -296,6 +296,17 @@ struct Shard
     }
 };
 
+struct ShardEpoch
+{
+    uint64_t id;
+    uint64_t epoch;
+    ShardEpoch() = default;
+    ShardEpoch(uint64_t id_, uint64_t epoch_)
+        : id(id_)
+        , epoch(epoch_)
+    {}
+};
+
 struct ShardWithAddr
 {
     Shard shard;
@@ -321,6 +332,11 @@ struct ShardWithAddr
     std::string endKey() const
     {
         return shard.end_key;
+    }
+
+    uint64_t epoch() const
+    {
+        return shard.epoch;
     }
 };
 
@@ -404,22 +420,23 @@ public:
         //    return shard;
         //}
         auto shard = loadShardByKey(tableID, indexID, key);
+        // insertShardToCache(shard);
         return shard;
     }
 
 private:
     ShardPtr searchCachedShard(const std::string & key)
     {
-        std::shared_lock lock(shard_mutex);
-        auto it = shard_map.upper_bound(key);
-        if (it != shard_map.end() && it->second->contains(key))
+        std::shared_lock<std::shared_mutex> lock(shard_mutex);
+        auto it = shards_map.upper_bound(key);
+        if (it != shards_map.end() && it->second->contains(key))
         {
             return it->second;
         }
         // An empty string is considered to be the largest string in order.
-        if (shard_map.begin() != shard_map.end() && shard_map.begin()->second->contains(key))
+        if (shards_map.begin() != shards_map.end() && shards_map.begin()->second->contains(key))
         {
-            return shard_map.begin()->second;
+            return shards_map.begin()->second;
         }
         return nullptr;
     };
@@ -436,10 +453,27 @@ private:
         return std::make_shared<ShardWithAddr>(shards[0]);
     };
 
-    std::map<std::string, ShardPtr> shard_map;
+    void insertShardToCache(ShardPtr shard)
+    {
+        std::unique_lock<std::shared_mutex> lock(shard_mutex);
+        for (auto it = shards_map.upper_bound(shard->startKey()); it != shards_map.end();)
+        {
+            if (it->second->endKey() <= shard->endKey())
+            {
+                it = shards_map.erase(it);
+            }
+            else
+            {
+                break;
+            }
+        }
+        shards_map[shard->endKey()] = shard;
+    }
+
+    std::map<std::string, ShardPtr> shards_map;
     std::shared_ptr<TiCIClient> tici_client;
     std::shared_mutex shard_mutex;
 };
-using ShardCachePtr = std::shared_ptr<ShardCache>;
+using ShardCachePtr = std::unique_ptr<ShardCache>;
 } // namespace kv
 } // namespace pingcap

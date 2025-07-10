@@ -99,7 +99,7 @@ std::vector<CopTask> buildCopTaskForFullText(
         // all ranges belong to same region.
         if (i == ranges.size())
         {
-            tasks.push_back(CopTask{{loc->shard.id, loc->shard.epoch, 0}, ranges, cop_req, store_type, /*partition_index=*/0, meta_data, before_send, keyspace_id, connection_id, connection_alias, true, loc->addr[0], executor_id});
+            tasks.push_back(CopTask{{0, 0, 0}, ranges, cop_req, store_type, /*partition_index=*/0, meta_data, before_send, keyspace_id, connection_id, connection_alias, true, {loc->shard.id, loc->shard.epoch}, loc->addr[0], executor_id});
             break;
         }
 
@@ -111,7 +111,7 @@ std::vector<CopTask> buildCopTaskForFullText(
             task_ranges.push_back(KeyRange{bound.start_key, loc->endKey()});
             bound.start_key = loc->endKey(); // update the last range start key after splitted
         }
-        tasks.push_back(CopTask{{loc->shard.id, loc->shard.epoch, 0}, task_ranges, cop_req, store_type, /*partition_index=*/0, meta_data, before_send, keyspace_id, connection_id, connection_alias, true, loc->addr[0], executor_id});
+        tasks.push_back(CopTask{{0, 0, 0}, task_ranges, cop_req, store_type, /*partition_index=*/0, meta_data, before_send, keyspace_id, connection_id, connection_alias, true, {loc->shard.id, loc->shard.epoch}, loc->addr[0], executor_id});
         ranges.erase(ranges.begin(), ranges.begin() + i);
     }
     log->debug("has " + std::to_string(tasks.size()) + " tasks.");

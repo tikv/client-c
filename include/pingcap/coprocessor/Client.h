@@ -73,6 +73,7 @@ struct CopTask
     std::string connection_alias;
 
     bool fulltext;
+    kv::ShardEpoch shard_epoch;
     std::string addr;
     std::string executor_id;
 };
