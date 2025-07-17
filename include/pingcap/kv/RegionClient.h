@@ -88,9 +88,11 @@ struct RegionClient
                 onRegionError(bo, ctx, resp->region_error());
                 continue;
             }
-            if (same_zone_flag && source_zone_label != "") {
+            if (same_zone_flag && source_zone_label != "")
+            {
                 auto iter = ctx->store.labels.find(DCLabelKey);
-                if (iter != ctx->store.labels.end()) {
+                if (iter != ctx->store.labels.end())
+                {
                     *same_zone_flag = iter->second == source_zone_label;
                 }
             }
@@ -179,12 +181,14 @@ struct RegionClient
             auto status = stream_reader->reader->Finish();
             if (status.ok())
             {
-                if (same_zone_flag && source_zone_label != "") {
+                if (same_zone_flag && source_zone_label != "")
+                {
                     auto iter = ctx->store.labels.find(DCLabelKey);
-                    if (iter != ctx->store.labels.end()) {
+                    if (iter != ctx->store.labels.end())
+                    {
                         *same_zone_flag = iter->second == source_zone_label;
                     }
-                }                
+                }
                 // No response msg.
                 stream_reader->no_resp = true;
                 return stream_reader;

@@ -3,6 +3,8 @@
 #include <pingcap/kv/Cluster.h>
 #include <pingcap/kv/RegionCache.h>
 #include <pingcap/kv/RegionClient.h>
+#include <pingcap/kv/ShardCache.h>
+#include <pingcap/kv/ShardClient.h>
 
 #include <atomic>
 #include <condition_variable>
@@ -71,6 +73,13 @@ struct CopTask
     pd::KeyspaceID keyspace_id;
     uint64_t connection_id;
     std::string connection_alias;
+
+    bool fulltext;
+    kv::ShardEpoch shard_epoch;
+    std::string addr;
+    int64_t table_id;
+    int64_t index_id;
+    std::string executor_id;
 };
 
 struct RegionInfo
@@ -249,6 +258,7 @@ private:
 
     template <bool is_stream>
     std::vector<CopTask> handleTaskImpl(kv::Backoffer & bo, const CopTask & task);
+    std::vector<CopTask> handleTiCITaskImpl(kv::Backoffer & bo, const CopTask & task);
     template <bool is_stream>
     void handleTask(const CopTask & task);
 
@@ -289,6 +299,22 @@ std::vector<CopTask> buildCopTasks(
     Logger * log,
     kv::GRPCMetaData meta_data = {},
     std::function<void()> before_send = {});
+
+std::vector<CopTask> buildCopTaskForFullText(
+    kv::Backoffer & bo,
+    kv::Cluster * cluster,
+    KeyRanges ranges,
+    RequestPtr cop_req,
+    kv::StoreType store_type,
+    pd::KeyspaceID keyspace_id,
+    uint64_t connection_id,
+    const std::string & connection_alias,
+    Logger * log,
+    kv::GRPCMetaData meta_data,
+    std::function<void()> before_send,
+    int64_t tableID,
+    int64_t indexID,
+    std::string executor_id);
 
 
 /*

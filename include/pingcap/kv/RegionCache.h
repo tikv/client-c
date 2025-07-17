@@ -321,6 +321,5 @@ bool labelFilterNoTiFlashWriteNode(const std::map<std::string, std::string> & la
 bool labelFilterAllTiFlashNode(const std::map<std::string, std::string> & labels);
 bool labelFilterAllNode(const std::map<std::string, std::string> &);
 bool labelFilterInvalid(const std::map<std::string, std::string> &);
-
 } // namespace kv
 } // namespace pingcap
