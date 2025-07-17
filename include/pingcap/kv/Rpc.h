@@ -3,6 +3,7 @@
 #include <grpcpp/create_channel.h>
 #include <pingcap/Log.h>
 #include <pingcap/kv/RegionCache.h>
+#include <pingcap/kv/ShardCache.h>
 #include <pingcap/kv/internal/type_traits.h>
 
 #include <mutex>
