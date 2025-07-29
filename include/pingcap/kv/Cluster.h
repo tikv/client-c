@@ -45,7 +45,6 @@ struct Cluster
     Cluster(const std::vector<std::string> & pd_addrs, const ClusterConfig & config)
         : pd_client(std::make_shared<pd::CodecClient>(pd_addrs, config))
         , region_cache(std::make_unique<RegionCache>(pd_client, config))
-        , shard_cache(std::make_unique<ShardCache>("127.0.0.1:50061"))
         , rpc_client(std::make_unique<RpcClient>(config))
         , oracle(std::make_unique<pd::Oracle>(pd_client, std::chrono::milliseconds(oracle_update_interval)))
         , lock_resolver(std::make_unique<LockResolver>(this))

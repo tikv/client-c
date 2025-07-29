@@ -76,7 +76,6 @@ struct CopTask
 
     bool fulltext;
     kv::ShardEpoch shard_epoch;
-    std::string addr;
     int64_t table_id;
     int64_t index_id;
     std::string executor_id;

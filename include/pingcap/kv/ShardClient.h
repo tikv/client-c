@@ -32,8 +32,7 @@ struct ShardClient
                         const LabelFilter & tiflash_label_filter = kv::labelFilterInvalid,
                         int timeout = dailTimeout,
                         StoreType store_type = StoreType::TiKV,
-                        const kv::GRPCMetaData & meta_data = {},
-                        std::string addr = "")
+                        const kv::GRPCMetaData & meta_data = {})
     {
         for (;;)
         {

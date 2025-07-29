@@ -100,7 +100,7 @@ std::vector<CopTask> buildCopTaskForFullText(
         // all ranges belong to same region.
         if (i == ranges.size())
         {
-            tasks.push_back(CopTask{{0, 0, 0}, ranges, cop_req, store_type, /*partition_index=*/0, meta_data, before_send, keyspace_id, connection_id, connection_alias, true, {loc->shard.id, loc->shard.epoch}, loc->addr[0], tableID, indexID, executor_id});
+            tasks.push_back(CopTask{{0, 0, 0}, ranges, cop_req, store_type, /*partition_index=*/0, meta_data, before_send, keyspace_id, connection_id, connection_alias, true, {loc->shard.id, loc->shard.epoch}, tableID, indexID, executor_id});
             break;
         }
 
@@ -112,7 +112,7 @@ std::vector<CopTask> buildCopTaskForFullText(
             task_ranges.push_back(KeyRange{bound.start_key, loc->endKey()});
             bound.start_key = loc->endKey(); // update the last range start key after splitted
         }
-        tasks.push_back(CopTask{{0, 0, 0}, task_ranges, cop_req, store_type, /*partition_index=*/0, meta_data, before_send, keyspace_id, connection_id, connection_alias, true, {loc->shard.id, loc->shard.epoch}, loc->addr[0], tableID, indexID, executor_id});
+        tasks.push_back(CopTask{{0, 0, 0}, task_ranges, cop_req, store_type, /*partition_index=*/0, meta_data, before_send, keyspace_id, connection_id, connection_alias, true, {loc->shard.id, loc->shard.epoch}, tableID, indexID, executor_id});
         ranges.erase(ranges.begin(), ranges.begin() + i);
     }
     log->debug("has " + std::to_string(tasks.size()) + " tasks.");
@@ -190,11 +190,11 @@ std::map<uint64_t, kv::Store> filterAliveStores(kv::Cluster * cluster, const std
 }
 
 std::vector<BatchCopTask> balanceBatchCopTasks(
-        const std::map<uint64_t, kv::Store> * alive_tiflash_stores,
-        const std::vector<BatchCopTask> & original_tasks,
-        bool is_mpp,
-        Poco::Logger * log,
-        bool centralized_schedule = false)
+    const std::map<uint64_t, kv::Store> * alive_tiflash_stores,
+    const std::vector<BatchCopTask> & original_tasks,
+    bool is_mpp,
+    Poco::Logger * log,
+    bool centralized_schedule = false)
 {
     if (original_tasks.empty())
     {
@@ -555,12 +555,12 @@ std::vector<BatchCopTask> buildBatchCopTasks(
             // And in details::splitKeyRangesByLocations(), will load new region and new store.
             // So if the first try of getRPCContext() failed, the second try loop will use the newest region cache to do it again.
             auto rpc_context = cluster->region_cache->getRPCContext(bo,
-                    cop_task.region_id,
-                    store_type,
-                    /*load_balance=*/is_mpp,
-                    label_filter,
-                    store_id_blocklist,
-                    filter_alive_tiflash_stores ? &alive_tiflash_stores : nullptr);
+                                                                    cop_task.region_id,
+                                                                    store_type,
+                                                                    /*load_balance=*/is_mpp,
+                                                                    label_filter,
+                                                                    store_id_blocklist,
+                                                                    filter_alive_tiflash_stores ? &alive_tiflash_stores : nullptr);
 
             if (rpc_context == nullptr)
             {
@@ -627,11 +627,11 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         if (log->getLevel() >= Poco::Message::PRIO_INFORMATION)
             log->information(tasks_to_str("Before region balance:", batch_cop_tasks));
         batch_cop_tasks = details::balanceBatchCopTasks(
-                filter_alive_tiflash_stores ? &alive_tiflash_stores : nullptr,
-                batch_cop_tasks,
-                is_mpp,
-                log,
-                centralized_schedule);
+            filter_alive_tiflash_stores ? &alive_tiflash_stores : nullptr,
+            batch_cop_tasks,
+            is_mpp,
+            log,
+            centralized_schedule);
         if (log->getLevel() >= Poco::Message::PRIO_INFORMATION)
             log->information(tasks_to_str("After region balance:", batch_cop_tasks));
 
@@ -667,12 +667,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         auto end = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
         if (elapsed >= 500)
-            log->warning("buildBatchCopTasks takes too long. total elapsed: " +
-                    std::to_string(elapsed) + "ms" + ", build cop_task elapsed: " +
-                    std::to_string(cop_task_elapsed) + "ms" + ", build batch_cop_task elapsed: " +
-                    std::to_string(batch_cop_task_elapsed) + "ms" + ", balance elapsed: " +
-                    std::to_string(balance_elapsed) + "ms" + ", cop_task num: " + std::to_string(cop_tasks.size()) +
-                    ", batch_cop_task num: " + std::to_string(batch_cop_tasks.size()) + ", retry_num: " + std::to_string(retry_num));
+            log->warning("buildBatchCopTasks takes too long. total elapsed: " + std::to_string(elapsed) + "ms" + ", build cop_task elapsed: " + std::to_string(cop_task_elapsed) + "ms" + ", build batch_cop_task elapsed: " + std::to_string(batch_cop_task_elapsed) + "ms" + ", balance elapsed: " + std::to_string(balance_elapsed) + "ms" + ", cop_task num: " + std::to_string(cop_tasks.size()) + ", batch_cop_task num: " + std::to_string(batch_cop_tasks.size()) + ", retry_num: " + std::to_string(retry_num));
         return batch_cop_tasks;
     }
 }
@@ -885,7 +880,7 @@ std::vector<CopTask> ResponseIter::handleTiCITaskImpl(kv::Backoffer & bo, const 
         bool same_zone_req = true;
         try
         {
-            client.sendReqToShard<kv::RPC_NAME(Coprocessor)>(bo, req, resp.get(), tiflash_label_filter, timeout, task.store_type, task.meta_data, task.addr);
+            client.sendReqToShard<kv::RPC_NAME(Coprocessor)>(bo, req, resp.get(), tiflash_label_filter, timeout, task.store_type, task.meta_data);
         }
         catch (Exception & e)
         {
