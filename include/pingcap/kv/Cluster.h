@@ -21,6 +21,7 @@ struct Cluster
 {
     pd::ClientPtr pd_client;
     RegionCachePtr region_cache;
+    ShardCachePtr shard_cache;
     RpcClientPtr rpc_client;
 
     pd::OraclePtr oracle;

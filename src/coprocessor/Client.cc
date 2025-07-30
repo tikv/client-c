@@ -5,6 +5,7 @@
 #include <pingcap/coprocessor/Client.h>
 #include <pingcap/kv/Backoff.h>
 #include <pingcap/kv/RegionCache.h>
+#include <pingcap/kv/ShardCache.h>
 #include <sys/types.h>
 
 #include <chrono>
@@ -61,6 +62,57 @@ std::vector<CopTask> buildCopTasks(
             bound.start_key = loc.end_key; // update the last range start key after splitted
         }
         tasks.push_back(CopTask{loc.region, task_ranges, cop_req, store_type, /*partition_index=*/0, meta_data, before_send, keyspace_id, connection_id, connection_alias});
+        ranges.erase(ranges.begin(), ranges.begin() + i);
+    }
+    log->debug("has " + std::to_string(tasks.size()) + " tasks.");
+    return tasks;
+}
+
+std::vector<CopTask> buildCopTaskForFullText(
+    kv::Backoffer & bo,
+    kv::Cluster * cluster,
+    KeyRanges ranges,
+    RequestPtr cop_req,
+    kv::StoreType store_type,
+    pd::KeyspaceID keyspace_id,
+    uint64_t connection_id,
+    const std::string & connection_alias,
+    Logger * log,
+    kv::GRPCMetaData meta_data,
+    std::function<void()> before_send,
+    int64_t tableID,
+    int64_t indexID,
+    std::string executor_id)
+{
+    log->debug("build " + std::to_string(ranges.size()) + " ranges.");
+    std::vector<CopTask> tasks;
+    while (!ranges.empty())
+    {
+        auto loc = cluster->shard_cache->locateKey(tableID, indexID, ranges[0].start_key);
+
+        size_t i;
+        for (i = 0; i < ranges.size(); i++)
+        {
+            const auto & range = ranges[i];
+            if (!(loc->contains(range.end_key) || loc->endKey() == range.end_key))
+                break;
+        }
+        // all ranges belong to same region.
+        if (i == ranges.size())
+        {
+            tasks.push_back(CopTask{{0, 0, 0}, ranges, cop_req, store_type, /*partition_index=*/0, meta_data, before_send, keyspace_id, connection_id, connection_alias, true, {loc->shard.id, loc->shard.epoch}, tableID, indexID, executor_id});
+            break;
+        }
+
+        KeyRanges task_ranges(ranges.begin(), ranges.begin() + i);
+        // Split the last range if it is overlapped with the region
+        auto & bound = ranges[i];
+        if (loc->contains(bound.start_key))
+        {
+            task_ranges.push_back(KeyRange{bound.start_key, loc->endKey()});
+            bound.start_key = loc->endKey(); // update the last range start key after splitted
+        }
+        tasks.push_back(CopTask{{0, 0, 0}, task_ranges, cop_req, store_type, /*partition_index=*/0, meta_data, before_send, keyspace_id, connection_id, connection_alias, true, {loc->shard.id, loc->shard.epoch}, tableID, indexID, executor_id});
         ranges.erase(ranges.begin(), ranges.begin() + i);
     }
     log->debug("has " + std::to_string(tasks.size()) + " tasks.");
@@ -138,11 +190,11 @@ std::map<uint64_t, kv::Store> filterAliveStores(kv::Cluster * cluster, const std
 }
 
 std::vector<BatchCopTask> balanceBatchCopTasks(
-        const std::map<uint64_t, kv::Store> * alive_tiflash_stores,
-        const std::vector<BatchCopTask> & original_tasks,
-        bool is_mpp,
-        Poco::Logger * log,
-        bool centralized_schedule = false)
+    const std::map<uint64_t, kv::Store> * alive_tiflash_stores,
+    const std::vector<BatchCopTask> & original_tasks,
+    bool is_mpp,
+    Poco::Logger * log,
+    bool centralized_schedule = false)
 {
     if (original_tasks.empty())
     {
@@ -503,12 +555,12 @@ std::vector<BatchCopTask> buildBatchCopTasks(
             // And in details::splitKeyRangesByLocations(), will load new region and new store.
             // So if the first try of getRPCContext() failed, the second try loop will use the newest region cache to do it again.
             auto rpc_context = cluster->region_cache->getRPCContext(bo,
-                    cop_task.region_id,
-                    store_type,
-                    /*load_balance=*/is_mpp,
-                    label_filter,
-                    store_id_blocklist,
-                    filter_alive_tiflash_stores ? &alive_tiflash_stores : nullptr);
+                                                                    cop_task.region_id,
+                                                                    store_type,
+                                                                    /*load_balance=*/is_mpp,
+                                                                    label_filter,
+                                                                    store_id_blocklist,
+                                                                    filter_alive_tiflash_stores ? &alive_tiflash_stores : nullptr);
 
             if (rpc_context == nullptr)
             {
@@ -575,11 +627,11 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         if (log->getLevel() >= Poco::Message::PRIO_INFORMATION)
             log->information(tasks_to_str("Before region balance:", batch_cop_tasks));
         batch_cop_tasks = details::balanceBatchCopTasks(
-                filter_alive_tiflash_stores ? &alive_tiflash_stores : nullptr,
-                batch_cop_tasks,
-                is_mpp,
-                log,
-                centralized_schedule);
+            filter_alive_tiflash_stores ? &alive_tiflash_stores : nullptr,
+            batch_cop_tasks,
+            is_mpp,
+            log,
+            centralized_schedule);
         if (log->getLevel() >= Poco::Message::PRIO_INFORMATION)
             log->information(tasks_to_str("After region balance:", batch_cop_tasks));
 
@@ -615,12 +667,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         auto end = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
         if (elapsed >= 500)
-            log->warning("buildBatchCopTasks takes too long. total elapsed: " +
-                    std::to_string(elapsed) + "ms" + ", build cop_task elapsed: " +
-                    std::to_string(cop_task_elapsed) + "ms" + ", build batch_cop_task elapsed: " +
-                    std::to_string(batch_cop_task_elapsed) + "ms" + ", balance elapsed: " +
-                    std::to_string(balance_elapsed) + "ms" + ", cop_task num: " + std::to_string(cop_tasks.size()) +
-                    ", batch_cop_task num: " + std::to_string(batch_cop_tasks.size()) + ", retry_num: " + std::to_string(retry_num));
+            log->warning("buildBatchCopTasks takes too long. total elapsed: " + std::to_string(elapsed) + "ms" + ", build cop_task elapsed: " + std::to_string(cop_task_elapsed) + "ms" + ", build batch_cop_task elapsed: " + std::to_string(batch_cop_task_elapsed) + "ms" + ", balance elapsed: " + std::to_string(balance_elapsed) + "ms" + ", cop_task num: " + std::to_string(cop_tasks.size()) + ", batch_cop_task num: " + std::to_string(batch_cop_tasks.size()) + ", retry_num: " + std::to_string(retry_num));
         return batch_cop_tasks;
     }
 }
@@ -765,6 +812,99 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
     return {};
 }
 
+std::vector<CopTask> ResponseIter::handleTiCITaskImpl(kv::Backoffer & bo, const CopTask & task)
+{
+    ::coprocessor::Request req;
+    auto * ctx = req.mutable_context();
+    if (task.keyspace_id != pd::NullspaceID)
+    {
+        ctx->set_api_version(kvrpcpb::APIVersion::V2);
+        ctx->set_keyspace_id(task.keyspace_id);
+    }
+    req.set_tp(task.req->tp);
+    req.set_start_ts(task.req->start_ts);
+    req.set_schema_ver(task.req->schema_version);
+    req.set_data(task.req->data);
+    req.set_is_cache_enabled(false);
+
+    auto * shard_info = req.mutable_table_shard_infos();
+    auto * shard_info_item = shard_info->Add();
+    auto * shard_infos = shard_info_item->add_shard_infos();
+    shard_infos->set_shard_id(task.shard_epoch.id);
+    shard_infos->set_shard_epoch(task.shard_epoch.epoch);
+    for (auto const & range : task.ranges)
+    {
+        auto * pb_range = shard_infos->add_ranges();
+        range.setKeyRange(pb_range);
+    }
+    shard_info_item->set_executor_id(task.executor_id);
+
+    auto * cop_req_context = req.mutable_context();
+    cop_req_context->mutable_resource_control_context()->set_resource_group_name(task.req->resource_group_name);
+    for (auto ts : min_commit_ts_pushed.getTimestamps())
+    {
+        cop_req_context->add_resolved_locks(ts);
+    }
+    for (const auto & range : task.ranges)
+    {
+        auto * pb_range = req.add_ranges();
+        range.setKeyRange(pb_range);
+    }
+
+    if (task.before_send)
+        task.before_send();
+
+    auto handle_locked_resp = [&](const ::kvrpcpb::LockInfo & locked) -> std::vector<CopTask> {
+        kv::LockPtr lock = std::make_shared<kv::Lock>(locked);
+        log->debug("region " + task.region_id.toString() + " encounter lock problem: " + locked.DebugString());
+        std::vector<uint64_t> pushed;
+        std::vector<kv::LockPtr> locks{lock};
+        auto before_expired = cluster->lock_resolver->resolveLocks(bo, task.req->start_ts, locks, pushed);
+        if (!pushed.empty())
+        {
+            min_commit_ts_pushed.addTimestamps(pushed);
+        }
+        if (before_expired > 0)
+        {
+            log->information("encounter lock and sleep for a while, region_id=" + task.region_id.toString() + //
+                             " req_start_ts=" + std::to_string(task.req->start_ts) + " lock_version=" + std::to_string(lock->txn_id) + //
+                             " sleep time is " + std::to_string(before_expired) + "ms.");
+            bo.backoffWithMaxSleep(kv::boTxnLockFast, before_expired, Exception("encounter lock, region_id=" + task.region_id.toString() + " " + locked.DebugString(), ErrorCodes::LockError));
+        }
+        return buildCopTasks(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, task.connection_id, task.connection_alias, log, task.meta_data, task.before_send);
+    };
+
+    kv::ShardClient client(cluster, task.shard_epoch);
+    auto handle_unary_cop = [&]() -> std::vector<CopTask> {
+        auto resp = std::make_shared<::coprocessor::Response>();
+        bool same_zone_req = true;
+        try
+        {
+            client.sendReqToShard<kv::RPC_NAME(Coprocessor)>(bo, req, resp.get(), tiflash_label_filter, timeout, task.store_type, task.meta_data);
+        }
+        catch (Exception & e)
+        {
+            bo.backoff(kv::boRegionMiss, e);
+            return buildCopTaskForFullText(bo, cluster, task.ranges, task.req, task.store_type, task.keyspace_id, task.connection_id, task.connection_alias, log, task.meta_data, task.before_send, task.table_id, task.index_id, task.executor_id);
+        }
+        if (resp->has_locked())
+            return handle_locked_resp(resp->locked());
+
+        const std::string & err_msg = resp->other_error();
+        if (!err_msg.empty())
+        {
+            throw Exception("Coprocessor other error: " + err_msg, ErrorCodes::CoprocessorError);
+        }
+
+        fiu_do_on("sleep_before_push_result", { std::this_thread::sleep_for(1s); });
+
+        queue->push(Result(resp, same_zone_req));
+        return {};
+    };
+
+    return handle_unary_cop();
+}
+
 template <bool is_stream>
 void ResponseIter::handleTask(const CopTask & task)
 {
@@ -779,7 +919,11 @@ void ResponseIter::handleTask(const CopTask & task)
         auto & bo = bo_maps.try_emplace(current_task.region_id.id, kv::copNextMaxBackoff).first->second;
         try
         {
-            auto new_tasks = handleTaskImpl<is_stream>(bo, current_task);
+            std::vector<CopTask> new_tasks;
+            if (task.fulltext)
+                new_tasks = handleTiCITaskImpl(bo, current_task);
+            else
+                new_tasks = handleTaskImpl<is_stream>(bo, current_task);
             if (!new_tasks.empty())
             {
                 remain_tasks.insert(remain_tasks.end(), new_tasks.begin(), new_tasks.end());
