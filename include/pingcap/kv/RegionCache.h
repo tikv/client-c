@@ -215,6 +215,36 @@ public:
 
     std::map<uint64_t, Store> getAllTiFlashStores(const LabelFilter & label_filter, bool exclude_tombstone);
 
+    void updateCachePeriodically()
+    {
+        while (!stopped.load())
+        {
+            // TODO: Also update region cache periodically.
+            try
+            {
+                forceReloadAllStores();
+            }
+            catch (...)
+            {
+                log->warning(getCurrentExceptionMsg("failed to reload all stores periodically: "));
+            }
+
+            {
+                std::unique_lock lock(update_cache_mu);
+                // Update store cache every 2 mins.
+                update_cache_cv.wait_for(lock, std::chrono::minutes(2), [this]() {
+                    return stopped.load();
+                });
+            }
+        }
+    }
+
+    void stop()
+    {
+        stopped.store(true);
+        std::lock_guard lock(update_cache_mu);
+        update_cache_cv.notify_all();
+    }
 private:
     RegionPtr loadRegionByKey(Backoffer & bo, const std::string & key);
 
@@ -254,6 +284,10 @@ private:
     const std::string tiflash_engine_value;
 
     Logger * log;
+
+    std::atomic<bool> stopped = false;
+    std::mutex update_cache_mu;
+    std::condition_variable update_cache_cv;
 };
 
 using RegionCachePtr = std::unique_ptr<RegionCache>;
