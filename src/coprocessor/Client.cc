@@ -401,7 +401,7 @@ std::vector<BatchCopTask> balanceBatchCopTasks(
     return ret;
 }
 
-// Return true if need retry. And invalid regions will be dropped and retry.
+// Return true and invalid region cache if one region has no alive store.
 bool checkAliveStores(
         const std::vector<CopTask> & cop_tasks,
         const std::vector<std::vector<uint64_t>> & all_used_tiflash_store_ids,
