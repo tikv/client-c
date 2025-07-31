@@ -273,7 +273,7 @@ metapb::Store RegionCache::loadStore(Backoffer & bo, uint64_t id)
     }
 }
 
-Store RegionCache::reloadStoreWithoutLock(const metapb::Store & store)
+Store RegionCache::reloadStore(const metapb::Store & store)
 {
     auto id = store.id();
     std::map<std::string, std::string> labels;
@@ -288,8 +288,8 @@ Store RegionCache::reloadStoreWithoutLock(const metapb::Store & store)
             store_type = StoreType::TiFlash;
         }
     }
-    auto res = stores.insert_or_assign(id, Store(id, store.address(), store.peer_address(), labels, store_type, store.state()));
-    return res.first->second;
+    auto it = stores.emplace(id, Store(id, store.address(), store.peer_address(), labels, store_type, store.state()));
+    return it.first->second;
 }
 
 Store RegionCache::getStore(Backoffer & bo, uint64_t id)
@@ -301,7 +301,7 @@ Store RegionCache::getStore(Backoffer & bo, uint64_t id)
         return (it->second);
     }
     auto store = loadStore(bo, id);
-    return reloadStoreWithoutLock(store);
+    return reloadStore(store);
 }
 
 void RegionCache::forceReloadAllStores()
@@ -309,7 +309,7 @@ void RegionCache::forceReloadAllStores()
     const auto all_stores = pd_client->getAllStores(/*exclude_tombstone=*/false);
     std::lock_guard<std::mutex> lock(store_mutex);
     for (const auto & store_pb : all_stores)
-        reloadStoreWithoutLock(store_pb);
+        reloadStore(store_pb);
 }
 
 std::pair<std::vector<uint64_t>, std::vector<uint64_t>> RegionCache::getTiFlashStoresByFilter(
@@ -343,6 +343,7 @@ std::pair<std::vector<uint64_t>, std::vector<uint64_t>> RegionCache::getTiFlashS
     };
 
     // Get others tiflash store ids
+    // TODO: Add TTL support for region cache, just like client-go.
     auto peers = selectTiFlashPeers(bo, cached_region->meta, label_filter);
     for (const auto & peer : peers)
     {
