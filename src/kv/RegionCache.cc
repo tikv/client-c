@@ -448,12 +448,13 @@ std::map<uint64_t, Store> RegionCache::getAllTiFlashStores(const LabelFilter & l
     }
     return ret_stores;
 }
+
 void RegionCache::forceReloadAllStores()
 {
     const auto all_stores = pd_client->getAllStores(/*exclude_tombstone=*/false);
     std::lock_guard<std::mutex> lock(store_mutex);
     for (const auto & store_pb : all_stores)
-        reloadStore(store_pb);
+        reloadStoreWithoutLock(store_pb);
 }
 
 bool hasLabel(const std::map<std::string, std::string> & labels, const std::string & key, const std::string & val)

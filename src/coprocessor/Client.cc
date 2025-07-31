@@ -138,7 +138,7 @@ std::unordered_map<uint64_t, kv::Store> filterAliveStores(kv::Cluster * cluster,
 }
 
 std::vector<BatchCopTask> balanceBatchCopTasks(
-        const std::map<uint64_t, kv::Store> * alive_tiflash_stores,
+        const std::unordered_map<uint64_t, kv::Store> * alive_tiflash_stores,
         const std::vector<BatchCopTask> & original_tasks,
         bool is_mpp,
         Poco::Logger * log,
@@ -487,12 +487,6 @@ std::vector<BatchCopTask> buildBatchCopTasks(
     auto & cache = cluster->region_cache;
 
     assert(physical_table_ids.size() == ranges_for_each_physical_table.size());
-    auto stores_to_str = [](const std::string_view prefix, const std::map<uint64_t, kv::Store> & stores) -> std::string {
-        std::string msg(prefix);
-        for (const auto & ele : stores)
-            msg += " " + std::to_string(ele.first) + ":" + ele.second.addr;
-        return msg;
-    };
     const bool filter_alive_tiflash_stores = (store_type == kv::StoreType::TiFlash);
 
     while (true) // for `need_retry`

@@ -22,12 +22,12 @@ enum class StoreType
 
 struct Store
 {
-    const uint64_t id;
-    const std::string addr;
-    const std::string peer_addr;
-    const std::map<std::string, std::string> labels;
-    const StoreType store_type;
-    const ::metapb::StoreState state;
+    uint64_t id;
+    std::string addr;
+    std::string peer_addr;
+    std::map<std::string, std::string> labels;
+    StoreType store_type;
+    ::metapb::StoreState state;
 
     Store(uint64_t id_, const std::string & addr_, const std::string & peer_addr_, const std::map<std::string, std::string> & labels_, StoreType store_type_, const ::metapb::StoreState state_)
         : id(id_)
@@ -203,6 +203,7 @@ public:
     RegionPtr getRegionByID(Backoffer & bo, const RegionVerID & id);
 
     Store getStore(Backoffer & bo, uint64_t id);
+    void forceReloadAllStores();
 
     // Return values:
     // 1. all stores of peers of this region
