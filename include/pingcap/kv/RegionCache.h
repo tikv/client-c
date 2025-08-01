@@ -30,8 +30,8 @@ struct Store
     ::metapb::StoreState state;
 
     Store(uint64_t id_, const std::string & addr_, const std::string & peer_addr_,
-        const std::map<std::string, std::string> & labels_, StoreType store_type_,
-        const ::metapb::StoreState state_)
+            const std::map<std::string, std::string> & labels_, StoreType store_type_,
+            const ::metapb::StoreState state_)
         : id(id_)
         , addr(addr_)
         , peer_addr(peer_addr_)
