@@ -401,7 +401,8 @@ std::vector<BatchCopTask> balanceBatchCopTasks(
     return ret;
 }
 
-// Return true and invalid region cache if one region has no alive store.
+// If there is a region has no alive store, region cache will be dropped and retry build batch cop task.
+// Return true means need retry.
 bool checkAliveStores(
         const std::vector<CopTask> & cop_tasks,
         const std::vector<std::vector<uint64_t>> & all_used_tiflash_store_ids,
@@ -411,7 +412,8 @@ bool checkAliveStores(
         kv::RegionCachePtr & region_cache,
         Logger * log)
 {
-    // Fast path to skip check alive_tiflash_stores map. Expect we can skip check in most cases.
+    // Fast path to skip check alive_tiflash_stores. We expect can skip check in most cases.
+    assert(all_used_tiflash_store_ids_set.size() >= alive_tiflash_stores.size());
     const auto dead_store_num = all_used_tiflash_store_ids_set.size() - alive_tiflash_stores.size();
     if (min_replica_num > dead_store_num)
         return false;
@@ -421,8 +423,8 @@ bool checkAliveStores(
     for (size_t i = 0; i < all_used_tiflash_store_ids.size(); ++i)
     {
         bool ok = false;
-        const auto & this_cop_task_used_tiflash_store_ids = all_used_tiflash_store_ids[i];
-        for (const auto & store : this_cop_task_used_tiflash_store_ids)
+        const auto & store_ids_this_region = all_used_tiflash_store_ids[i];
+        for (const auto & store : store_ids_this_region)
         {
             if (alive_tiflash_stores.find(store) != alive_tiflash_stores.end())
             {
@@ -438,11 +440,11 @@ bool checkAliveStores(
     for (const auto & region : invalid_regions)
         region_cache->dropRegion(region);
 
+    const auto ori_invalid_size = invalid_regions.size();
     if (!invalid_regions.empty())
     {
-        const auto ori_invalid_size = invalid_regions.size();
         // Only log 10 invalid regions when log level is larger than info.
-        if (log->getLevel() >= Poco::Message::PRIO_INFORMATION)
+        if (log->getLevel() >= Poco::Message::PRIO_INFORMATION && invalid_regions.size() > 10)
             invalid_regions.resize(10);
         std::string err_msg = std::string("size: ") + std::to_string(ori_invalid_size) + std::string(". ");
         for (const auto & region : invalid_regions)
@@ -450,7 +452,7 @@ bool checkAliveStores(
         log->information("got invalid regions that cannot find any alive store, retrying: " + err_msg);
     }
     // need_retry will be true when there is invalid region.
-    return !invalid_regions.empty();
+    return ori_invalid_size > 0;
 }
 
 std::string storesToStr(const std::string_view prefix, const std::unordered_map<uint64_t, kv::Store> & stores)

@@ -248,9 +248,24 @@ Store RegionCache::getStore(Backoffer & bo, uint64_t id)
     return reloadStoreWithoutLock(store);
 }
 
-std::pair<std::vector<uint64_t>, std::vector<uint64_t>> RegionCache::getAllValidTiFlashStores(Backoffer & bo, const RegionVerID & region_id, const Store & current_store, const LabelFilter & label_filter, const std::unordered_set<uint64_t> * store_id_blocklist)
+void RegionCache::forceReloadAllStores()
 {
-    auto remove_blocklist = [](const std::unordered_set<uint64_t> * store_id_blocklist, std::vector<uint64_t> & stores, const RegionVerID & region_id, Logger * log) {
+    const auto all_stores = pd_client->getAllStores(/*exclude_tombstone=*/false);
+    std::lock_guard<std::mutex> lock(store_mutex);
+    for (const auto & store_pb : all_stores)
+        reloadStoreWithoutLock(store_pb);
+}
+
+std::pair<std::vector<uint64_t>, std::vector<uint64_t>> RegionCache::getAllValidTiFlashStores(Backoffer & bo,
+        const RegionVerID & region_id,
+        const Store & current_store,
+        const LabelFilter & label_filter,
+        const std::unordered_set<uint64_t> * store_id_blocklist)
+{
+    auto remove_blocklist = [](const std::unordered_set<uint64_t> * store_id_blocklist,
+            std::vector<uint64_t> & stores,
+            const RegionVerID & region_id,
+            Logger * log) {
         if (store_id_blocklist != nullptr)
         {
             auto origin_size = stores.size();
@@ -276,7 +291,6 @@ std::pair<std::vector<uint64_t>, std::vector<uint64_t>> RegionCache::getAllValid
     }
 
     // Get others tiflash store ids
-    // TODO: client-go also check region cache TTL.
     auto peers = selectTiFlashPeers(bo, cached_region->meta, label_filter);
     for (const auto & peer : peers)
     {
@@ -453,14 +467,6 @@ std::map<uint64_t, Store> RegionCache::getAllTiFlashStores(const LabelFilter & l
             ret_stores.emplace(store.first, store.second);
     }
     return ret_stores;
-}
-
-void RegionCache::forceReloadAllStores()
-{
-    const auto all_stores = pd_client->getAllStores(/*exclude_tombstone=*/false);
-    std::lock_guard<std::mutex> lock(store_mutex);
-    for (const auto & store_pb : all_stores)
-        reloadStoreWithoutLock(store_pb);
 }
 
 bool hasLabel(const std::map<std::string, std::string> & labels, const std::string & key, const std::string & val)
