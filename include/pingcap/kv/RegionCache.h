@@ -29,7 +29,9 @@ struct Store
     StoreType store_type;
     ::metapb::StoreState state;
 
-    Store(uint64_t id_, const std::string & addr_, const std::string & peer_addr_, const std::map<std::string, std::string> & labels_, StoreType store_type_, const ::metapb::StoreState state_)
+    Store(uint64_t id_, const std::string & addr_, const std::string & peer_addr_,
+        const std::map<std::string, std::string> & labels_, StoreType store_type_,
+        const ::metapb::StoreState state_)
         : id(id_)
         , addr(addr_)
         , peer_addr(peer_addr_)
@@ -132,6 +134,7 @@ struct Region
 
 using RegionPtr = std::shared_ptr<Region>;
 using LabelFilter = bool (*)(const std::map<std::string, std::string> &);
+using StoreFilter = std::function<bool(uint64_t)>;
 
 struct KeyLocation
 {
@@ -184,7 +187,12 @@ public:
         , log(&Logger::get("pingcap.tikv"))
     {}
 
-    RPCContextPtr getRPCContext(Backoffer & bo, const RegionVerID & id, StoreType store_type, bool load_balance, const LabelFilter & tiflash_label_filter, const std::unordered_set<uint64_t> * store_id_blocklist = nullptr);
+    RPCContextPtr getRPCContext(Backoffer & bo,
+            const RegionVerID & id,
+            StoreType store_type,
+            bool load_balance,
+            const LabelFilter & tiflash_label_filter,
+            const std::unordered_set<uint64_t> * store_id_blocklist = nullptr);
 
     bool updateLeader(const RegionVerID & region_id, const metapb::Peer & leader);
 
@@ -206,9 +214,13 @@ public:
     void forceReloadAllStores();
 
     // Return values:
-    // 1. all stores of peers of this region
-    // 2. stores of non pending peers of this region
-    std::pair<std::vector<uint64_t>, std::vector<uint64_t>> getAllValidTiFlashStores(Backoffer & bo, const RegionVerID & region_id, const Store & current_store, const LabelFilter & label_filter, const std::unordered_set<uint64_t> * store_id_blocklist = nullptr);
+    // 1. all stores of this region.
+    // 2. stores of non pending peers of this region.
+    std::pair<std::vector<uint64_t>, std::vector<uint64_t>> getAllValidTiFlashStores(Backoffer & bo,
+            const RegionVerID & region_id,
+            const Store & current_store,
+            const LabelFilter & label_filter,
+            const std::unordered_set<uint64_t> * store_id_blocklist = nullptr);
 
     std::pair<std::unordered_map<RegionVerID, std::vector<std::string>>, RegionVerID>
     groupKeysByRegion(Backoffer & bo,
