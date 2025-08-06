@@ -588,7 +588,6 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         std::unordered_map<uint64_t, kv::Store> alive_tiflash_stores;
         if (filter_alive_tiflash_stores)
         {
-            // auto tiflash_stores = cache->getAllTiFlashStores(label_filter, /*exclude_tombstone =*/true);
             std::unordered_map<uint64_t, kv::Store> all_used_tiflash_stores;
             all_used_tiflash_stores.reserve(all_used_tiflash_store_ids_set.size());
             for (const auto & store_id : all_used_tiflash_store_ids_set)
