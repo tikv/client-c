@@ -170,9 +170,9 @@ std::vector<LocationKeyRanges> splitKeyRangesByLocations(
     return res;
 }
 
-std::map<uint64_t, kv::Store> filterAliveStores(kv::Cluster * cluster, const std::map<uint64_t, kv::Store> & stores, Logger * log)
+std::unordered_map<uint64_t, kv::Store> filterAliveStores(kv::Cluster * cluster, const std::unordered_map<uint64_t, kv::Store> & stores, Logger * log)
 {
-    std::map<uint64_t, kv::Store> alive_stores;
+    std::unordered_map<uint64_t, kv::Store> alive_stores;
     for (const auto & ele : stores)
     {
         if (!cluster->mpp_prober->isRecovery(ele.second.addr, /*mpp_fail_ttl=*/std::chrono::seconds(0)))
@@ -190,7 +190,7 @@ std::map<uint64_t, kv::Store> filterAliveStores(kv::Cluster * cluster, const std
 }
 
 std::vector<BatchCopTask> balanceBatchCopTasks(
-    const std::map<uint64_t, kv::Store> * alive_tiflash_stores,
+    const std::unordered_map<uint64_t, kv::Store> * alive_tiflash_stores,
     const std::vector<BatchCopTask> & original_tasks,
     bool is_mpp,
     Poco::Logger * log,
@@ -452,6 +452,68 @@ std::vector<BatchCopTask> balanceBatchCopTasks(
     }
     return ret;
 }
+
+// If there is a region has no alive store, region cache will be dropped and retry build batch cop task.
+// Return true means need retry.
+bool checkAliveStores(
+    const std::vector<CopTask> & cop_tasks,
+    const std::vector<std::vector<uint64_t>> & all_used_tiflash_store_ids,
+    const std::unordered_set<uint64_t> & all_used_tiflash_store_ids_set,
+    uint64_t min_replica_num,
+    const std::unordered_map<uint64_t, kv::Store> & alive_tiflash_stores,
+    kv::RegionCachePtr & region_cache,
+    Logger * log)
+{
+    // Fast path to skip check alive_tiflash_stores. We expect can skip check in most cases.
+    assert(all_used_tiflash_store_ids_set.size() >= alive_tiflash_stores.size());
+    const auto dead_store_num = all_used_tiflash_store_ids_set.size() - alive_tiflash_stores.size();
+    if (min_replica_num > dead_store_num)
+        return false;
+
+    std::vector<kv::RegionVerID> invalid_regions;
+    assert(all_used_tiflash_store_ids.size() == cop_tasks.size());
+    for (size_t i = 0; i < all_used_tiflash_store_ids.size(); ++i)
+    {
+        bool ok = false;
+        const auto & store_ids_this_region = all_used_tiflash_store_ids[i];
+        for (const auto & store : store_ids_this_region)
+        {
+            if (alive_tiflash_stores.find(store) != alive_tiflash_stores.end())
+            {
+                ok = true;
+                break;
+            }
+        }
+
+        if (!ok)
+            invalid_regions.push_back(cop_tasks[i].region_id);
+    }
+
+    for (const auto & region : invalid_regions)
+        region_cache->dropRegion(region);
+
+    const auto ori_invalid_size = invalid_regions.size();
+    if (!invalid_regions.empty())
+    {
+        // Only log 10 invalid regions when log level is larger than info.
+        if (log->getLevel() >= Poco::Message::PRIO_INFORMATION && invalid_regions.size() > 10)
+            invalid_regions.resize(10);
+        std::string err_msg = std::string("size: ") + std::to_string(ori_invalid_size) + std::string(". ");
+        for (const auto & region : invalid_regions)
+            err_msg += region.toString() + ", ";
+        log->information("got invalid regions that cannot find any alive store, retrying: " + err_msg);
+    }
+    // need_retry will be true when there is invalid region.
+    return ori_invalid_size > 0;
+}
+
+std::string storesToStr(const std::string_view prefix, const std::unordered_map<uint64_t, kv::Store> & stores)
+{
+    std::string msg(prefix);
+    for (const auto & ele : stores)
+        msg += " " + ele.second.addr;
+    return msg;
+};
 } // namespace details
 
 // The elements in the two `physical_table_ids` and `ranges_for_each_physical_table` should be in one-to-one mapping.
@@ -479,12 +541,6 @@ std::vector<BatchCopTask> buildBatchCopTasks(
     auto & cache = cluster->region_cache;
 
     assert(physical_table_ids.size() == ranges_for_each_physical_table.size());
-    auto stores_to_str = [](const std::string_view prefix, const std::map<uint64_t, kv::Store> & stores) -> std::string {
-        std::string msg(prefix);
-        for (const auto & ele : stores)
-            msg += " " + std::to_string(ele.first) + ":" + ele.second.addr;
-        return msg;
-    };
     const bool filter_alive_tiflash_stores = (store_type == kv::StoreType::TiFlash);
 
     while (true) // for `need_retry`
@@ -513,42 +569,11 @@ std::vector<BatchCopTask> buildBatchCopTasks(
         std::map<std::string, BatchCopTask> store_task_map;
         bool need_retry = false;
 
-        std::map<uint64_t, kv::Store> alive_tiflash_stores;
-        if (filter_alive_tiflash_stores)
-        {
-            bool has_force_get_all_stores = false;
-            while (alive_tiflash_stores.empty())
-            {
-                // TODO: Need find a way to drop store info in RegionCache. Otherwise we may have meanless probing of tiflash stores.
-                // We don't directly drop the cached store info in RegionCache here, because the current mechanism of RegionCache is to
-                // cache store information by looking up the store corresponding to region.peer from PD.
-                // Therefore, the removal mechanism should also be consistent: only when all cached regions on a store have been dropped should the
-                // cached store info be removed. Otherwise, it may lead to inconsistencies between RegionCache::region and RegionCache::store.
-                auto tiflash_stores = cache->getAllTiFlashStores(label_filter, /*exclude_tombstone =*/true);
-                log->information(stores_to_str("before filter alive stores: ", tiflash_stores));
-                // filter by the mpp_prober
-                alive_tiflash_stores = details::filterAliveStores(cluster, tiflash_stores, log);
-                log->information(stores_to_str("after filter alive stores: ", alive_tiflash_stores));
-                if (alive_tiflash_stores.empty())
-                {
-                    if (!has_force_get_all_stores)
-                    {
-                        // Get all stores immediately first time.
-                        log->warning("no alive tiflash, cannot dispatch BatchCopTask, force get all stores from pd", ErrorCodes::CoprocessorError);
-                        has_force_get_all_stores = true;
-                        cache->forceReloadAllStores();
-                    }
-                    else
-                    {
-                        // Backoff and get all stores.
-                        log->warning("no alive tiflash, cannot dispatch BatchCopTask, retrying", ErrorCodes::CoprocessorError);
-                        bo.backoff(kv::boTiFlashRPC, Exception("No alive tiflash stores"));
-                        cache->forceReloadAllStores();
-                    }
-                }
-            }
-        }
-
+        std::vector<std::vector<uint64_t>> all_used_tiflash_store_ids;
+        all_used_tiflash_store_ids.reserve(cop_tasks.size());
+        std::unordered_set<uint64_t> all_used_tiflash_store_ids_set;
+        all_used_tiflash_store_ids_set.reserve(cop_tasks.size());
+        uint64_t min_replica_num = std::numeric_limits<uint64_t>::max();
         for (const auto & cop_task : cop_tasks)
         {
             // In getRPCContext(), region will be dropped when we cannot get valid store.
@@ -559,8 +584,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                                                                     store_type,
                                                                     /*load_balance=*/is_mpp,
                                                                     label_filter,
-                                                                    store_id_blocklist,
-                                                                    filter_alive_tiflash_stores ? &alive_tiflash_stores : nullptr);
+                                                                    store_id_blocklist);
 
             if (rpc_context == nullptr)
             {
@@ -570,6 +594,16 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                 // Then `splitRegion` will reloads these regions.
                 continue;
             }
+
+            auto [all_stores, non_pending_stores] = cluster->region_cache->getAllValidTiFlashStores(bo, cop_task.region_id, rpc_context->store, label_filter, store_id_blocklist);
+            // There are pending store for this region, need to refresh region cache until this region is ok.
+            if (all_stores.size() != non_pending_stores.size())
+                cluster->region_cache->dropRegion(cop_task.region_id);
+
+            // Use non_pending_stores to dispatch this task, so no need to wait tiflash replica sync from tikv.
+            // If all stores are in pending state, we use `all_stores` as fallback.
+            if (!non_pending_stores.empty())
+                all_stores = non_pending_stores;
 
             if (auto iter = store_task_map.find(rpc_context->addr); iter == store_task_map.end())
             {
@@ -581,7 +615,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                     .region_id = cop_task.region_id,
                     // .meta = rpc_context.meta
                     .ranges = cop_task.ranges,
-                    .all_stores = rpc_context->all_stores,
+                    .all_stores = all_stores,
                     .partition_index = cop_task.partition_index,
                 });
                 batch_cop_task.store_id = rpc_context->store.id;
@@ -593,11 +627,35 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                     .region_id = cop_task.region_id,
                     // .meta = rpc_context.meta
                     .ranges = cop_task.ranges,
-                    .all_stores = rpc_context->all_stores,
+                    .all_stores = all_stores,
                     .partition_index = cop_task.partition_index,
                 });
             }
+            min_replica_num = std::min(min_replica_num, all_stores.size());
+            all_used_tiflash_store_ids.push_back(all_stores);
+            for (const auto & store : all_stores)
+                all_used_tiflash_store_ids_set.insert(store);
         }
+
+        std::unordered_map<uint64_t, kv::Store> alive_tiflash_stores;
+        if (filter_alive_tiflash_stores)
+        {
+            std::unordered_map<uint64_t, kv::Store> all_used_tiflash_stores;
+            all_used_tiflash_stores.reserve(all_used_tiflash_store_ids_set.size());
+            for (const auto & store_id : all_used_tiflash_store_ids_set)
+            {
+                auto store = cluster->region_cache->getStore(bo, store_id);
+                all_used_tiflash_stores.emplace(store_id, store);
+            }
+            log->information(details::storesToStr("before filter alive stores: ", all_used_tiflash_stores));
+            // filter by the mpp_prober
+            alive_tiflash_stores = details::filterAliveStores(cluster, all_used_tiflash_stores, log);
+            log->information(details::storesToStr("after filter alive stores: ", alive_tiflash_stores));
+        }
+
+        if (!need_retry && filter_alive_tiflash_stores)
+            need_retry = details::checkAliveStores(cop_tasks, all_used_tiflash_store_ids, all_used_tiflash_store_ids_set, min_replica_num, alive_tiflash_stores, cluster->region_cache, log);
+
         auto batch_cop_task_end = std::chrono::steady_clock::now();
         batch_cop_task_elapsed += std::chrono::duration_cast<std::chrono::milliseconds>(batch_cop_task_end - batch_cop_task_start).count();
         if (need_retry)
