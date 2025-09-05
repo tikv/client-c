@@ -579,7 +579,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
                     .partition_index = cop_task.partition_index,
                 });
             }
-            min_replica_num = std::min(min_replica_num, all_stores.size());
+            min_replica_num = std::min(min_replica_num, static_cast<uint64_t>(all_stores.size()));
             all_used_tiflash_store_ids.push_back(all_stores);
             for (const auto & store : all_stores)
                 all_used_tiflash_store_ids_set.insert(store);
