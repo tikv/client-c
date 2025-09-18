@@ -786,7 +786,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
         bool same_zone_req = true;
         try
         {
-            client.sendReqToRegion<kv::RPC_NAME(Coprocessor)>(bo, req, resp.get(), tiflash_label_filter, timeout, task.store_type, task.meta_data, nullptr, source_zone_label, &same_zone_req);
+            client.sendReqToRegion<kv::RPC_NAME(Coprocessor)>(bo, req, resp.get(), tiflash_label_filter, timeout, task.store_type, task.meta_data, nullptr, source_zone_label, &same_zone_req, task.prefer_store_id);
         }
         catch (Exception & e)
         {
@@ -816,7 +816,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
     bool same_zone_req = true;
     try
     {
-        reader = client.sendStreamReqToRegion<kv::RPC_NAME(CoprocessorStream), ::coprocessor::Request, ::coprocessor::Response>(bo, req, tiflash_label_filter, timeout, task.store_type, task.meta_data, source_zone_label, &same_zone_req);
+        reader = client.sendStreamReqToRegion<kv::RPC_NAME(CoprocessorStream), ::coprocessor::Request, ::coprocessor::Response>(bo, req, tiflash_label_filter, timeout, task.store_type, task.meta_data, nullptr, source_zone_label, &same_zone_req, task.prefer_store_id);
     }
     catch (Exception & e)
     {
@@ -968,6 +968,8 @@ void ResponseIter::handleTask(const CopTask & task)
 {
     std::unordered_map<uint64_t, kv::Backoffer> bo_maps;
     std::vector<CopTask> remain_tasks({task});
+    // Set the `prefer_store_id` for the initial task to always try the preferred store first
+    remain_tasks[0].prefer_store_id = prefer_store_id;
     size_t idx = 0;
     while (idx < remain_tasks.size())
     {
@@ -984,6 +986,18 @@ void ResponseIter::handleTask(const CopTask & task)
                 new_tasks = handleTaskImpl<is_stream>(bo, current_task);
             if (!new_tasks.empty())
             {
+                if (new_tasks.size() == 1 && new_tasks[0].region_id == current_task.region_id)
+                {
+                    // For retrying the same region, clear `prefer_store_id` to fallback to normal round-robin
+                    // store selection, in order to avoid infinite retries on an abnormal store
+                    new_tasks[0].prefer_store_id = 0;
+                }
+                else
+                {
+                    // For the new region tasks, set `prefer_store_id` to always try the preferred store first
+                    for (auto & task : new_tasks)
+                        task.prefer_store_id = prefer_store_id;
+                }
                 remain_tasks.insert(remain_tasks.end(), new_tasks.begin(), new_tasks.end());
             }
         }
