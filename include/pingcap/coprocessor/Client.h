@@ -71,6 +71,7 @@ struct CopTask
     pd::KeyspaceID keyspace_id;
     uint64_t connection_id;
     std::string connection_alias;
+    uint64_t prefer_store_id = 0;
 };
 
 struct RegionInfo
