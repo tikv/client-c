@@ -830,6 +830,7 @@ void ResponseIter::handleTask(const CopTask & task)
 {
     std::unordered_map<uint64_t, kv::Backoffer> bo_maps;
     std::vector<CopTask> remain_tasks({task});
+    // Set the `prefer_store_id` for the initial task to always try the preferred store first
     remain_tasks[0].prefer_store_id = prefer_store_id;
     size_t idx = 0;
     while (idx < remain_tasks.size())
@@ -845,12 +846,13 @@ void ResponseIter::handleTask(const CopTask & task)
             {
                 if (new_tasks.size() == 1 && new_tasks[0].region_id == current_task.region_id)
                 {
-                    // For retrying the same region, clear `prefer_store_id` to fallback to normal round-robin store selection
+                    // For retrying the same region, clear `prefer_store_id` to fallback to normal round-robin
+                    // store selection, in order to avoid infinite retries on an abnormal store
                     new_tasks[0].prefer_store_id = 0;
                 }
                 else
                 {
-                    // For the new region tasks, set `prefer_store_id` to prefer the given store
+                    // For the new region tasks, set `prefer_store_id` to always try the preferred store first
                     for (auto & task : new_tasks)
                         task.prefer_store_id = prefer_store_id;
                 }
