@@ -4,7 +4,6 @@
 #include <pingcap/kv/Cluster.h>
 #include <pingcap/kv/RegionCache.h>
 #include <pingcap/kv/Rpc.h>
-#include <cstddef>
 
 namespace pingcap
 {
