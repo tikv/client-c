@@ -192,7 +192,8 @@ public:
             StoreType store_type,
             bool load_balance,
             const LabelFilter & tiflash_label_filter,
-            const std::unordered_set<uint64_t> * store_id_blocklist = nullptr);
+            const std::unordered_set<uint64_t> * store_id_blocklist = nullptr,
+            uint64_t prefer_store_id = 0);
 
     bool updateLeader(const RegionVerID & region_id, const metapb::Peer & leader);
 

@@ -14,7 +14,8 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo,
         const StoreType store_type,
         bool load_balance,
         const LabelFilter & tiflash_label_filter,
-        const std::unordered_set<uint64_t> * store_id_blocklist)
+        const std::unordered_set<uint64_t> * store_id_blocklist,
+        uint64_t prefer_store_id)
 {
     for (;;)
     {
@@ -34,13 +35,33 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo,
         {
             // can access to all tiflash peers
             peers = selectTiFlashPeers(bo, meta, tiflash_label_filter);
+        }
+
+        const size_t peer_size = peers.size();
+        if (prefer_store_id > 0)
+        {
+            for (size_t i = 0; i < peer_size; i++)
+            {
+                auto & peer = peers[i];
+                if (peer.store_id() != prefer_store_id)
+                    continue;
+                auto store = getStore(bo, prefer_store_id);
+                if (store.store_type != store_type)
+                    break;
+                if (store.addr.empty())
+                    break;
+                if (store_id_blocklist && store_id_blocklist->count(store.id) > 0)
+                    break;
+                return std::make_shared<RPCContext>(id, meta, peer, store, store.addr);
+            }
+        }
+        if (store_type == StoreType::TiFlash)
+        {
             if (load_balance)
                 start_index = ++region->work_tiflash_peer_idx;
             else
                 start_index = region->work_tiflash_peer_idx;
         }
-
-        const size_t peer_size = peers.size();
         for (size_t i = 0; i < peer_size; i++)
         {
             size_t peer_index = (i + start_index) % peer_size;
