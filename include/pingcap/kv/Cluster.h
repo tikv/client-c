@@ -48,7 +48,7 @@ struct Cluster
         , oracle(std::make_unique<pd::Oracle>(pd_client, std::chrono::milliseconds(oracle_update_interval)))
         , lock_resolver(std::make_unique<LockResolver>(this))
         , api_version(config.api_version)
-        , thread_pool(std::make_unique<pingcap::common::FixedThreadPool>(1))
+        , thread_pool(std::make_unique<pingcap::common::FixedThreadPool>(2))
         , mpp_prober(std::make_unique<common::MPPProber>(this))
     {
         startBackgroundTasks();
@@ -65,6 +65,8 @@ struct Cluster
     ~Cluster()
     {
         mpp_prober->stop();
+        if (region_cache)
+            region_cache->stop();
         thread_pool->stop();
     }
 

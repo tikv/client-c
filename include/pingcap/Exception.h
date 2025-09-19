@@ -55,4 +55,26 @@ public:
     bool empty() const { return code() == 0 && message().empty(); }
 };
 
+inline std::string getCurrentExceptionMsg(const std::string & prefix_msg)
+{
+    std::string msg = prefix_msg;
+    try
+    {
+        throw;
+    }
+    catch (const Exception & e)
+    {
+        msg += e.message();
+    }
+    catch (const std::exception & e)
+    {
+        msg += std::string(e.what());
+    }
+    catch (...)
+    {
+        msg += "unknown exception";
+    }
+    return msg;
+}
+
 } // namespace pingcap

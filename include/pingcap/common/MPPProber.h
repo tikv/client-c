@@ -57,6 +57,16 @@ struct ProbeState
     void detectAndUpdateState(const std::chrono::seconds & detect_period, size_t detect_rpc_timeout);
 };
 
+// The main purpose of MPPProber is to prevent excessive delays caused by repeatedly probing failed stores.
+//
+// MPPProber continuously probes failed_stores in the background. If a probe succeeds, it sets the store's recovery_time.
+// Callers check this recovery_time and determine whether the store has recovered based on a TTL using MPPProber::isRecovery().
+//
+// If a store is considered recovered, the caller will re-trigger a liveness probe.
+// If the probe fails again, the store will be re-added to failed_stores; otherwise, it can be used directly.
+//
+// If a store was previously attempted to be used (last_lookup_time exists) but couldn't actually be used,
+// and this state persists beyond MAX_OBSOLETE_TIME, it will be removed from failed_stores to avoid being continuously probed in the background.
 class MPPProber
 {
 public:
@@ -91,6 +101,9 @@ private:
     std::atomic<bool> stopped;
     FailedStoreMap failed_stores;
     std::mutex store_lock;
+
+    std::mutex scan_mu;
+    std::condition_variable scan_cv;
 };
 } // namespace common
 } // namespace pingcap

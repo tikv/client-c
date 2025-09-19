@@ -9,7 +9,13 @@ namespace kv
 {
 // load_balance is an option, becase if store fail, it may cause batchCop fail.
 // For now, label_filter only works for tiflash.
-RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id, const StoreType store_type, bool load_balance, const LabelFilter & tiflash_label_filter, const std::unordered_set<uint64_t> * store_id_blocklist)
+RPCContextPtr RegionCache::getRPCContext(Backoffer & bo,
+        const RegionVerID & id,
+        const StoreType store_type,
+        bool load_balance,
+        const LabelFilter & tiflash_label_filter,
+        const std::unordered_set<uint64_t> * store_id_blocklist,
+        uint64_t prefer_store_id)
 {
     for (;;)
     {
@@ -29,13 +35,33 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
         {
             // can access to all tiflash peers
             peers = selectTiFlashPeers(bo, meta, tiflash_label_filter);
+        }
+
+        const size_t peer_size = peers.size();
+        if (prefer_store_id > 0)
+        {
+            for (size_t i = 0; i < peer_size; i++)
+            {
+                auto & peer = peers[i];
+                if (peer.store_id() != prefer_store_id)
+                    continue;
+                auto store = getStore(bo, prefer_store_id);
+                if (store.store_type != store_type)
+                    break;
+                if (store.addr.empty())
+                    break;
+                if (store_id_blocklist && store_id_blocklist->count(store.id) > 0)
+                    break;
+                return std::make_shared<RPCContext>(id, meta, peer, store, store.addr);
+            }
+        }
+        if (store_type == StoreType::TiFlash)
+        {
             if (load_balance)
                 start_index = ++region->work_tiflash_peer_idx;
             else
                 start_index = region->work_tiflash_peer_idx;
         }
-
-        const size_t peer_size = peers.size();
         for (size_t i = 0; i < peer_size; i++)
         {
             size_t peer_index = (i + start_index) % peer_size;
@@ -56,6 +82,7 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo, const RegionVerID & id,
             }
             if (store_id_blocklist && store_id_blocklist->count(store.id) > 0)
             {
+                log->warning("blocklist remove peer for region: " + id.toString() + std::string(", store: ") + std::to_string(store.id));
                 continue;
             }
             if (store_type == StoreType::TiFlash)
@@ -211,7 +238,7 @@ metapb::Store RegionCache::loadStore(Backoffer & bo, uint64_t id)
     }
 }
 
-Store RegionCache::reloadStore(const metapb::Store & store)
+Store RegionCache::reloadStoreWithoutLock(const metapb::Store & store)
 {
     auto id = store.id();
     std::map<std::string, std::string> labels;
@@ -226,8 +253,8 @@ Store RegionCache::reloadStore(const metapb::Store & store)
             store_type = StoreType::TiFlash;
         }
     }
-    auto it = stores.emplace(id, Store(id, store.address(), store.peer_address(), labels, store_type, store.state()));
-    return it.first->second;
+    auto res = stores.insert_or_assign(id, Store(id, store.address(), store.peer_address(), labels, store_type, store.state()));
+    return res.first->second;
 }
 
 Store RegionCache::getStore(Backoffer & bo, uint64_t id)
@@ -239,12 +266,27 @@ Store RegionCache::getStore(Backoffer & bo, uint64_t id)
         return (it->second);
     }
     auto store = loadStore(bo, id);
-    return reloadStore(store);
+    return reloadStoreWithoutLock(store);
 }
 
-std::pair<std::vector<uint64_t>, std::vector<uint64_t>> RegionCache::getAllValidTiFlashStores(Backoffer & bo, const RegionVerID & region_id, const Store & current_store, const LabelFilter & label_filter, const std::unordered_set<uint64_t> * store_id_blocklist)
+void RegionCache::forceReloadAllStores()
 {
-    auto remove_blocklist = [](const std::unordered_set<uint64_t> * store_id_blocklist, std::vector<uint64_t> & stores, const RegionVerID & region_id, Logger * log) {
+    const auto all_stores = pd_client->getAllStores(/*exclude_tombstone=*/false);
+    std::lock_guard<std::mutex> lock(store_mutex);
+    for (const auto & store_pb : all_stores)
+        reloadStoreWithoutLock(store_pb);
+}
+
+std::pair<std::vector<uint64_t>, std::vector<uint64_t>> RegionCache::getAllValidTiFlashStores(Backoffer & bo,
+        const RegionVerID & region_id,
+        const Store & current_store,
+        const LabelFilter & label_filter,
+        const std::unordered_set<uint64_t> * store_id_blocklist)
+{
+    auto remove_blocklist = [](const std::unordered_set<uint64_t> * store_id_blocklist,
+            std::vector<uint64_t> & stores,
+            const RegionVerID & region_id,
+            Logger * log) {
         if (store_id_blocklist != nullptr)
         {
             auto origin_size = stores.size();
@@ -270,7 +312,6 @@ std::pair<std::vector<uint64_t>, std::vector<uint64_t>> RegionCache::getAllValid
     }
 
     // Get others tiflash store ids
-    // TODO: client-go also check region cache TTL.
     auto peers = selectTiFlashPeers(bo, cached_region->meta, label_filter);
     for (const auto & peer : peers)
     {

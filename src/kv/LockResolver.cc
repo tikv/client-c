@@ -101,7 +101,7 @@ int64_t LockResolver::resolveLocks(
                     return before_txn_expired.value();
                 }
             }
-            else
+            else // status.ttl != 0
             {
                 auto before_txn_expired_time = cluster->oracle->untilExpired(lock->txn_id, status.ttl);
                 before_txn_expired.update(before_txn_expired_time);
@@ -295,7 +295,7 @@ void LockResolver::resolvePessimisticLock(Backoffer & bo, LockPtr lock, std::uno
         const auto & key_errors = response.errors();
         if (!key_errors.empty())
         {
-            log->error("unexpected resolve pessimistic lock err: " + key_errors[0].ShortDebugString());
+            log->warning("unexpected resolve pessimistic lock err: " + key_errors[0].ShortDebugString());
             throw Exception("unexpected err :" + key_errors[0].ShortDebugString(), ErrorCodes::UnknownError);
         }
 

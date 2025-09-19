@@ -44,7 +44,10 @@ struct RegionClient
                          int timeout = dailTimeout,
                          StoreType store_type = StoreType::TiKV,
                          const kv::GRPCMetaData & meta_data = {},
-                         const std::unordered_set<uint64_t> * store_id_blocklist = nullptr)
+                         const std::unordered_set<uint64_t> * store_id_blocklist = nullptr,
+                         const std::string & source_zone_label = "",
+                         bool * same_zone_flag = nullptr,
+                         uint64_t prefer_store_id = 0)
     {
         if (store_type == kv::StoreType::TiFlash && tiflash_label_filter == kv::labelFilterInvalid)
         {
@@ -52,7 +55,7 @@ struct RegionClient
         }
         for (;;)
         {
-            RPCContextPtr ctx = cluster->region_cache->getRPCContext(bo, region_id, store_type, /*load_balance=*/true, tiflash_label_filter, store_id_blocklist);
+            RPCContextPtr ctx = cluster->region_cache->getRPCContext(bo, region_id, store_type, /*load_balance=*/true, tiflash_label_filter, store_id_blocklist, prefer_store_id);
             if (ctx == nullptr)
             {
                 // If the region is not found in cache, it must be out
@@ -85,6 +88,12 @@ struct RegionClient
                 log->warning("region " + region_id.toString() + " find error: " + resp->region_error().DebugString());
                 onRegionError(bo, ctx, resp->region_error());
                 continue;
+            }
+            if (same_zone_flag && source_zone_label != "") {
+                auto iter = ctx->store.labels.find(DCLabelKey);
+                if (iter != ctx->store.labels.end()) {
+                    *same_zone_flag = iter->second == source_zone_label;
+                }
             }
             return;
         }
@@ -133,7 +142,11 @@ struct RegionClient
                                                               const LabelFilter & tiflash_label_filter = kv::labelFilterInvalid,
                                                               int timeout = dailTimeout,
                                                               StoreType store_type = StoreType::TiKV,
-                                                              const kv::GRPCMetaData & meta_data = {})
+                                                              const kv::GRPCMetaData & meta_data = {},
+                                                              const std::unordered_set<uint64_t> * store_id_blocklist = nullptr,
+                                                              const std::string & source_zone_label = "",
+                                                              bool * same_zone_flag = nullptr,
+                                                              uint64_t prefer_store_id = 0)
     {
         if (store_type == kv::StoreType::TiFlash && tiflash_label_filter == kv::labelFilterInvalid)
         {
@@ -141,7 +154,7 @@ struct RegionClient
         }
         for (;;)
         {
-            RPCContextPtr ctx = cluster->region_cache->getRPCContext(bo, region_id, store_type, /*load_balance=*/true, tiflash_label_filter);
+            RPCContextPtr ctx = cluster->region_cache->getRPCContext(bo, region_id, store_type, /*load_balance=*/true, tiflash_label_filter, store_id_blocklist, prefer_store_id);
             if (ctx == nullptr)
             {
                 // If the region is not found in cache, it must be out
@@ -169,6 +182,12 @@ struct RegionClient
             auto status = stream_reader->reader->Finish();
             if (status.ok())
             {
+                if (same_zone_flag && source_zone_label != "") {
+                    auto iter = ctx->store.labels.find(DCLabelKey);
+                    if (iter != ctx->store.labels.end()) {
+                        *same_zone_flag = iter->second == source_zone_label;
+                    }
+                }                
                 // No response msg.
                 stream_reader->no_resp = true;
                 return stream_reader;

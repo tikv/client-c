@@ -48,14 +48,29 @@ void MPPProber::run()
 {
     while (!stopped.load())
     {
-        std::this_thread::sleep_for(std::chrono::seconds(scan_interval));
-        scan();
+        {
+            std::unique_lock lock(scan_mu);
+            scan_cv.wait_for(lock, std::chrono::seconds(scan_interval), [this] () {
+                return stopped.load();
+            });
+        }
+
+        try
+        {
+            scan();
+        }
+        catch (...)
+        {
+            log->warning(getCurrentExceptionMsg("MPPProber scan failed: "));
+        }
     }
 }
 
 void MPPProber::stop()
 {
     stopped.store(true);
+    std::lock_guard lock(scan_mu);
+    scan_cv.notify_all();
 }
 
 void MPPProber::scan()
