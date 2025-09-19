@@ -861,7 +861,7 @@ void ResponseIter::handleTask(const CopTask & task)
         }
         catch (const pingcap::Exception & e)
         {
-            log->error("coprocessor meets error, error_message=" + e.displayText() + " error_code=" + std::to_string(e.code()) + " region_id=" + current_task.region_id.toString());
+            log->warning("coprocessor meets error, error_message=" + e.displayText() + " error_code=" + std::to_string(e.code()) + " region_id=" + current_task.region_id.toString());
             queue->push(Result(e));
             meet_error = true;
             break;
