@@ -9,6 +9,8 @@
 #include <queue>
 #include <string>
 
+#include "kvrpcpb.pb.h"
+
 namespace pingcap
 {
 namespace kv
@@ -23,22 +25,14 @@ struct TxnStatus
     ::kvrpcpb::Action action;
     std::optional<::kvrpcpb::LockInfo> primary_lock;
     bool isCommitted() const { return ttl == 0 && commit_ts > 0; }
+    bool isRollback() const
+    {
+        return ttl == 0 && (action == kvrpcpb::Action::NoAction || action == kvrpcpb::Action::TTLExpireRollback || action == kvrpcpb::Action::LockNotExistRollback);
+    }
 
     bool isCacheable() const
     {
-        if (isCommitted())
-        {
-            return true;
-        }
-        if (ttl == 0)
-        {
-            if (action == kvrpcpb::Action::NoAction || action == kvrpcpb::Action::LockNotExistRollback
-                || action == kvrpcpb::Action::TTLExpireRollback)
-            {
-                return true;
-            }
-        }
-        return false;
+        return isCommitted() || isRollback();
     }
 };
 
@@ -224,6 +218,8 @@ public:
     //    the same transaction.
 
     int64_t resolveLocks(Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks, std::vector<uint64_t> & pushed);
+
+    int64_t getBypassLockTs(Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks, std::vector<uint64_t> & bypass_lock_ts);
 
     int64_t resolveLocks(
         Backoffer & bo,
