@@ -11,8 +11,6 @@
 #include <string>
 #include <unordered_map>
 
-#include "kvrpcpb.pb.h"
-
 namespace pingcap
 {
 namespace kv
