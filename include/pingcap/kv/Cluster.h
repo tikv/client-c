@@ -67,6 +67,8 @@ struct Cluster
         mpp_prober->stop();
         if (region_cache)
             region_cache->stop();
+        if (lock_resolver)
+            lock_resolver->stopBgResolve();
         thread_pool->stop();
     }
 
