@@ -25,7 +25,7 @@ int64_t LockResolver::resolveLocks(Backoffer & bo, uint64_t caller_start_ts, std
     return resolveLocks(bo, caller_start_ts, locks, pushed, false);
 }
 
-int64_t LockResolver::getBypassLockTs(
+int64_t LockResolver::tryGetBypassLock(
     Backoffer & bo,
     uint64_t caller_start_ts,
     const std::unordered_map<uint64_t, std::vector<LockPtr>> & locks,
@@ -54,15 +54,21 @@ int64_t LockResolver::getBypassLockTs(
 
         if (status.ttl == 0)
         {
+            if ((status.primary_lock.has_value() && status.primary_lock->use_async_commit()))
+            {
+                // todo resolve async locks on the fly since the size of async locks are limited(less than 256), the resolve cost should be small
+                // once async locks is resolved, even if status.isCommmited() < caller_start_ts, it will not block tiflash's read
+                addPendingLocksForBgResolve(caller_start_ts, lock_entry.second);
+                continue;
+            }
             if (status.isRollback() || (status.isCommitted() && status.commit_ts > caller_start_ts))
             {
+                // the lock can be bypassed if the txn is rolled back or committed after caller_start_ts
                 bypass_lock_ts.push_back(lock_entry.first);
             }
             if (status.isRollback() || status.isCommitted())
             {
                 // resolve lock in background threads if the status is determined
-                // todo resolve async locks on the fly since the size of async locks are limited(less than 256), the resolve cost should be small
-                // once async locks is resolved, even if status.isCommmited() < caller_start_ts, it will not block tiflash's read
                 addPendingLocksForBgResolve(caller_start_ts, lock_entry.second);
             }
         }
