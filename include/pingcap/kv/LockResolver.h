@@ -224,7 +224,7 @@ public:
     int64_t resolveLocks(Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks, std::vector<uint64_t> & pushed);
 
     // tryGetBypassLock checks the status of the transactions which own the locks in `locks`, and collect the txn ids which can be bypassed
-    int64_t tryGetBypassLock(Backoffer & bo, uint64_t caller_start_ts, const std::unordered_map<uint64_t, std::vector<LockPtr>> & locks, std::vector<uint64_t> & bypass_lock_ts);
+    void tryGetBypassLock(Backoffer & bo, uint64_t caller_start_ts, const std::unordered_map<uint64_t, std::vector<LockPtr>> & locks, std::vector<uint64_t> & bypass_lock_ts);
 
     int64_t resolveLocks(
         Backoffer & bo,

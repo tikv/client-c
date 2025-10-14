@@ -25,15 +25,12 @@ int64_t LockResolver::resolveLocks(Backoffer & bo, uint64_t caller_start_ts, std
     return resolveLocks(bo, caller_start_ts, locks, pushed, false);
 }
 
-int64_t LockResolver::tryGetBypassLock(
+void LockResolver::tryGetBypassLock(
     Backoffer & bo,
     uint64_t caller_start_ts,
     const std::unordered_map<uint64_t, std::vector<LockPtr>> & locks,
     std::vector<uint64_t> & bypass_lock_ts)
 {
-    TxnExpireTime before_txn_expired;
-    if (locks.empty())
-        return before_txn_expired.value();
     bypass_lock_ts.reserve(locks.size());
     for (const auto & lock_entry : locks)
     {
@@ -48,7 +45,7 @@ int64_t LockResolver::tryGetBypassLock(
         catch (Exception & e)
         {
             log->warning("get txn status failed: " + e.displayText());
-            // each lock is independent, so we can continue to check other locks
+            // each txn is independent, so just continue to check other txns
             continue;
         }
 
@@ -74,15 +71,13 @@ int64_t LockResolver::tryGetBypassLock(
         }
         else // status.ttl != 0
         {
-            auto before_txn_expired_time = cluster->oracle->untilExpired(lock_entry.first, status.ttl);
-            before_txn_expired.update(before_txn_expired_time);
             if (status.action == ::kvrpcpb::MinCommitTSPushed)
             {
+                // min_commit_ts is pushed, so the lock can be bypassed
                 bypass_lock_ts.push_back(lock_entry.first);
             }
         }
     }
-    return before_txn_expired.value();
 }
 
 int64_t LockResolver::resolveLocks(
