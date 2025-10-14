@@ -31,52 +31,60 @@ void LockResolver::tryGetBypassLock(
     const std::unordered_map<uint64_t, std::vector<LockPtr>> & locks,
     std::vector<uint64_t> & bypass_lock_ts)
 {
-    bypass_lock_ts.reserve(locks.size());
-    for (const auto & lock_entry : locks)
+    try
     {
-        // should not happen, just for safety
-        if (lock_entry.second.empty())
-            continue;
-        TxnStatus status;
-        try
+        bypass_lock_ts.reserve(locks.size());
+        for (const auto & lock_entry : locks)
         {
-            status = getTxnStatusFromLock(bo, lock_entry.second[0], caller_start_ts, false);
-        }
-        catch (Exception & e)
-        {
-            log->warning("get txn status failed: " + e.displayText());
-            // each txn is independent, so just continue to check other txns
-            continue;
-        }
-
-        if (status.ttl == 0)
-        {
-            if ((status.primary_lock.has_value() && status.primary_lock->use_async_commit()))
+            // should not happen, just for safety
+            if (lock_entry.second.empty())
+                continue;
+            TxnStatus status;
+            try
             {
-                // todo resolve async locks on the fly since the size of async locks are limited(less than 256), the resolve cost should be small
-                // once async locks is resolved, even if status.isCommmited() < caller_start_ts, it will not block tiflash's read
-                addPendingLocksForBgResolve(caller_start_ts, lock_entry.second);
+                status = getTxnStatusFromLock(bo, lock_entry.second[0], caller_start_ts, false);
+            }
+            catch (Exception & e)
+            {
+                log->warning("get txn status failed: " + e.displayText());
+                // each txn is independent, so just continue to check other txns
                 continue;
             }
-            if (status.isRollback() || (status.isCommitted() && status.commit_ts > caller_start_ts))
+
+            if (status.ttl == 0)
             {
-                // the lock can be bypassed if the txn is rolled back or committed after caller_start_ts
-                bypass_lock_ts.push_back(lock_entry.first);
+                if ((status.primary_lock.has_value() && status.primary_lock->use_async_commit()))
+                {
+                    // todo resolve async locks on the fly since the size of async locks are limited(less than 256), the resolve cost should be small
+                    // once async locks is resolved, even if status.isCommmited() < caller_start_ts, it will not block tiflash's read
+                    addPendingLocksForBgResolve(caller_start_ts, lock_entry.second);
+                    continue;
+                }
+                if (status.isRollback() || (status.isCommitted() && status.commit_ts > caller_start_ts))
+                {
+                    // the lock can be bypassed if the txn is rolled back or committed after caller_start_ts
+                    bypass_lock_ts.push_back(lock_entry.first);
+                }
+                if (status.isRollback() || status.isCommitted())
+                {
+                    // resolve lock in background threads if the status is determined
+                    addPendingLocksForBgResolve(caller_start_ts, lock_entry.second);
+                }
             }
-            if (status.isRollback() || status.isCommitted())
+            else // status.ttl != 0
             {
-                // resolve lock in background threads if the status is determined
-                addPendingLocksForBgResolve(caller_start_ts, lock_entry.second);
+                if (status.action == ::kvrpcpb::MinCommitTSPushed)
+                {
+                    // min_commit_ts is pushed, so the lock can be bypassed
+                    bypass_lock_ts.push_back(lock_entry.first);
+                }
             }
         }
-        else // status.ttl != 0
-        {
-            if (status.action == ::kvrpcpb::MinCommitTSPushed)
-            {
-                // min_commit_ts is pushed, so the lock can be bypassed
-                bypass_lock_ts.push_back(lock_entry.first);
-            }
-        }
+    }
+    catch (...)
+    {
+        // tryGetBypassLock is just an optimization, should not throw any exception even fails
+        log->warning("tryGetBypassLock failed");
     }
 }
 
@@ -615,7 +623,7 @@ void LockResolver::backgroundResolve()
             }
             catch (...)
             {
-                // ignore all errors, and do not retry. Let the next reader to resolve it again.
+                // ignore all errors, and do not retry. Let the next reader to trigger resolve again.
             }
         }
     }
