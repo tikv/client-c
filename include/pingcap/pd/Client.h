@@ -59,6 +59,10 @@ public:
 
     uint64_t getGCSafePointV2(KeyspaceID keyspace_id) override;
 
+    pdpb::GetGCStateResponse getGcState(KeyspaceID keyspace_id) override;
+
+    pdpb::GetAllKeyspacesGCStatesResponse getAllKeyspacesGCStates() override;
+
     KeyspaceID getKeyspaceID(const std::string & keyspace_name) override;
 
     bool isMock() override;

@@ -367,6 +367,55 @@ uint64_t Client::getGCSafePointV2(KeyspaceID keyspace_id)
     return response.safe_point();
 }
 
+pdpb::GetGCStateResponse Client::getGcState(KeyspaceID keyspace_id)
+{
+    pdpb::GetGCStateRequest request{};
+    pdpb::GetGCStateResponse response{};
+    request.set_allocated_header(requestHeader());
+    request.mutable_keyspace_scope()->set_keyspace_id(keyspace_id);
+    std::string err_msg;
+
+    grpc::ClientContext context;
+
+    auto leader_client = leaderClient();
+    context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
+
+    auto status = leader_client->stub->GetGCState(&context, request, &response);
+    if (!status.ok())
+    {
+        err_msg = "get keyspace_id:" + std::to_string(keyspace_id) + " gc state failed: " + std::to_string(status.error_code()) + ": " + status.error_message();
+        log->warning(err_msg);
+        check_leader.store(true);
+        throw Exception(err_msg, status.error_code());
+    }
+
+    return response;
+}
+
+pdpb::GetAllKeyspacesGCStatesResponse Client::getAllKeyspacesGCStates()
+{
+    pdpb::GetAllKeyspacesGCStatesRequest request{};
+    pdpb::GetAllKeyspacesGCStatesResponse response{};
+    request.set_allocated_header(requestHeader());
+    std::string err_msg;
+
+    grpc::ClientContext context;
+
+    auto leader_client = leaderClient();
+    context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
+
+    auto status = leader_client->stub->GetAllKeyspacesGCStates(&context, request, &response);
+    if (!status.ok())
+    {
+        err_msg = "get all keyspaces gc states failed: " + std::to_string(status.error_code()) + ": " + status.error_message();
+        log->warning(err_msg);
+        check_leader.store(true);
+        throw Exception(err_msg, status.error_code());
+    }
+
+    return response;
+}
+
 pdpb::GetRegionResponse Client::getRegionByKey(const std::string & key)
 {
     pdpb::GetRegionRequest request{};
