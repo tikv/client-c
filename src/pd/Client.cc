@@ -365,7 +365,7 @@ uint64_t Client::getGCSafePointV2(KeyspaceID keyspace_id)
     return response.safe_point();
 }
 
-pdpb::GetGCStateResponse Client::getGcState(KeyspaceID keyspace_id)
+pdpb::GetGCStateResponse Client::getGCState(KeyspaceID keyspace_id)
 {
     pdpb::GetGCStateRequest request{};
     request.set_allocated_header(requestHeader());

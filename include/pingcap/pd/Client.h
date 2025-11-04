@@ -58,7 +58,7 @@ public:
 
     uint64_t getGCSafePointV2(KeyspaceID keyspace_id) override;
 
-    pdpb::GetGCStateResponse getGcState(KeyspaceID keyspace_id) override;
+    pdpb::GetGCStateResponse getGCState(KeyspaceID keyspace_id) override;
 
     pdpb::GetAllKeyspacesGCStatesResponse getAllKeyspacesGCStates() override;
 

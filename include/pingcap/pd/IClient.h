@@ -33,12 +33,12 @@ public:
 
     virtual std::vector<metapb::Store> getAllStores(bool exclude_tombstone) = 0;
 
-    [[deprecated("Use getGcState instead")]] virtual uint64_t getGCSafePoint() = 0;
+    [[deprecated("Use getGCState instead")]] virtual uint64_t getGCSafePoint() = 0;
 
     // Return the gc safe point of given keyspace_id.
-    [[deprecated("Use getGcState instead")]] virtual uint64_t getGCSafePointV2(KeyspaceID keyspace_id) = 0;
+    [[deprecated("Use getGCState instead")]] virtual uint64_t getGCSafePointV2(KeyspaceID keyspace_id) = 0;
 
-    virtual pdpb::GetGCStateResponse getGcState(KeyspaceID keyspace_id) = 0;
+    virtual pdpb::GetGCStateResponse getGCState(KeyspaceID keyspace_id) = 0;
 
     virtual pdpb::GetAllKeyspacesGCStatesResponse getAllKeyspacesGCStates() = 0;
 

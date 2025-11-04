@@ -23,7 +23,7 @@ public:
 
     uint64_t getGCSafePointV2(KeyspaceID) override { return MOCKED_GC_SAFE_POINT; }
 
-    pdpb::GetGCStateResponse getGcState(KeyspaceID keyspace_id) override
+    pdpb::GetGCStateResponse getGCState(KeyspaceID keyspace_id) override
     {
         pdpb::GetGCStateResponse gc_state;
         auto * hdr = gc_state.mutable_header();
