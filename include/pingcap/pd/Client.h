@@ -17,10 +17,9 @@
 #include <shared_mutex>
 #include <thread>
 
-namespace pingcap
+namespace pingcap::pd
 {
-namespace pd
-{
+
 class Client : public IClient
 {
     const int max_init_cluster_retries;
@@ -155,5 +154,4 @@ private:
 };
 
 
-} // namespace pd
-} // namespace pingcap
+} // namespace pingcap::pd
