@@ -8,9 +8,7 @@
 #include <deque>
 #include <mutex>
 
-namespace pingcap
-{
-namespace pd
+namespace pingcap::pd
 {
 inline std::vector<std::string> addrsToUrls(const std::vector<std::string> & addrs, const ClusterConfig & config)
 {
@@ -367,6 +365,51 @@ uint64_t Client::getGCSafePointV2(KeyspaceID keyspace_id)
     return response.safe_point();
 }
 
+pdpb::GetGCStateResponse Client::getGCState(KeyspaceID keyspace_id)
+{
+    pdpb::GetGCStateRequest request{};
+    request.set_allocated_header(requestHeader());
+    request.mutable_keyspace_scope()->set_keyspace_id(keyspace_id);
+
+    auto leader_client = leaderClient();
+    grpc::ClientContext context;
+    context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
+
+    pdpb::GetGCStateResponse response{};
+    auto status = leader_client->stub->GetGCState(&context, request, &response);
+    if (!status.ok())
+    {
+        std::string err_msg = "GetGCState failed, keyspace_id=" + std::to_string(keyspace_id) + ": " + std::to_string(status.error_code()) + ": " + status.error_message();
+        log->warning(err_msg);
+        check_leader.store(true);
+        throw Exception(err_msg, status.error_code());
+    }
+
+    return response;
+}
+
+pdpb::GetAllKeyspacesGCStatesResponse Client::getAllKeyspacesGCStates()
+{
+    pdpb::GetAllKeyspacesGCStatesRequest request{};
+    request.set_allocated_header(requestHeader());
+
+    auto leader_client = leaderClient();
+    grpc::ClientContext context;
+    context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
+
+    pdpb::GetAllKeyspacesGCStatesResponse response{};
+    auto status = leader_client->stub->GetAllKeyspacesGCStates(&context, request, &response);
+    if (!status.ok())
+    {
+        std::string err_msg = "GetAllKeyspacesGCStates failed: " + std::to_string(status.error_code()) + ": " + status.error_message();
+        log->warning(err_msg);
+        check_leader.store(true);
+        throw Exception(err_msg, status.error_code());
+    }
+
+    return response;
+}
+
 pdpb::GetRegionResponse Client::getRegionByKey(const std::string & key)
 {
     pdpb::GetRegionRequest request{};
@@ -556,7 +599,7 @@ bool Client::isClusterBootstrapped()
         if (!status.ok())                                                                                                                                          \
         {                                                                                                                                                          \
             std::string err_msg = ("resource manager grpc call failed: " #GRPC_METHOD ". " + std::to_string(status.error_code()) + ": " + status.error_message()); \
-            log->warning(err_msg);                                                                                                                                   \
+            log->warning(err_msg);                                                                                                                                 \
             check_leader.store(true);                                                                                                                              \
             throw Exception(err_msg, GRPCErrorCode);                                                                                                               \
         }                                                                                                                                                          \
@@ -594,5 +637,4 @@ resource_manager::TokenBucketsResponse Client::acquireTokenBuckets(const resourc
     return resp;
 }
 
-} // namespace pd
-} // namespace pingcap
+} // namespace pingcap::pd
