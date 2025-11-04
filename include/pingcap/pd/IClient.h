@@ -13,9 +13,7 @@
 #include <kvproto/resource_manager.pb.h>
 #pragma GCC diagnostic pop
 
-namespace pingcap
-{
-namespace pd
+namespace pingcap::pd
 {
 
 class IClient
@@ -35,10 +33,14 @@ public:
 
     virtual std::vector<metapb::Store> getAllStores(bool exclude_tombstone) = 0;
 
-    virtual uint64_t getGCSafePoint() = 0;
+    [[deprecated("Use getGCState instead")]] virtual uint64_t getGCSafePoint() = 0;
 
     // Return the gc safe point of given keyspace_id.
-    virtual uint64_t getGCSafePointV2(KeyspaceID keyspace_id) = 0;
+    [[deprecated("Use getGCState instead")]] virtual uint64_t getGCSafePointV2(KeyspaceID keyspace_id) = 0;
+
+    virtual pdpb::GetGCStateResponse getGCState(KeyspaceID keyspace_id) = 0;
+
+    virtual pdpb::GetAllKeyspacesGCStatesResponse getAllKeyspacesGCStates() = 0;
 
     virtual KeyspaceID getKeyspaceID(const std::string & keyspace_name) = 0;
 
@@ -64,5 +66,4 @@ public:
 
 using ClientPtr = std::shared_ptr<IClient>;
 
-} // namespace pd
-} // namespace pingcap
+} // namespace pingcap::pd
