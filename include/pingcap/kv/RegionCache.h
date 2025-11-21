@@ -159,15 +159,13 @@ struct RPCContext
     metapb::Peer peer;
     Store store;
     std::string addr;
-    std::vector<uint64_t> all_stores;
 
-    RPCContext(const RegionVerID & region_, const metapb::Region & meta_, const metapb::Peer & peer_, const Store & store_, const std::string & addr_, const std::vector<uint64_t> & all_stores_)
+    RPCContext(const RegionVerID & region_, const metapb::Region & meta_, const metapb::Peer & peer_, const Store & store_, const std::string & addr_)
         : region(region_)
         , meta(meta_)
         , peer(peer_)
         , store(store_)
         , addr(addr_)
-        , all_stores(all_stores_)
     {}
 
     std::string toString() const
@@ -195,7 +193,7 @@ public:
             bool load_balance,
             const LabelFilter & tiflash_label_filter,
             const std::unordered_set<uint64_t> * store_id_blocklist = nullptr,
-            std::map<uint64_t, kv::Store> * alive_tiflash_stores = nullptr);
+            uint64_t prefer_store_id = 0);
 
     bool updateLeader(const RegionVerID & region_id, const metapb::Peer & leader);
 
@@ -217,11 +215,11 @@ public:
     void forceReloadAllStores();
 
     // Return values:
-    // 1. all stores of peers of this region
-    // 2. stores of non pending peers of this region
-    std::pair<std::vector<uint64_t>, std::vector<uint64_t>> getTiFlashStoresByFilter(
-            Backoffer & bo,
-            const RegionPtr & cached_region,
+    // 1. all stores of this region.
+    // 2. stores of non pending peers of this region.
+    std::pair<std::vector<uint64_t>, std::vector<uint64_t>> getAllValidTiFlashStores(Backoffer & bo,
+            const RegionVerID & region_id,
+            const Store & current_store,
             const LabelFilter & label_filter,
             const std::unordered_set<uint64_t> * store_id_blocklist = nullptr);
 
@@ -275,7 +273,6 @@ private:
     RegionPtr searchCachedRegion(const std::string & key);
 
     std::vector<metapb::Peer> selectTiFlashPeers(Backoffer & bo, const metapb::Region & meta, const LabelFilter & label_filter);
-    std::vector<metapb::Peer> selectPeers(Backoffer & bo, const metapb::Region & meta, const StoreFilter & store_filter);
 
     void insertRegionToCache(RegionPtr region);
 

@@ -8,9 +8,7 @@
 #include <deque>
 #include <mutex>
 
-namespace pingcap
-{
-namespace pd
+namespace pingcap::pd
 {
 inline std::vector<std::string> addrsToUrls(const std::vector<std::string> & addrs, const ClusterConfig & config)
 {
@@ -119,7 +117,7 @@ pdpb::GetMembersResponse Client::getMembers(const std::string & url)
     if (!status.ok())
     {
         std::string err_msg = "get member failed: " + std::to_string(status.error_code()) + ": " + status.error_message();
-        log->error(err_msg);
+        log->warning(err_msg);
         return {};
     }
     return resp;
@@ -176,7 +174,7 @@ void Client::initLeader()
             }
             else
             {
-                log->error("failed to update leader, stop retrying");
+                log->warning("failed to update leader, stop retrying");
                 throw e;
             }
         }
@@ -276,7 +274,7 @@ void Client::leaderLoop()
             }
             catch (Exception & e)
             {
-                log->error(e.displayText());
+                log->warning(e.displayText());
             }
         }
     }
@@ -305,14 +303,14 @@ uint64_t Client::getTS()
     if (!stream->Write(request))
     {
         std::string err_msg = ("Send TsoRequest failed");
-        log->error(err_msg);
+        log->warning(err_msg);
         check_leader.store(true);
         throw Exception(err_msg, GRPCErrorCode);
     }
     if (!stream->Read(&response))
     {
         std::string err_msg = ("Receive TsoResponse failed");
-        log->error(err_msg);
+        log->warning(err_msg);
         check_leader.store(true);
         throw Exception(err_msg, GRPCErrorCode);
     }
@@ -336,7 +334,7 @@ uint64_t Client::getGCSafePoint()
     if (!status.ok())
     {
         err_msg = "get safe point failed: " + std::to_string(status.error_code()) + ": " + status.error_message();
-        log->error(err_msg);
+        log->warning(err_msg);
         check_leader.store(true);
         throw Exception(err_msg, status.error_code());
     }
@@ -360,11 +358,56 @@ uint64_t Client::getGCSafePointV2(KeyspaceID keyspace_id)
     if (!status.ok())
     {
         err_msg = "get keyspace_id:" + std::to_string(keyspace_id) + " safe point failed: " + std::to_string(status.error_code()) + ": " + status.error_message();
-        log->error(err_msg);
+        log->warning(err_msg);
         check_leader.store(true);
         throw Exception(err_msg, status.error_code());
     }
     return response.safe_point();
+}
+
+pdpb::GetGCStateResponse Client::getGCState(KeyspaceID keyspace_id)
+{
+    pdpb::GetGCStateRequest request{};
+    request.set_allocated_header(requestHeader());
+    request.mutable_keyspace_scope()->set_keyspace_id(keyspace_id);
+
+    auto leader_client = leaderClient();
+    grpc::ClientContext context;
+    context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
+
+    pdpb::GetGCStateResponse response{};
+    auto status = leader_client->stub->GetGCState(&context, request, &response);
+    if (!status.ok())
+    {
+        std::string err_msg = "GetGCState failed, keyspace_id=" + std::to_string(keyspace_id) + ": " + std::to_string(status.error_code()) + ": " + status.error_message();
+        log->warning(err_msg);
+        check_leader.store(true);
+        throw Exception(err_msg, status.error_code());
+    }
+
+    return response;
+}
+
+pdpb::GetAllKeyspacesGCStatesResponse Client::getAllKeyspacesGCStates()
+{
+    pdpb::GetAllKeyspacesGCStatesRequest request{};
+    request.set_allocated_header(requestHeader());
+
+    auto leader_client = leaderClient();
+    grpc::ClientContext context;
+    context.set_deadline(std::chrono::system_clock::now() + pd_timeout);
+
+    pdpb::GetAllKeyspacesGCStatesResponse response{};
+    auto status = leader_client->stub->GetAllKeyspacesGCStates(&context, request, &response);
+    if (!status.ok())
+    {
+        std::string err_msg = "GetAllKeyspacesGCStates failed: " + std::to_string(status.error_code()) + ": " + status.error_message();
+        log->warning(err_msg);
+        check_leader.store(true);
+        throw Exception(err_msg, status.error_code());
+    }
+
+    return response;
 }
 
 pdpb::GetRegionResponse Client::getRegionByKey(const std::string & key)
@@ -384,7 +427,7 @@ pdpb::GetRegionResponse Client::getRegionByKey(const std::string & key)
     if (!status.ok())
     {
         std::string err_msg = ("get region failed: " + std::to_string(status.error_code()) + " : " + status.error_message());
-        log->error(err_msg);
+        log->warning(err_msg);
         check_leader.store(true);
         throw Exception(err_msg, GRPCErrorCode);
     }
@@ -409,7 +452,7 @@ pdpb::GetRegionResponse Client::getRegionByID(uint64_t region_id)
     if (!status.ok())
     {
         std::string err_msg = ("get region by id failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
-        log->error(err_msg);
+        log->warning(err_msg);
         check_leader.store(true);
         throw Exception(err_msg, GRPCErrorCode);
     }
@@ -434,7 +477,7 @@ std::vector<metapb::Store> Client::getAllStores(bool exclude_tombstone)
     if (!status.ok())
     {
         std::string err_msg = ("get all stores failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
-        log->error(err_msg);
+        log->warning(err_msg);
         check_leader.store(true);
         throw Exception(err_msg, GRPCErrorCode);
     }
@@ -463,7 +506,7 @@ metapb::Store Client::getStore(uint64_t store_id)
     if (!status.ok())
     {
         std::string err_msg = ("get store failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
-        log->error(err_msg);
+        log->warning(err_msg);
         check_leader.store(true);
         throw Exception(err_msg, GRPCErrorCode);
     }
@@ -487,7 +530,7 @@ KeyspaceID Client::getKeyspaceID(const std::string & keyspace_name)
     if (!status.ok())
     {
         std::string err_msg = ("get keyspace id failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
-        log->error(err_msg);
+        log->warning(err_msg);
         check_leader.store(true);
         throw Exception(err_msg, GRPCErrorCode);
     }
@@ -495,14 +538,14 @@ KeyspaceID Client::getKeyspaceID(const std::string & keyspace_name)
     if (response.header().has_error())
     {
         std::string err_msg = ("get keyspace id failed: " + response.header().error().message());
-        log->error(err_msg);
+        log->warning(err_msg);
         throw Exception(err_msg, InternalError);
     }
 
     if (response.keyspace().state() != keyspacepb::KeyspaceState::ENABLED)
     {
         std::string err_msg = ("keyspace " + keyspace_name + " is not enabled");
-        log->error(err_msg);
+        log->warning(err_msg);
         throw Exception(err_msg, KeyspaceNotEnabled);
     }
     return response.keyspace().id();
@@ -556,7 +599,7 @@ bool Client::isClusterBootstrapped()
         if (!status.ok())                                                                                                                                          \
         {                                                                                                                                                          \
             std::string err_msg = ("resource manager grpc call failed: " #GRPC_METHOD ". " + std::to_string(status.error_code()) + ": " + status.error_message()); \
-            log->error(err_msg);                                                                                                                                   \
+            log->warning(err_msg);                                                                                                                                 \
             check_leader.store(true);                                                                                                                              \
             throw Exception(err_msg, GRPCErrorCode);                                                                                                               \
         }                                                                                                                                                          \
@@ -594,5 +637,4 @@ resource_manager::TokenBucketsResponse Client::acquireTokenBuckets(const resourc
     return resp;
 }
 
-} // namespace pd
-} // namespace pingcap
+} // namespace pingcap::pd

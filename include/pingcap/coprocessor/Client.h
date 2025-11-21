@@ -79,6 +79,7 @@ struct CopTask
     int64_t table_id;
     int64_t index_id;
     std::string executor_id;
+    uint64_t prefer_store_id = 0;
 };
 
 struct RegionInfo
@@ -147,7 +148,8 @@ public:
                  Logger * log_,
                  int timeout_ = kv::copTimeout,
                  const kv::LabelFilter & tiflash_label_filter_ = kv::labelFilterInvalid,
-                 const std::string source_zone_label_ = "")
+                 const std::string source_zone_label_ = "",
+                 uint64_t prefer_store_id_ = 0)
         : queue(std::move(queue_))
         , tasks(std::move(tasks_))
         , cluster(cluster_)
@@ -157,6 +159,7 @@ public:
         , tiflash_label_filter(tiflash_label_filter_)
         , source_zone_label(source_zone_label_)
         , log(log_)
+        , prefer_store_id(prefer_store_id_)
     {}
 
     ~ResponseIter()
@@ -284,6 +287,8 @@ private:
     const std::string source_zone_label;
 
     Logger * log;
+
+    const uint64_t prefer_store_id;
 };
 
 std::vector<CopTask> buildCopTasks(
