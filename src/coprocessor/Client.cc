@@ -88,7 +88,7 @@ std::vector<CopTask> buildCopTaskForFullText(
     std::vector<CopTask> tasks;
     while (!ranges.empty())
     {
-        auto loc = cluster->shard_cache->locateKey(tableID, indexID, ranges[0].start_key);
+        auto loc = cluster->shard_cache->locateKey(keyspace_id, tableID, indexID, ranges[0].start_key);
 
         size_t i;
         for (i = 0; i < ranges.size(); i++)
@@ -938,7 +938,7 @@ std::vector<CopTask> ResponseIter::handleTiCITaskImpl(kv::Backoffer & bo, const 
         bool same_zone_req = true;
         try
         {
-            client.sendReqToShard<kv::RPC_NAME(Coprocessor)>(bo, req, resp.get(), tiflash_label_filter, timeout, task.store_type, task.meta_data);
+            client.sendReqToShard<kv::RPC_NAME(Coprocessor)>(bo, req, resp.get(), tiflash_label_filter, timeout, task.store_type, task.keyspace_id, task.table_id, task.index_id, task.meta_data);
         }
         catch (Exception & e)
         {

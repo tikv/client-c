@@ -32,11 +32,14 @@ struct ShardClient
                         const LabelFilter & tiflash_label_filter = kv::labelFilterInvalid,
                         int timeout = dailTimeout,
                         StoreType store_type = StoreType::TiKV,
+                        pd::KeyspaceID keyspace_id = pd::NullspaceID,
+                        int64_t table_id = 0,
+                        int64_t index_id = 0,
                         const kv::GRPCMetaData & meta_data = {})
     {
         for (;;)
         {
-            auto addr = cluster->shard_cache->getRPCContext(bo, shard_epoch);
+            auto addr = cluster->shard_cache->getRPCContext(bo, keyspace_id, table_id, index_id, shard_epoch);
             if (addr == "")
             {
                 throw Exception("Shard epoch not match after retries: Shard" + shard_epoch.toString() + " not in shard cache.", RegionEpochNotMatch);
@@ -57,13 +60,13 @@ struct ShardClient
                 std::string err_msg = rpc.errMsg(status);
                 log->warning(err_msg);
 
-                onSendFail(bo, Exception(err_msg, GRPCErrorCode), nullptr);
+                onSendFail(bo, Exception(err_msg, GRPCErrorCode), nullptr, keyspace_id, table_id, index_id);
                 continue;
             }
             if (resp->has_region_error())
             {
                 log->warning("shard" + shard_epoch.toString() + " find error: " + resp->region_error().DebugString());
-                onShardFail(bo, nullptr, resp->region_error());
+                onShardFail(bo, nullptr, resp->region_error(), keyspace_id, table_id, index_id);
                 continue;
             }
             return;
@@ -71,15 +74,15 @@ struct ShardClient
     }
 
 protected:
-    void onShardFail(Backoffer & bo, RPCContextPtr rpc_ctx, const errorpb::Error & err) const
+    void onShardFail(Backoffer & bo, RPCContextPtr rpc_ctx, const errorpb::Error & err, pd::KeyspaceID keyspaceID, int64_t tableID, int64_t indexID) const
     {
-        cluster->shard_cache->onSendFail(shard_epoch);
+        cluster->shard_cache->onSendFail(keyspaceID, tableID, indexID, shard_epoch);
     }
 
     // Normally, it happens when machine down or network partition between tidb and kv or process crash.
-    void onSendFail(Backoffer & bo, const Exception & e, RPCContextPtr rpc_ctx) const
+    void onSendFail(Backoffer & bo, const Exception & e, RPCContextPtr rpc_ctx, pd::KeyspaceID keyspaceID, int64_t tableID, int64_t indexID) const
     {
-        cluster->shard_cache->onSendFail(shard_epoch);
+        cluster->shard_cache->onSendFail(keyspaceID, tableID, indexID, shard_epoch);
     }
 };
 

@@ -2,6 +2,7 @@
 
 #include <mutex>
 #include <shared_mutex>
+#include <tuple>
 
 namespace pingcap
 {
@@ -9,6 +10,7 @@ namespace kv
 {
 
 std::vector<ShardWithAddr> TiCIClient::scanRanges(
+    pd::KeyspaceID keyspaceID,
     int64_t tableID,
     int64_t indexID,
     const std::vector<std::string> & key_ranges,
@@ -18,6 +20,7 @@ std::vector<ShardWithAddr> TiCIClient::scanRanges(
     tici::GetShardLocalCacheRequest request{};
     grpc::ClientContext context;
 
+    request.set_keyspace_id(keyspaceID);
     request.set_table_id(tableID);
     request.set_index_id(indexID);
     request.set_limit(limit);
@@ -53,25 +56,59 @@ std::vector<ShardWithAddr> TiCIClient::scanRanges(
     return result;
 }
 
-ShardPtr ShardCache::locateKey(int64_t tableID, int64_t indexID, const std::string & key)
+ShardPtr ShardCache::locateKey(pd::KeyspaceID keyspaceID, int64_t tableID, int64_t indexID, const std::string & key)
 {
-    auto shard = searchCachedShard(key);
+    auto shard_cache_for_one_index = getOrCreateShardCacheForKeyspace(keyspaceID, tableID, indexID);
+    auto shard = shard_cache_for_one_index->searchCachedShard(key);
     if (shard != nullptr)
     {
         return shard;
     }
-    shard = loadShardByKey(tableID, indexID, key);
-    insertShardToCache(shard);
+    shard = loadShardByKey(keyspaceID, tableID, indexID, key);
+    shard_cache_for_one_index->insertShardToCache(shard);
     return shard;
 }
 
+ShardCacheForOneIndexPtr ShardCache::getOrCreateShardCacheForKeyspace(pd::KeyspaceID keyspaceID, int64_t tableID, int64_t indexID)
+{
+    std::shared_lock<std::shared_mutex> lock(shard_mutex);
+    auto id = std::make_tuple(keyspaceID, tableID, indexID);
+    auto it = shard_caches.find(id);
+    if (it == shard_caches.end())
+    {
+        lock.unlock();
+        std::unique_lock<std::shared_mutex> unique_lock(shard_mutex);
+        // double check
+        it = shard_caches.find(id);
+        if (it == shard_caches.end())
+        {
+            auto shard_cache_for_keyspace = std::make_shared<ShardCacheForOneIndex>(keyspaceID, tableID, indexID);
+            it = shard_caches.emplace(id, std::move(shard_cache_for_keyspace)).first;
+        }
+        unique_lock.unlock();
+        lock.lock();
+    }
+    return it->second;
+}
 
-void ShardCache::onSendFail(const ShardEpoch & shard_epoch)
+ShardPtr ShardCache::loadShardByKey(pd::KeyspaceID keyspaceID, int64_t tableID, int64_t indexID, const std::string & key)
+{
+    auto shards = tici_client->scanRanges(keyspaceID, tableID, indexID, {key, ""}, 1);
+    Logger::get("pingcap.tikv").information("load shard by key: " + key + ", tableID: " + std::to_string(tableID) + ", indexID: " + std::to_string(indexID) + ", result: " + std::to_string(shards.size()));
+    if (shards.size() != 1)
+    {
+        std::string err_msg = ("shards size not 1 ");
+        throw Exception(err_msg, GRPCErrorCode);
+    }
+    return std::make_shared<ShardWithAddr>(shards[0]);
+};
+
+void ShardCacheForOneIndex::onSendFail(const ShardEpoch & shard_epoch)
 {
     dropShard(shard_epoch);
 }
 
-void ShardCache::onSendReqFailForBatchShards(const std::vector<ShardEpoch> & shard_epoch)
+void ShardCacheForOneIndex::onSendReqFailForBatchShards(const std::vector<ShardEpoch> & shard_epoch)
 {
     for (const auto & epoch : shard_epoch)
     {
@@ -79,7 +116,7 @@ void ShardCache::onSendReqFailForBatchShards(const std::vector<ShardEpoch> & sha
     }
 }
 
-void ShardCache::dropShard(const ShardEpoch & shard_epoch)
+void ShardCacheForOneIndex::dropShard(const ShardEpoch & shard_epoch)
 {
     std::unique_lock<std::shared_mutex> lock(shard_mutex);
     log->information("drop shard " + shard_epoch.toString() + " from cache");
@@ -96,7 +133,7 @@ void ShardCache::dropShard(const ShardEpoch & shard_epoch)
     }
 }
 
-ShardPtr ShardCache::searchCachedShard(const std::string & key)
+ShardPtr ShardCacheForOneIndex::searchCachedShard(const std::string & key)
 {
     std::shared_lock<std::shared_mutex> lock(shard_mutex);
     auto it = shards_map.upper_bound(key);
@@ -112,19 +149,8 @@ ShardPtr ShardCache::searchCachedShard(const std::string & key)
     return nullptr;
 };
 
-ShardPtr ShardCache::loadShardByKey(int64_t tableID, int64_t indexID, const std::string & key)
-{
-    auto shards = tici_client->scanRanges(tableID, indexID, {key, ""}, 1);
-    Logger::get("pingcap.tikv").information("load shard by key: " + key + ", tableID: " + std::to_string(tableID) + ", indexID: " + std::to_string(indexID) + ", result: " + std::to_string(shards.size()));
-    if (shards.size() != 1)
-    {
-        std::string err_msg = ("shards size not 1 ");
-        throw Exception(err_msg, GRPCErrorCode);
-    }
-    return std::make_shared<ShardWithAddr>(shards[0]);
-};
 
-void ShardCache::insertShardToCache(ShardPtr shard)
+void ShardCacheForOneIndex::insertShardToCache(ShardPtr shard)
 {
     std::unique_lock<std::shared_mutex> lock(shard_mutex);
     shards_map[shard->endKey()] = shard;

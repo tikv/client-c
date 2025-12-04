@@ -125,6 +125,7 @@ public:
     }
 
     std::vector<ShardWithAddr> scanRanges(
+        pd::KeyspaceID keyspaceID,
         int64_t tableID,
         int64_t indexID,
         const std::vector<std::string> & key_ranges,
@@ -136,14 +137,21 @@ private:
     std::unique_ptr<tici::MetaService::Stub> stub;
 };
 
-class ShardCache
+class ShardCacheForOneIndex
 {
 public:
-    explicit ShardCache(const std::string & addr)
-        : tici_client(std::make_shared<TiCIClient>(addr))
+    explicit ShardCacheForOneIndex(pd::KeyspaceID keyspace_id_, int64_t table_id_, int64_t index_id_)
+        : keyspace_id(keyspace_id_)
+        , table_id(table_id_)
+        , index_id(index_id_)
         , log(&Logger::get("pingcap.tikv"))
     {}
-    ShardPtr locateKey(int64_t tableID, int64_t indexID, const std::string & key);
+    ShardPtr searchCachedShard(const std::string & key);
+    void insertShardToCache(ShardPtr shard);
+    void dropShard(const ShardEpoch & shard_epoch);
+
+    void onSendFail(const ShardEpoch & shard_epoch);
+    void onSendReqFailForBatchShards(const std::vector<ShardEpoch> & shard_epoch);
     std::string getRPCContext([[maybe_unused]] Backoffer & bo, const ShardEpoch & shard_epoch)
     {
         std::shared_lock<std::shared_mutex> lock(shard_mutex);
@@ -155,17 +163,47 @@ public:
         return "";
     }
 
-    void onSendFail(const ShardEpoch & shard_epoch);
-    void onSendReqFailForBatchShards(const std::vector<ShardEpoch> & shard_epoch);
-
 private:
-    ShardPtr searchCachedShard(const std::string & key);
-    ShardPtr loadShardByKey(int64_t tableID, int64_t indexID, const std::string & key);
-    void insertShardToCache(ShardPtr shard);
-    void dropShard(const ShardEpoch & shard_epoch);
-
+    std::shared_mutex shard_mutex;
     std::map<std::string, ShardPtr> shards_map;
     std::unordered_map<ShardEpoch, ShardPtr> shards;
+
+    [[maybe_unused]] pd::KeyspaceID keyspace_id;
+    [[maybe_unused]] int64_t table_id;
+    [[maybe_unused]] int64_t index_id;
+    Logger * log;
+};
+using ShardCacheForOneIndexPtr = std::shared_ptr<ShardCacheForOneIndex>;
+
+class ShardCache
+{
+public:
+    explicit ShardCache(const std::string & addr)
+        : tici_client(std::make_shared<TiCIClient>(addr))
+        , log(&Logger::get("pingcap.tikv"))
+    {}
+    ShardPtr locateKey(pd::KeyspaceID keyspaceID, int64_t tableID, int64_t indexID, const std::string & key);
+    ShardPtr loadShardByKey(pd::KeyspaceID keyspaceID, int64_t tableID, int64_t indexID, const std::string & key);
+    std::string getRPCContext([[maybe_unused]] Backoffer & bo, pd::KeyspaceID keyspaceID, int64_t tableID, int64_t indexID, const ShardEpoch & shard_epoch)
+    {
+        auto cache = getOrCreateShardCacheForKeyspace(keyspaceID, tableID, indexID);
+        return cache->getRPCContext(bo, shard_epoch);
+    }
+
+    void onSendFail(pd::KeyspaceID keyspaceID, int64_t tableID, int64_t indexID, const ShardEpoch & shard_epoch)
+    {
+        auto cache = getOrCreateShardCacheForKeyspace(keyspaceID, tableID, indexID);
+        cache->onSendFail(shard_epoch);
+    }
+    void onSendReqFailForBatchShards(pd::KeyspaceID keyspaceID, int64_t tableID, int64_t indexID, const std::vector<ShardEpoch> & shard_epoch)
+    {
+        auto cache = getOrCreateShardCacheForKeyspace(keyspaceID, tableID, indexID);
+        cache->onSendReqFailForBatchShards(shard_epoch);
+    }
+
+private:
+    ShardCacheForOneIndexPtr getOrCreateShardCacheForKeyspace(pd::KeyspaceID keyspaceID, int64_t tableID, int64_t indexID);
+    std::map<std::tuple<pd::KeyspaceID, int64_t, int64_t>, ShardCacheForOneIndexPtr> shard_caches;
     std::shared_ptr<TiCIClient> tici_client;
     std::shared_mutex shard_mutex;
 
