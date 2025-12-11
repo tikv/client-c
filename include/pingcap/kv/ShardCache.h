@@ -140,7 +140,7 @@ private:
 class ShardCacheForOneIndex
 {
 public:
-    explicit ShardCacheForOneIndex(pd::KeyspaceID keyspace_id_, int64_t table_id_, int64_t index_id_)
+    ShardCacheForOneIndex(pd::KeyspaceID keyspace_id_, int64_t table_id_, int64_t index_id_)
         : keyspace_id(keyspace_id_)
         , table_id(table_id_)
         , index_id(index_id_)

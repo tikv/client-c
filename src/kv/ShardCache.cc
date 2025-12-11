@@ -85,8 +85,6 @@ ShardCacheForOneIndexPtr ShardCache::getOrCreateShardCacheForKeyspace(pd::Keyspa
             auto shard_cache_for_keyspace = std::make_shared<ShardCacheForOneIndex>(keyspaceID, tableID, indexID);
             it = shard_caches.emplace(id, std::move(shard_cache_for_keyspace)).first;
         }
-        unique_lock.unlock();
-        lock.lock();
     }
     return it->second;
 }
@@ -94,7 +92,7 @@ ShardCacheForOneIndexPtr ShardCache::getOrCreateShardCacheForKeyspace(pd::Keyspa
 ShardPtr ShardCache::loadShardByKey(pd::KeyspaceID keyspaceID, int64_t tableID, int64_t indexID, const std::string & key)
 {
     auto shards = tici_client->scanRanges(keyspaceID, tableID, indexID, {key, ""}, 1);
-    Logger::get("pingcap.tikv").information("load shard by key: " + key + ", tableID: " + std::to_string(tableID) + ", indexID: " + std::to_string(indexID) + ", result: " + std::to_string(shards.size()));
+    Logger::get("pingcap.tikv").debug("load shard by key: " + key + ", tableID: " + std::to_string(tableID) + ", indexID: " + std::to_string(indexID) + ", result: " + std::to_string(shards.size()));
     if (shards.size() != 1)
     {
         std::string err_msg = ("shards size not 1 ");
