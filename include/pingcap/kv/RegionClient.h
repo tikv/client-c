@@ -73,12 +73,13 @@ struct RegionClient
             auto status = rpc.call(&context, req, resp);
             if (!status.ok())
             {
+                auto extra_msg = "region_id: " + region_id.toString() + ", addr: " + ctx->addr;
                 if (status.error_code() == ::grpc::StatusCode::UNIMPLEMENTED)
                 {
                     // The rpc is not implemented on this service.
-                    throw Exception("rpc is not implemented: " + rpc.errMsg(status), GRPCNotImplemented);
+                    throw Exception("rpc is not implemented: " + rpc.errMsg(status, extra_msg), GRPCNotImplemented);
                 }
-                std::string err_msg = rpc.errMsg(status);
+                std::string err_msg = rpc.errMsg(status, extra_msg);
                 log->warning(err_msg);
                 onSendFail(bo, Exception(err_msg, GRPCErrorCode), ctx);
                 continue;
@@ -192,12 +193,14 @@ struct RegionClient
                 stream_reader->no_resp = true;
                 return stream_reader;
             }
-            else if (status.error_code() == ::grpc::StatusCode::UNIMPLEMENTED)
+            auto extra_msg = "region_id: " + region_id.toString() + ", addr: " + ctx->addr;
+            if (status.error_code() == ::grpc::StatusCode::UNIMPLEMENTED)
             {
+
                 // The rpc is not implemented on this service.
-                throw Exception("rpc is not implemented: " + rpc.errMsg(status), GRPCNotImplemented);
+                throw Exception("rpc is not implemented: " + rpc.errMsg(status, extra_msg), GRPCNotImplemented);
             }
-            std::string err_msg = rpc.errMsg(status);
+            std::string err_msg = rpc.errMsg(status, extra_msg);
             log->warning(err_msg);
             onSendFail(bo, Exception(err_msg, GRPCErrorCode), ctx);
         }
