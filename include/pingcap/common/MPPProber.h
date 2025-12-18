@@ -21,7 +21,7 @@ namespace common
 using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 static constexpr TimePoint INVALID_TIME_POINT = std::chrono::steady_clock::time_point::max();
 static constexpr auto MAX_RECOVERY_TIME_LIMIT = std::chrono::minutes(15);
-static constexpr auto MAX_OBSOLET_TIME_LIMIT = std::chrono::hours(1);
+static constexpr auto MAX_OBSOLETE_TIME_LIMIT = std::chrono::hours(1);
 static constexpr auto SCAN_INTERVAL = std::chrono::seconds(1); // scan per 1s.
 static constexpr auto DETECT_PERIOD = std::chrono::seconds(3); // do real alive rpc per 3s.
 static constexpr size_t DETECT_RPC_TIMEOUT = 2;
@@ -66,7 +66,7 @@ struct ProbeState
 // If the probe fails again, the store will be re-added to failed_stores; otherwise, it can be used directly.
 //
 // If a store was previously attempted to be used (last_lookup_time exists) but couldn't actually be used,
-// and this state persists beyond MAX_OBSOLETE_TIME, it will be removed from failed_stores to avoid being continuously probed in the background.
+// and this state persists beyond MAX_OBSOLETE_TIME_LIMIT, it will be removed from failed_stores to avoid being continuously probed in the background.
 class MPPProber
 {
 public:

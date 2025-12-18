@@ -3,8 +3,6 @@
 #include <pingcap/common/MPPProber.h>
 #include <pingcap/kv/Cluster.h>
 
-#include <thread>
-
 namespace pingcap
 {
 namespace common
@@ -101,8 +99,8 @@ void MPPProber::scan()
         }
         else
         {
-            // Store is dead, we want to check if this store has not used for MAX_OBSOLET_TIME.
-            if (ele.second->last_lookup_timepoint != INVALID_TIME_POINT && getElapsed(ele.second->last_lookup_timepoint) > std::chrono::duration_cast<std::chrono::seconds>(MAX_OBSOLET_TIME_LIMIT))
+            // Store is dead, we want to check if this store has not used for MAX_OBSOLETE_TIME.
+            if (ele.second->last_lookup_timepoint != INVALID_TIME_POINT && getElapsed(ele.second->last_lookup_timepoint) > std::chrono::duration_cast<std::chrono::seconds>(MAX_OBSOLETE_TIME_LIMIT))
                 recovery_stores.push_back(ele.first);
         }
         ele.second->state_lock.unlock();
