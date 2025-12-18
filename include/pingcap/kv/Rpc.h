@@ -6,7 +6,6 @@
 #include <pingcap/kv/internal/type_traits.h>
 
 #include <mutex>
-#include <type_traits>
 #include <vector>
 
 namespace pingcap
@@ -99,7 +98,7 @@ public:
 
     std::string errMsg(const ::grpc::Status & status)
     {
-        return std::string(T::errMsg()) + std::to_string(status.error_code()) + ": " + status.error_message();
+        return std::string(T::errMsg()) + " " + std::to_string(status.error_code()) + ": " + status.error_message();
     }
 
 private:

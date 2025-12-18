@@ -7,7 +7,7 @@ namespace pingcap
 {
 namespace kv
 {
-// load_balance is an option, becase if store fail, it may cause batchCop fail.
+// load_balance is an option, because if store fail, it may cause batchCop fail.
 // For now, label_filter only works for tiflash.
 RPCContextPtr RegionCache::getRPCContext(Backoffer & bo,
         const RegionVerID & id,
@@ -392,7 +392,7 @@ void RegionCache::dropStore(uint64_t failed_store_id)
     }
 }
 
-void RegionCache::onSendReqFail(RPCContextPtr & ctx, const Exception & exc)
+void RegionCache::onSendReqFail(RPCContextPtr & ctx, const Exception &  /*exc*/)
 {
     const auto & failed_region_id = ctx->region;
     uint64_t failed_store_id = ctx->peer.store_id();
@@ -523,6 +523,30 @@ bool labelFilterAllNode(const std::map<std::string, std::string> &)
 bool labelFilterInvalid(const std::map<std::string, std::string> &)
 {
     throw Exception("invalid label_filter", ErrorCodes::LogicalError);
+}
+
+void RegionCache::updateCachePeriodically()
+{
+    while (!stopped.load())
+    {
+        // TODO: Also update region cache periodically.
+        try
+        {
+            forceReloadAllStores();
+        }
+        catch (...)
+        {
+            log->warning(getCurrentExceptionMsg("failed to reload all stores periodically: "));
+        }
+
+        {
+            std::unique_lock lock(update_cache_mu);
+            // Update store cache every 2 mins.
+            update_cache_cv.wait_for(lock, std::chrono::minutes(2), [this]() {
+                return stopped.load();
+            });
+        }
+    }
 }
 } // namespace kv
 } // namespace pingcap
