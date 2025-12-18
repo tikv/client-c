@@ -146,8 +146,7 @@ bool detectStore(kv::RpcClientPtr & rpc_client, const std::string & store_addr, 
     auto status = rpc.call(&context, req, &resp);
     if (!status.ok())
     {
-        std::string extra_msg = "addr: " + store_addr;
-        log->warning("detect failed: " + store_addr + " error: " + rpc.errMsg(status, extra_msg));
+        log->warning("detect failed: " + store_addr + " error: " + rpc.errMsg(status, ""));
         return false;
     }
 
