@@ -29,9 +29,7 @@ struct Store
     StoreType store_type;
     ::metapb::StoreState state;
 
-    Store(uint64_t id_, const std::string & addr_, const std::string & peer_addr_,
-            const std::map<std::string, std::string> & labels_, StoreType store_type_,
-            const ::metapb::StoreState state_)
+    Store(uint64_t id_, const std::string & addr_, const std::string & peer_addr_, const std::map<std::string, std::string> & labels_, StoreType store_type_, const ::metapb::StoreState state_)
         : id(id_)
         , addr(addr_)
         , peer_addr(peer_addr_)
@@ -188,12 +186,12 @@ public:
     {}
 
     RPCContextPtr getRPCContext(Backoffer & bo,
-            const RegionVerID & id,
-            StoreType store_type,
-            bool load_balance,
-            const LabelFilter & tiflash_label_filter,
-            const std::unordered_set<uint64_t> * store_id_blocklist = nullptr,
-            uint64_t prefer_store_id = 0);
+                                const RegionVerID & id,
+                                StoreType store_type,
+                                bool load_balance,
+                                const LabelFilter & tiflash_label_filter,
+                                const std::unordered_set<uint64_t> * store_id_blocklist = nullptr,
+                                uint64_t prefer_store_id = 0);
 
     bool updateLeader(const RegionVerID & region_id, const metapb::Peer & leader);
 
@@ -217,11 +215,12 @@ public:
     // Return values:
     // 1. all stores of this region.
     // 2. stores of non pending peers of this region.
-    std::pair<std::vector<uint64_t>, std::vector<uint64_t>> getAllValidTiFlashStores(Backoffer & bo,
-            const RegionVerID & region_id,
-            const Store & current_store,
-            const LabelFilter & label_filter,
-            const std::unordered_set<uint64_t> * store_id_blocklist = nullptr);
+    std::pair<std::vector<uint64_t>, std::vector<uint64_t>> getAllValidTiFlashStores(
+        Backoffer & bo,
+        const RegionVerID & region_id,
+        const Store & current_store,
+        const LabelFilter & label_filter,
+        const std::unordered_set<uint64_t> * store_id_blocklist = nullptr);
 
     std::pair<std::unordered_map<RegionVerID, std::vector<std::string>>, RegionVerID>
     groupKeysByRegion(Backoffer & bo,
@@ -237,6 +236,7 @@ public:
         std::lock_guard lock(update_cache_mu);
         update_cache_cv.notify_all();
     }
+
 private:
     RegionPtr loadRegionByKey(Backoffer & bo, const std::string & key);
 

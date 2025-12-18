@@ -12,8 +12,8 @@ void RegionClient::onRegionError(Backoffer & bo, RPCContextPtr rpc_ctx, const er
         if (not_leader.has_leader())
         {
             // don't backoff if a new leader is returned.
-            log->information("not leader but has leader, region " + rpc_ctx->region.toString() + ", new leader {" + std::to_string(not_leader.leader().id())
-                             + "," + std::to_string(not_leader.leader().store_id()) + "}");
+            log->information("not leader but has leader, region_id=" + rpc_ctx->region.toString() + ", new leader peer_id=" + std::to_string(not_leader.leader().id())
+                             + ", store_id=" + std::to_string(not_leader.leader().store_id()));
             if (!cluster->region_cache->updateLeader(rpc_ctx->region, not_leader.leader()))
             {
                 bo.backoff(boRegionScheduling, Exception("not leader, ctx: " + rpc_ctx->toString(), NotLeader));
@@ -25,7 +25,7 @@ void RegionClient::onRegionError(Backoffer & bo, RPCContextPtr rpc_ctx, const er
             // the Raft group is in an election, but it's possible that the peer is
             // isolated and removed from the Raft group. So it's necessary to reload
             // the region from PD.
-            log->information("not leader but doesn't have new leader, region: " + rpc_ctx->region.toString());
+            log->information("not leader but doesn't have new leader, region_id=" + rpc_ctx->region.toString());
             cluster->region_cache->dropRegion(rpc_ctx->region);
             bo.backoff(boRegionScheduling, Exception("not leader, ctx: " + rpc_ctx->toString(), NotLeader));
         }

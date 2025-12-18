@@ -9,13 +9,14 @@ namespace kv
 {
 // load_balance is an option, because if store fail, it may cause batchCop fail.
 // For now, label_filter only works for tiflash.
-RPCContextPtr RegionCache::getRPCContext(Backoffer & bo,
-        const RegionVerID & id,
-        const StoreType store_type,
-        bool load_balance,
-        const LabelFilter & tiflash_label_filter,
-        const std::unordered_set<uint64_t> * store_id_blocklist,
-        uint64_t prefer_store_id)
+RPCContextPtr RegionCache::getRPCContext( //
+    Backoffer & bo,
+    const RegionVerID & id,
+    const StoreType store_type,
+    bool load_balance,
+    const LabelFilter & tiflash_label_filter,
+    const std::unordered_set<uint64_t> * store_id_blocklist,
+    uint64_t prefer_store_id)
 {
     for (;;)
     {
@@ -76,13 +77,13 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo,
             {
                 dropStore(peer.store_id());
                 bo.backoff(boRegionMiss,
-                           Exception("miss store, region id is: " + std::to_string(id.id) + " store id is: " + std::to_string(peer.store_id()),
+                           Exception("miss store, region_id is: " + std::to_string(id.id) + " store_id is: " + std::to_string(peer.store_id()),
                                      StoreNotReady));
                 continue;
             }
             if (store_id_blocklist && store_id_blocklist->count(store.id) > 0)
             {
-                log->warning("blocklist remove peer for region: " + id.toString() + std::string(", store: ") + std::to_string(store.id));
+                log->warning("blocklist remove peer for region_id: " + id.toString() + std::string(", store_id= ") + std::to_string(store.id));
                 continue;
             }
             if (store_type == StoreType::TiFlash)
@@ -93,7 +94,7 @@ RPCContextPtr RegionCache::getRPCContext(Backoffer & bo,
             return std::make_shared<RPCContext>(id, meta, peer, store, store.addr);
         }
         dropRegion(id);
-        bo.backoff(boRegionMiss, Exception("region miss, region id is: " + std::to_string(id.id), RegionUnavailable));
+        bo.backoff(boRegionMiss, Exception("region miss, region_id is: " + std::to_string(id.id), RegionUnavailable));
     }
 }
 
@@ -179,7 +180,7 @@ RegionPtr RegionCache::loadRegionByID(Backoffer & bo, uint64_t region_id)
             {
                 region->switchPeer(leader.id());
             }
-            log->debug("load region id: " + std::to_string(region->meta.id()) + " leader peer id: " + std::to_string(leader.id()) + " leader store id: " + std::to_string(leader.store_id()));
+            log->debug("load region_id: " + std::to_string(region->meta.id()) + " leader peer id: " + std::to_string(leader.id()) + " leader store_id: " + std::to_string(leader.store_id()));
             return region;
         }
         catch (const Exception & e)
@@ -228,7 +229,7 @@ metapb::Store RegionCache::loadStore(Backoffer & bo, uint64_t id)
         {
             // TODO:: The store may be not ready, it's better to check store's state.
             const auto & store = pd_client->getStore(id);
-            log->information("load store id " + std::to_string(id) + " address " + store.address());
+            log->information("load store_id " + std::to_string(id) + " address " + store.address());
             return store;
         }
         catch (Exception & e)
@@ -277,16 +278,17 @@ void RegionCache::forceReloadAllStores()
         reloadStoreWithoutLock(store_pb);
 }
 
-std::pair<std::vector<uint64_t>, std::vector<uint64_t>> RegionCache::getAllValidTiFlashStores(Backoffer & bo,
-        const RegionVerID & region_id,
-        const Store & current_store,
-        const LabelFilter & label_filter,
-        const std::unordered_set<uint64_t> * store_id_blocklist)
+std::pair<std::vector<uint64_t>, std::vector<uint64_t>> RegionCache::getAllValidTiFlashStores( //
+    Backoffer & bo,
+    const RegionVerID & region_id,
+    const Store & current_store,
+    const LabelFilter & label_filter,
+    const std::unordered_set<uint64_t> * store_id_blocklist)
 {
     auto remove_blocklist = [](const std::unordered_set<uint64_t> * store_id_blocklist,
-            std::vector<uint64_t> & stores,
-            const RegionVerID & region_id,
-            Logger * log) {
+                               std::vector<uint64_t> & stores,
+                               const RegionVerID & region_id,
+                               Logger * log) {
         if (store_id_blocklist != nullptr)
         {
             auto origin_size = stores.size();
@@ -296,7 +298,7 @@ std::pair<std::vector<uint64_t>, std::vector<uint64_t>> RegionCache::getAllValid
                          stores.end());
             if (log != nullptr && origin_size != stores.size())
             {
-                auto s = "blocklist peer removed, region=" + region_id.toString() + ", origin_store_size=" + std::to_string(origin_size) + ", current_store_size=" + std::to_string(stores.size());
+                auto s = "blocklist peer removed, region_id=" + region_id.toString() + ", origin_store_size=" + std::to_string(origin_size) + ", current_store_size=" + std::to_string(stores.size());
                 log->information(s);
             }
         }
@@ -367,7 +369,7 @@ void RegionCache::insertRegionToCache(RegionPtr region)
 void RegionCache::dropRegion(const RegionVerID & region_id)
 {
     std::unique_lock<std::shared_mutex> lock(region_mutex);
-    log->information("try drop region " + region_id.toString());
+    log->information("try drop region, region_id=" + region_id.toString());
     auto iter_by_id = regions.find(region_id);
     if (iter_by_id != regions.end())
     {
@@ -379,7 +381,7 @@ void RegionCache::dropRegion(const RegionVerID & region_id)
         /// record the work flash index when drop region
         region_last_work_flash_index[region_id.id] = iter_by_id->second->work_tiflash_peer_idx.load();
         regions.erase(iter_by_id);
-        log->information("drop region " + std::to_string(region_id.id) + " because of send failure");
+        log->information("drop region because of send failure, region_id=" + std::to_string(region_id.id));
     }
 }
 
@@ -388,11 +390,11 @@ void RegionCache::dropStore(uint64_t failed_store_id)
     std::lock_guard<std::mutex> lock(store_mutex);
     if (stores.erase(failed_store_id))
     {
-        log->information("drop store " + std::to_string(failed_store_id) + " because of send failure");
+        log->information("drop store because of send failure, store_id=" + std::to_string(failed_store_id));
     }
 }
 
-void RegionCache::onSendReqFail(RPCContextPtr & ctx, const Exception &  /*exc*/)
+void RegionCache::onSendReqFail(RPCContextPtr & ctx, const Exception & /*exc*/)
 {
     const auto & failed_region_id = ctx->region;
     uint64_t failed_store_id = ctx->peer.store_id();
@@ -420,8 +422,8 @@ bool RegionCache::updateLeader(const RegionVerID & region_id, const metapb::Peer
     if (!it->second->switchPeer(leader.id()))
     {
         lock.unlock();
-        log->warning("failed to update leader, region " + region_id.toString() + ", new leader {" + std::to_string(leader.id())
-                     + "," + std::to_string(leader.store_id()) + "}");
+        log->warning("failed to update leader, region_id=" + region_id.toString() + ", new leader peer_id=" + std::to_string(leader.id())
+                     + ", store_id=" + std::to_string(leader.store_id()));
         dropRegion(region_id);
         return false;
     }
@@ -430,7 +432,7 @@ bool RegionCache::updateLeader(const RegionVerID & region_id, const metapb::Peer
 
 void RegionCache::onRegionStale(Backoffer & /*bo*/, RPCContextPtr ctx, const errorpb::EpochNotMatch & stale_epoch)
 {
-    log->information("region stale for region " + ctx->region.toString() + ".");
+    log->information("region stale for region_id=" + ctx->region.toString());
 
     dropRegion(ctx->region);
 

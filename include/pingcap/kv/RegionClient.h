@@ -86,7 +86,7 @@ struct RegionClient
             }
             if (resp->has_region_error())
             {
-                log->warning("region " + region_id.toString() + " find error: " + resp->region_error().DebugString());
+                log->warning("region_id " + region_id.toString() + " find error: " + resp->region_error().DebugString());
                 onRegionError(bo, ctx, resp->region_error());
                 continue;
             }
@@ -174,7 +174,7 @@ struct RegionClient
             {
                 if (stream_reader->first_resp.has_region_error())
                 {
-                    log->warning("region " + region_id.toString() + " find error: " + stream_reader->first_resp.region_error().message());
+                    log->warning("region_id " + region_id.toString() + " find error: " + stream_reader->first_resp.region_error().message());
                     onRegionError(bo, ctx, stream_reader->first_resp.region_error());
                     continue;
                 }

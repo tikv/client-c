@@ -537,7 +537,7 @@ std::vector<BatchCopTask> buildBatchCopTasks(
             if (rpc_context == nullptr)
             {
                 need_retry = true;
-                log->information("retry for TiFlash peer with region missing, region=" + cop_task.region_id.toString());
+                log->information("retry for TiFlash peer with region missing, region_id=" + cop_task.region_id.toString());
                 // Probably all the regions are invalid. Make the loop continue and mark all the regions invalid.
                 // Then `splitRegion` will reloads these regions.
                 continue;
@@ -717,7 +717,7 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
 
     auto handle_locked_resp = [&](const ::kvrpcpb::LockInfo & locked) -> std::vector<CopTask> {
         kv::LockPtr lock = std::make_shared<kv::Lock>(locked);
-        log->debug("region " + task.region_id.toString() + " encounter lock problem: " + locked.DebugString());
+        log->debug("region_id " + task.region_id.toString() + " encounter lock problem: " + locked.DebugString());
         std::vector<uint64_t> pushed;
         std::vector<kv::LockPtr> locks{lock};
         auto before_expired = cluster->lock_resolver->resolveLocks(bo, task.req->start_ts, locks, pushed);
