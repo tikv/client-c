@@ -298,7 +298,7 @@ std::pair<std::vector<uint64_t>, std::vector<uint64_t>> RegionCache::getAllValid
                          stores.end());
             if (log != nullptr && origin_size != stores.size())
             {
-                auto s = "blocklist peer removed, region_id=" + region_id.toString() + ", origin_store_size=" + std::to_string(origin_size) + ", current_store_size=" + std::to_string(stores.size());
+                auto s = "blocklist peer removed, region_ver_id=" + region_id.toString() + ", origin_store_size=" + std::to_string(origin_size) + ", current_store_size=" + std::to_string(stores.size());
                 log->information(s);
             }
         }
@@ -369,7 +369,7 @@ void RegionCache::insertRegionToCache(RegionPtr region)
 void RegionCache::dropRegion(const RegionVerID & region_id)
 {
     std::unique_lock<std::shared_mutex> lock(region_mutex);
-    log->information("try drop region, region_id=" + region_id.toString());
+    log->information("try drop region, region_ver_id=" + region_id.toString());
     auto iter_by_id = regions.find(region_id);
     if (iter_by_id != regions.end())
     {
@@ -381,7 +381,7 @@ void RegionCache::dropRegion(const RegionVerID & region_id)
         /// record the work flash index when drop region
         region_last_work_flash_index[region_id.id] = iter_by_id->second->work_tiflash_peer_idx.load();
         regions.erase(iter_by_id);
-        log->information("drop region because of send failure, region_id=" + std::to_string(region_id.id));
+        log->information("drop region because of send failure, region_ver_id=" + std::to_string(region_id.id));
     }
 }
 
@@ -422,7 +422,7 @@ bool RegionCache::updateLeader(const RegionVerID & region_id, const metapb::Peer
     if (!it->second->switchPeer(leader.id()))
     {
         lock.unlock();
-        log->warning("failed to update leader, region_id=" + region_id.toString() + ", new leader peer_id=" + std::to_string(leader.id())
+        log->warning("failed to update leader, region_ver_id=" + region_id.toString() + ", new leader peer_id=" + std::to_string(leader.id())
                      + ", store_id=" + std::to_string(leader.store_id()));
         dropRegion(region_id);
         return false;
@@ -432,7 +432,7 @@ bool RegionCache::updateLeader(const RegionVerID & region_id, const metapb::Peer
 
 void RegionCache::onRegionStale(Backoffer & /*bo*/, RPCContextPtr ctx, const errorpb::EpochNotMatch & stale_epoch)
 {
-    log->information("region stale for region_id=" + ctx->region.toString());
+    log->information("region stale for region_ver_id=" + ctx->region.toString());
 
     dropRegion(ctx->region);
 
