@@ -73,23 +73,25 @@ struct RegionClient
             auto status = rpc.call(&context, req, resp);
             if (!status.ok())
             {
+                auto extra_msg = "region_id: " + region_id.toString() + ", addr: " + ctx->addr;
                 if (status.error_code() == ::grpc::StatusCode::UNIMPLEMENTED)
                 {
                     // The rpc is not implemented on this service.
-                    throw Exception("rpc is not implemented: " + rpc.errMsg(status), GRPCNotImplemented);
+                    throw Exception("rpc is not implemented: " + rpc.errMsg(status, extra_msg), GRPCNotImplemented);
                 }
-                std::string err_msg = rpc.errMsg(status);
+                std::string err_msg = rpc.errMsg(status, extra_msg);
                 log->warning(err_msg);
                 onSendFail(bo, Exception(err_msg, GRPCErrorCode), ctx);
                 continue;
             }
             if (resp->has_region_error())
             {
-                log->warning("region " + region_id.toString() + " find error: " + resp->region_error().DebugString());
+                log->warning("region_id " + region_id.toString() + " find error: " + resp->region_error().DebugString());
                 onRegionError(bo, ctx, resp->region_error());
                 continue;
             }
-            if (same_zone_flag && source_zone_label != "")
+
+            if (same_zone_flag && !source_zone_label.empty())
             {
                 auto iter = ctx->store.labels.find(DCLabelKey);
                 if (iter != ctx->store.labels.end())
@@ -175,7 +177,7 @@ struct RegionClient
             {
                 if (stream_reader->first_resp.has_region_error())
                 {
-                    log->warning("region " + region_id.toString() + " find error: " + stream_reader->first_resp.region_error().message());
+                    log->warning("region_id " + region_id.toString() + " find error: " + stream_reader->first_resp.region_error().message());
                     onRegionError(bo, ctx, stream_reader->first_resp.region_error());
                     continue;
                 }
@@ -184,7 +186,7 @@ struct RegionClient
             auto status = stream_reader->reader->Finish();
             if (status.ok())
             {
-                if (same_zone_flag && source_zone_label != "")
+                if (same_zone_flag && !source_zone_label.empty())
                 {
                     auto iter = ctx->store.labels.find(DCLabelKey);
                     if (iter != ctx->store.labels.end())
@@ -196,12 +198,13 @@ struct RegionClient
                 stream_reader->no_resp = true;
                 return stream_reader;
             }
-            else if (status.error_code() == ::grpc::StatusCode::UNIMPLEMENTED)
+            auto extra_msg = "region_id: " + region_id.toString() + ", addr: " + ctx->addr;
+            if (status.error_code() == ::grpc::StatusCode::UNIMPLEMENTED)
             {
                 // The rpc is not implemented on this service.
-                throw Exception("rpc is not implemented: " + rpc.errMsg(status), GRPCNotImplemented);
+                throw Exception("rpc is not implemented: " + rpc.errMsg(status, extra_msg), GRPCNotImplemented);
             }
-            std::string err_msg = rpc.errMsg(status);
+            std::string err_msg = rpc.errMsg(status, extra_msg);
             log->warning(err_msg);
             onSendFail(bo, Exception(err_msg, GRPCErrorCode), ctx);
         }
