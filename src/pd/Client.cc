@@ -139,21 +139,21 @@ void Client::initClusterID()
             auto resp = getMembers(url);
             if (!resp.has_header())
             {
-                log->warning("failed to get cluster id by :" + url + " retrying");
+                log->warning("failed to get cluster_id by :" + url + " retrying");
                 continue;
             }
             if (resp.header().has_error())
             {
-                log->warning("failed to init cluster id: " + resp.header().error().message());
+                log->warning("failed to init cluster_id: " + resp.header().error().message());
                 continue;
             }
             cluster_id = resp.header().cluster_id();
-            log->information("init cluster id done: " + std::to_string(cluster_id));
+            log->information("init cluster_id done: " + std::to_string(cluster_id));
             return;
         }
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
-    throw Exception("failed to init cluster id", InitClusterIDFailed);
+    throw Exception("failed to init cluster_id", InitClusterIDFailed);
 }
 
 void Client::initLeader()
@@ -189,7 +189,7 @@ void Client::updateLeader()
         auto resp = getMembers(url);
         if (!resp.has_header() || resp.leader().client_urls_size() == 0)
         {
-            log->warning("failed to get cluster id by :" + url);
+            log->warning("failed to get members by :" + url);
             failed_urls.insert(url);
             continue;
         }
@@ -529,7 +529,7 @@ KeyspaceID Client::getKeyspaceID(const std::string & keyspace_name)
     auto status = leader_client->keyspace_stub->LoadKeyspace(&context, request, &response);
     if (!status.ok())
     {
-        std::string err_msg = ("get keyspace id failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
+        std::string err_msg = ("get keyspace_id failed: " + std::to_string(status.error_code()) + ": " + status.error_message());
         log->warning(err_msg);
         check_leader.store(true);
         throw Exception(err_msg, GRPCErrorCode);
@@ -537,7 +537,7 @@ KeyspaceID Client::getKeyspaceID(const std::string & keyspace_name)
 
     if (response.header().has_error())
     {
-        std::string err_msg = ("get keyspace id failed: " + response.header().error().message());
+        std::string err_msg = ("get keyspace_id failed: " + response.header().error().message());
         log->warning(err_msg);
         throw Exception(err_msg, InternalError);
     }

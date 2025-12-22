@@ -48,7 +48,7 @@ kvrpcpb::MvccInfo Snapshot::mvccGet(Backoffer & bo, const std::string & key)
         if (!response.error().empty())
         {
             Logger * log(&Logger::get("Snapshot::mvccGet"));
-            log->warning("reponse error is " + response.error());
+            log->warning("response error is " + response.error());
             continue;
         }
         return response.info();
