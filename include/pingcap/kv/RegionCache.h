@@ -87,19 +87,26 @@ struct Region
     metapb::Peer leader_peer;
     std::vector<metapb::Peer> pending_peers;
     std::atomic_uint work_tiflash_peer_idx;
+    std::atomic_int64_t ttl;
 
     Region(const metapb::Region & meta_, const metapb::Peer & peer_)
         : meta(meta_)
         , leader_peer(peer_)
         , work_tiflash_peer_idx(0)
-    {}
+        , ttl(0)
+    {
+        initTTL();
+    }
 
     Region(const metapb::Region & meta_, const metapb::Peer & peer_, const std::vector<metapb::Peer> & pending_peers_)
         : meta(meta_)
         , leader_peer(peer_)
         , pending_peers(pending_peers_)
         , work_tiflash_peer_idx(0)
-    {}
+        , ttl(0)
+    {
+        initTTL();
+    }
 
     const std::string & startKey() const { return meta.start_key(); }
 
@@ -128,6 +135,18 @@ struct Region
         }
         return false;
     }
+
+    inline void initTTL()
+    {
+        int64_t now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+        ttl = nextTTL(now);
+    }
+
+    // nextTTL returns a random TTL in range [ts+base, ts+base+jitter). The input ts should be an epoch timestamp in seconds.
+    static int64_t nextTTL(int64_t ts);
+
+    // checkRegionCacheTTL returns false means the region cache is expired.
+    bool checkRegionCacheTTL(int64_t ts);
 };
 
 using RegionPtr = std::shared_ptr<Region>;

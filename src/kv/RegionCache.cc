@@ -3,10 +3,58 @@
 #include <pingcap/kv/RegionCache.h>
 #include <pingcap/pd/CodecClient.h>
 
+#include <random>
+
 namespace pingcap
 {
 namespace kv
 {
+
+constexpr int64_t regionCacheTTLSec = 600;
+constexpr int64_t regionCacheTTLJitterSec = 60;
+
+int64_t Region::nextTTL(int64_t ts)
+{
+    int64_t ttl = ts + regionCacheTTLSec;
+
+    static thread_local std::mt19937 generator{std::random_device{}()};
+
+    std::uniform_int_distribution<int64_t> distribution(0, regionCacheTTLJitterSec - 1);
+    int64_t jitter = distribution(generator);
+
+    return ttl + jitter;
+}
+
+bool Region::checkRegionCacheTTL(int64_t ts)
+{
+    int64_t new_ttl = 0;
+    int64_t current_ttl = ttl.load(std::memory_order_relaxed);
+    while (true)
+    {
+        if (ts > current_ttl)
+        {
+            return false;
+        }
+
+        // skip updating TTL when the TTL is far away from ts (still within jitter time)
+        if (current_ttl > ts + regionCacheTTLSec)
+        {
+            return true;
+        }
+
+        if (new_ttl == 0)
+        {
+            new_ttl = nextTTL(ts);
+        }
+
+        // now we have ts <= ttl <= ts+regionCacheTTLSec <= newTTL = ts+regionCacheTTLSec+randomJitter
+        if (ttl.compare_exchange_weak(current_ttl, new_ttl, std::memory_order_relaxed))
+        {
+            return true;
+        }
+    }
+}
+
 // load_balance is an option, because if store fail, it may cause batchCop fail.
 // For now, label_filter only works for tiflash.
 RPCContextPtr RegionCache::getRPCContext( //
@@ -129,7 +177,16 @@ KeyLocation RegionCache::locateKey(Backoffer & bo, const std::string & key)
     RegionPtr region = searchCachedRegion(key);
     if (region != nullptr)
     {
-        return KeyLocation(region->verID(), region->startKey(), region->endKey());
+        int64_t now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+        if (region->checkRegionCacheTTL(now))
+        {
+            return KeyLocation(region->verID(), region->startKey(), region->endKey());
+        }
+        else
+        {
+            log->debug("region cache ttl expired for region_id: " + std::to_string(region->meta.id()));
+            dropRegion(region->verID());
+        }
     }
 
     region = loadRegionByKey(bo, key);
