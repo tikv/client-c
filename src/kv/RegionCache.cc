@@ -12,6 +12,7 @@ namespace kv
 
 constexpr int64_t regionCacheTTLSec = 600;
 constexpr int64_t regionCacheTTLJitterSec = 60;
+constexpr bool enableRegionCacheTTL = false;
 
 int64_t Region::nextTTL(int64_t ts)
 {
@@ -27,6 +28,8 @@ int64_t Region::nextTTL(int64_t ts)
 
 bool Region::checkRegionCacheTTL(int64_t ts)
 {
+    if constexpr (!enableRegionCacheTTL)
+        return true;
     int64_t new_ttl = 0;
     int64_t current_ttl = ttl.load(std::memory_order_relaxed);
     while (true)
