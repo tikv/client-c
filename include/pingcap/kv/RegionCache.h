@@ -7,6 +7,7 @@
 #include <pingcap/kv/Backoff.h>
 #include <pingcap/pd/Client.h>
 
+#include <atomic>
 #include <map>
 #include <unordered_map>
 
@@ -147,6 +148,12 @@ struct Region
 
     // checkRegionCacheTTL returns false means the region cache is expired.
     bool checkRegionCacheTTL(int64_t ts);
+
+    // SetRegionCacheTTL configures region cache TTL and jitter (seconds).
+    static void setRegionCacheTTL(int64_t base_sec, int64_t jitter_sec);
+
+    // SetRegionCacheTTLEnabled enables or disables region cache TTL check.
+    static void setRegionCacheTTLEnabled(bool enable);
 };
 
 using RegionPtr = std::shared_ptr<Region>;

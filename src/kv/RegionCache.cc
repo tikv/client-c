@@ -10,17 +10,24 @@ namespace pingcap
 namespace kv
 {
 
-constexpr int64_t regionCacheTTLSec = 600;
-constexpr int64_t regionCacheTTLJitterSec = 60;
-constexpr bool enableRegionCacheTTL = false;
+std::atomic<int64_t> regionCacheTTLSec{600};
+std::atomic<int64_t> regionCacheTTLJitterSec{60};
+std::atomic<bool> enableRegionCacheTTL{false};
 
 int64_t Region::nextTTL(int64_t ts)
 {
-    int64_t ttl = ts + regionCacheTTLSec;
+    int64_t base = regionCacheTTLSec.load(std::memory_order_relaxed);
+    if (base < 0)
+        base = 0;
+    int64_t ttl = ts + base;
 
     static thread_local std::mt19937 generator{std::random_device{}()};
 
-    std::uniform_int_distribution<int64_t> distribution(0, regionCacheTTLJitterSec - 1);
+    int64_t jitter_sec = regionCacheTTLJitterSec.load(std::memory_order_relaxed);
+    if (jitter_sec <= 0)
+        return ttl;
+
+    std::uniform_int_distribution<int64_t> distribution(0, jitter_sec - 1);
     int64_t jitter = distribution(generator);
 
     return ttl + jitter;
@@ -28,8 +35,11 @@ int64_t Region::nextTTL(int64_t ts)
 
 bool Region::checkRegionCacheTTL(int64_t ts)
 {
-    if constexpr (!enableRegionCacheTTL)
+    if (!enableRegionCacheTTL.load(std::memory_order_relaxed))
         return true;
+    int64_t base = regionCacheTTLSec.load(std::memory_order_relaxed);
+    if (base < 0)
+        base = 0;
     int64_t new_ttl = 0;
     int64_t current_ttl = ttl.load(std::memory_order_relaxed);
     while (true)
@@ -40,7 +50,7 @@ bool Region::checkRegionCacheTTL(int64_t ts)
         }
 
         // skip updating TTL when the TTL is far away from ts (still within jitter time)
-        if (current_ttl > ts + regionCacheTTLSec)
+        if (current_ttl > ts + base)
         {
             return true;
         }
@@ -56,6 +66,17 @@ bool Region::checkRegionCacheTTL(int64_t ts)
             return true;
         }
     }
+}
+
+void Region::setRegionCacheTTL(int64_t base_sec, int64_t jitter_sec)
+{
+    regionCacheTTLSec.store(base_sec, std::memory_order_relaxed);
+    regionCacheTTLJitterSec.store(jitter_sec, std::memory_order_relaxed);
+}
+
+void Region::setRegionCacheTTLEnabled(bool enable)
+{
+    enableRegionCacheTTL.store(enable, std::memory_order_relaxed);
 }
 
 // load_balance is an option, because if store fail, it may cause batchCop fail.
