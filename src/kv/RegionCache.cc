@@ -125,7 +125,7 @@ RPCContextPtr RegionCache::getRPCContext( //
                     break;
                 if (store_id_blocklist && store_id_blocklist->count(store.id) > 0)
                     break;
-                return std::make_shared<RPCContext>(id, meta, peer, store, store.addr);
+                return std::make_shared<RPCContext>(cluster_id, id, meta, peer, store, store.addr);
             }
         }
         if (store_type == StoreType::TiFlash)
@@ -163,7 +163,7 @@ RPCContextPtr RegionCache::getRPCContext( //
                 // set the index for next access in order to balance the workload among all tiflash peers
                 region->work_tiflash_peer_idx.store(peer_index);
             }
-            return std::make_shared<RPCContext>(id, meta, peer, store, store.addr);
+            return std::make_shared<RPCContext>(cluster_id, id, meta, peer, store, store.addr);
         }
         dropRegion(id);
         bo.backoff(boRegionMiss, Exception("region miss, region_id is: " + std::to_string(id.id), RegionUnavailable));

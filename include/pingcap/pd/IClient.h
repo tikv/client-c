@@ -21,6 +21,8 @@ class IClient
 public:
     virtual ~IClient() = default;
 
+    virtual uint64_t getClusterID() = 0;
+
     virtual uint64_t getTS() = 0;
 
     virtual pdpb::GetRegionResponse getRegionByKey(const std::string & key) = 0;

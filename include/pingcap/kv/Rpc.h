@@ -79,6 +79,7 @@ public:
         context->set_region_id(rpc_ctx->region.id);
         context->set_allocated_region_epoch(new metapb::RegionEpoch(rpc_ctx->meta.region_epoch()));
         context->set_allocated_peer(new metapb::Peer(rpc_ctx->peer));
+        context->set_cluster_id(rpc_ctx->cluster_id);
     }
 
     void setClientContext(::grpc::ClientContext & context, int timeout, const GRPCMetaData & meta_data = {})

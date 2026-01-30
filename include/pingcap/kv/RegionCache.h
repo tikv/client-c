@@ -179,14 +179,16 @@ struct KeyLocation
 
 struct RPCContext
 {
+    uint64_t cluster_id;
     RegionVerID region;
     metapb::Region meta;
     metapb::Peer peer;
     Store store;
     std::string addr;
 
-    RPCContext(const RegionVerID & region_, const metapb::Region & meta_, const metapb::Peer & peer_, const Store & store_, const std::string & addr_)
-        : region(region_)
+    RPCContext(uint64_t cluster_id_, const RegionVerID & region_, const metapb::Region & meta_, const metapb::Peer & peer_, const Store & store_, const std::string & addr_)
+        : cluster_id(cluster_id_)
+        , region(region_)
         , meta(meta_)
         , peer(peer_)
         , store(store_)
@@ -207,6 +209,7 @@ class RegionCache
 public:
     RegionCache(pd::ClientPtr pdClient_, const ClusterConfig & config)
         : pd_client(pdClient_)
+        , cluster_id(pd_client ? pd_client->getClusterID() : 0)
         , tiflash_engine_key(config.tiflash_engine_key)
         , tiflash_engine_value(config.tiflash_engine_value)
         , log(&Logger::get("pingcap.tikv"))
@@ -293,6 +296,7 @@ private:
     std::map<uint64_t, Store> stores;
 
     pd::ClientPtr pd_client;
+    const uint64_t cluster_id;
 
     std::shared_mutex region_mutex;
 
