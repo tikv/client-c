@@ -3,10 +3,82 @@
 #include <pingcap/kv/RegionCache.h>
 #include <pingcap/pd/CodecClient.h>
 
+#include <random>
+
 namespace pingcap
 {
 namespace kv
 {
+
+std::atomic<int64_t> regionCacheTTLSec{600};
+std::atomic<int64_t> regionCacheTTLJitterSec{60};
+std::atomic<bool> enableRegionCacheTTL{false};
+
+int64_t Region::nextTTL(int64_t ts)
+{
+    int64_t base = regionCacheTTLSec.load(std::memory_order_relaxed);
+    if (base < 0)
+        base = 0;
+    int64_t ttl = ts + base;
+
+    static thread_local std::mt19937 generator{std::random_device{}()};
+
+    int64_t jitter_sec = regionCacheTTLJitterSec.load(std::memory_order_relaxed);
+    if (jitter_sec <= 0)
+        return ttl;
+
+    std::uniform_int_distribution<int64_t> distribution(0, jitter_sec - 1);
+    int64_t jitter = distribution(generator);
+
+    return ttl + jitter;
+}
+
+bool Region::checkRegionCacheTTL(int64_t ts)
+{
+    if (!enableRegionCacheTTL.load(std::memory_order_relaxed))
+        return true;
+    int64_t base = regionCacheTTLSec.load(std::memory_order_relaxed);
+    if (base < 0)
+        base = 0;
+    int64_t new_ttl = 0;
+    int64_t current_ttl = ttl.load(std::memory_order_relaxed);
+    while (true)
+    {
+        if (ts > current_ttl)
+        {
+            return false;
+        }
+
+        // skip updating TTL when the TTL is far away from ts (still within jitter time)
+        if (current_ttl > ts + base)
+        {
+            return true;
+        }
+
+        if (new_ttl == 0)
+        {
+            new_ttl = nextTTL(ts);
+        }
+
+        // now we have ts <= ttl <= ts+regionCacheTTLSec <= newTTL = ts+regionCacheTTLSec+randomJitter
+        if (ttl.compare_exchange_weak(current_ttl, new_ttl, std::memory_order_relaxed))
+        {
+            return true;
+        }
+    }
+}
+
+void Region::setRegionCacheTTL(int64_t base_sec, int64_t jitter_sec)
+{
+    regionCacheTTLSec.store(base_sec, std::memory_order_relaxed);
+    regionCacheTTLJitterSec.store(jitter_sec, std::memory_order_relaxed);
+}
+
+void Region::setRegionCacheTTLEnabled(bool enable)
+{
+    enableRegionCacheTTL.store(enable, std::memory_order_relaxed);
+}
+
 // load_balance is an option, because if store fail, it may cause batchCop fail.
 // For now, label_filter only works for tiflash.
 RPCContextPtr RegionCache::getRPCContext( //
@@ -53,7 +125,7 @@ RPCContextPtr RegionCache::getRPCContext( //
                     break;
                 if (store_id_blocklist && store_id_blocklist->count(store.id) > 0)
                     break;
-                return std::make_shared<RPCContext>(id, meta, peer, store, store.addr);
+                return std::make_shared<RPCContext>(cluster_id, id, meta, peer, store, store.addr);
             }
         }
         if (store_type == StoreType::TiFlash)
@@ -91,7 +163,7 @@ RPCContextPtr RegionCache::getRPCContext( //
                 // set the index for next access in order to balance the workload among all tiflash peers
                 region->work_tiflash_peer_idx.store(peer_index);
             }
-            return std::make_shared<RPCContext>(id, meta, peer, store, store.addr);
+            return std::make_shared<RPCContext>(cluster_id, id, meta, peer, store, store.addr);
         }
         dropRegion(id);
         bo.backoff(boRegionMiss, Exception("region miss, region_id is: " + std::to_string(id.id), RegionUnavailable));
@@ -129,7 +201,16 @@ KeyLocation RegionCache::locateKey(Backoffer & bo, const std::string & key)
     RegionPtr region = searchCachedRegion(key);
     if (region != nullptr)
     {
-        return KeyLocation(region->verID(), region->startKey(), region->endKey());
+        int64_t now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+        if (region->checkRegionCacheTTL(now))
+        {
+            return KeyLocation(region->verID(), region->startKey(), region->endKey());
+        }
+        else
+        {
+            log->debug("region cache ttl expired for region_id: " + std::to_string(region->meta.id()));
+            dropRegion(region->verID());
+        }
     }
 
     region = loadRegionByKey(bo, key);
