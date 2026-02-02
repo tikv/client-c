@@ -19,6 +19,8 @@ public:
 
     ~MockPDClient() override = default;
 
+    uint64_t getClusterID() override { return 1; }
+
     uint64_t getGCSafePoint() override { return 10000000; }
 
     uint64_t getGCSafePointV2(KeyspaceID) override { return 10000000; }
