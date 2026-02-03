@@ -42,7 +42,7 @@ struct ShardClient
             auto addr = cluster->shard_cache->getRPCContext(bo, keyspace_id, table_id, index_id, shard_epoch);
             if (addr == "")
             {
-                throw Exception("Shard epoch not match after retries: Shard" + shard_epoch.toString() + " not in shard cache.", RegionEpochNotMatch);
+                throw Exception("Shard epoch not match after retries: " + shard_epoch.toString() + " not in shard cache.", RegionEpochNotMatch);
             }
             RpcCall<T> rpc(cluster->rpc_client, addr);
 
@@ -76,13 +76,29 @@ struct ShardClient
 protected:
     void onShardFail(Backoffer & bo, RPCContextPtr rpc_ctx, const errorpb::Error & err, pd::KeyspaceID keyspaceID, int64_t tableID, int64_t indexID) const
     {
+        (void)rpc_ctx;
+        if (err.has_server_is_busy())
+        {
+            bo.backoff(boServerBusy, Exception("server is busy: " + err.server_is_busy().reason(), ServerIsBusy));
+            return;
+        }
+        if (err.has_epoch_not_match())
+        {
+            cluster->shard_cache->onSendFail(keyspaceID, tableID, indexID, shard_epoch);
+            throw Exception("Shard epoch not match for " + shard_epoch.toString() + ", error: " + err.DebugString(), RegionEpochNotMatch);
+        }
         cluster->shard_cache->onSendFail(keyspaceID, tableID, indexID, shard_epoch);
+        throw Exception("Shard request meet region error for " + shard_epoch.toString() + ", error: " + err.DebugString(), RegionEpochNotMatch);
     }
 
     // Normally, it happens when machine down or network partition between tidb and kv or process crash.
     void onSendFail(Backoffer & bo, const Exception & e, RPCContextPtr rpc_ctx, pd::KeyspaceID keyspaceID, int64_t tableID, int64_t indexID) const
     {
-        cluster->shard_cache->onSendFail(keyspaceID, tableID, indexID, shard_epoch);
+        (void)rpc_ctx;
+        (void)keyspaceID;
+        (void)tableID;
+        (void)indexID;
+        bo.backoff(boTiFlashRPC, e);
     }
 };
 
