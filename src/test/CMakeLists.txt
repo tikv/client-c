@@ -16,6 +16,7 @@ add_executable(kv_client_ut
     lock_resolve_test.cc
     coprocessor_test.cc
     batch_coprocessor_test.cc
+    shard_cache_test.cc
 )
 target_include_directories(kv_client_ut PUBLIC ${test_includes})
 target_link_libraries(kv_client_ut ${test_libs} )
