@@ -74,9 +74,8 @@ struct ShardClient
     }
 
 protected:
-    void onShardFail(Backoffer & bo, RPCContextPtr rpc_ctx, const errorpb::Error & err, pd::KeyspaceID keyspaceID, int64_t tableID, int64_t indexID) const
+    void onShardFail(Backoffer & bo, RPCContextPtr, const errorpb::Error & err, pd::KeyspaceID keyspaceID, int64_t tableID, int64_t indexID) const
     {
-        (void)rpc_ctx;
         if (err.has_server_is_busy())
         {
             bo.backoff(boServerBusy, Exception("server is busy: " + err.server_is_busy().reason(), ServerIsBusy));
@@ -92,12 +91,8 @@ protected:
     }
 
     // Normally, it happens when machine down or network partition between tidb and kv or process crash.
-    void onSendFail(Backoffer & bo, const Exception & e, RPCContextPtr rpc_ctx, pd::KeyspaceID keyspaceID, int64_t tableID, int64_t indexID) const
+    void onSendFail(Backoffer & bo, const Exception & e, RPCContextPtr, pd::KeyspaceID, int64_t, int64_t) const
     {
-        (void)rpc_ctx;
-        (void)keyspaceID;
-        (void)tableID;
-        (void)indexID;
         bo.backoff(boTiFlashRPC, e);
     }
 };
