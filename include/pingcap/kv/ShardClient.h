@@ -60,7 +60,7 @@ struct ShardClient
                 std::string err_msg = rpc.errMsg(status);
                 log->warning(err_msg);
 
-                onSendFail(bo, Exception(err_msg, GRPCErrorCode), nullptr, keyspace_id, table_id, index_id);
+                onSendFail(bo, Exception(err_msg, GRPCErrorCode));
                 continue;
             }
             if (resp->has_region_error())
@@ -87,11 +87,11 @@ protected:
             throw Exception("Shard epoch not match for " + shard_epoch.toString() + ", error: " + err.DebugString(), RegionEpochNotMatch);
         }
         cluster->shard_cache->onSendFail(keyspaceID, tableID, indexID, shard_epoch);
-        throw Exception("Shard request meet region error for " + shard_epoch.toString() + ", error: " + err.DebugString(), RegionEpochNotMatch);
+        throw Exception("Shard request encountered a region error for " + shard_epoch.toString() + ", error: " + err.DebugString(), RegionEpochNotMatch);
     }
 
     // Normally, it happens when machine down or network partition between tidb and kv or process crash.
-    void onSendFail(Backoffer & bo, const Exception & e, RPCContextPtr, pd::KeyspaceID, int64_t, int64_t) const
+    void onSendFail(Backoffer & bo, const Exception & e) const
     {
         bo.backoff(boTiFlashRPC, e);
     }
