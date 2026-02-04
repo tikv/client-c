@@ -11,6 +11,7 @@
 
 #include <map>
 #include <unordered_map>
+#include <utility>
 
 
 namespace pingcap
@@ -200,6 +201,14 @@ public:
         auto cache = getOrCreateShardCacheForKeyspace(keyspaceID, tableID, indexID);
         cache->onSendReqFailForBatchShards(shard_epoch);
     }
+
+#ifdef PINGCAP_KV_CLIENT_TESTING
+    void insertShardToCacheForTest(pd::KeyspaceID keyspaceID, int64_t tableID, int64_t indexID, ShardPtr shard)
+    {
+        auto cache = getOrCreateShardCacheForKeyspace(keyspaceID, tableID, indexID);
+        cache->insertShardToCache(std::move(shard));
+    }
+#endif
 
 private:
     ShardCacheForOneIndexPtr getOrCreateShardCacheForKeyspace(pd::KeyspaceID keyspaceID, int64_t tableID, int64_t indexID);

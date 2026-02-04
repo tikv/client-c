@@ -1,8 +1,6 @@
 #include <gtest/gtest.h>
 
-#define private public
 #include <pingcap/kv/ShardCache.h>
-#undef private
 
 #include <pingcap/kv/RegionClient.h>
 #include <pingcap/kv/ShardClient.h>
@@ -104,7 +102,7 @@ struct ServerBusyOnceThenOkRPC
 
 std::atomic<int> ServerBusyOnceThenOkRPC::call_count{0};
 
-ShardCacheForOneIndexPtr insertTestShard(
+void insertTestShard(
     ShardCache & shard_cache,
     pd::KeyspaceID keyspace_id,
     int64_t table_id,
@@ -112,10 +110,8 @@ ShardCacheForOneIndexPtr insertTestShard(
     const ShardEpoch & shard_epoch,
     const std::string & addr)
 {
-    auto cache = shard_cache.getOrCreateShardCacheForKeyspace(keyspace_id, table_id, index_id);
     auto shard = std::make_shared<ShardWithAddr>(Shard(shard_epoch.id, "", "", shard_epoch.epoch), std::vector<std::string>{addr});
-    cache->insertShardToCache(shard);
-    return cache;
+    shard_cache.insertShardToCacheForTest(keyspace_id, table_id, index_id, shard);
 }
 
 } // namespace

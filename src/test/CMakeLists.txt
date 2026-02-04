@@ -20,6 +20,7 @@ add_executable(kv_client_ut
 )
 target_include_directories(kv_client_ut PUBLIC ${test_includes})
 target_link_libraries(kv_client_ut ${test_libs} )
+target_compile_definitions(kv_client_ut PRIVATE PINGCAP_KV_CLIENT_TESTING=1)
 
 include(CTest)
 add_test(kv_client_test kv_client_ut)
