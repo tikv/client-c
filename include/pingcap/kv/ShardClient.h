@@ -55,9 +55,9 @@ struct ShardClient
                 if (status.error_code() == ::grpc::StatusCode::UNIMPLEMENTED)
                 {
                     // The rpc is not implemented on this service.
-                    throw Exception("rpc is not implemented: " + rpc.errMsg(status), GRPCNotImplemented);
+                    throw Exception("rpc is not implemented: " + rpc.errMsg(status, ""), GRPCNotImplemented);
                 }
-                std::string err_msg = rpc.errMsg(status);
+                std::string err_msg = rpc.errMsg(status, "");
                 log->warning(err_msg);
 
                 onSendFail(bo, Exception(err_msg, GRPCErrorCode));
