@@ -134,15 +134,24 @@ void ShardCacheForOneIndex::dropShard(const ShardEpoch & shard_epoch)
 ShardPtr ShardCacheForOneIndex::searchCachedShard(const std::string & key)
 {
     std::shared_lock<std::shared_mutex> lock(shard_mutex);
+    auto is_consistent = [&](const ShardPtr & shard) {
+        auto it_by_epoch = shards.find(ShardEpoch{shard->shard.id, shard->shard.epoch});
+        return it_by_epoch != shards.end();
+    };
+
     auto it = shards_map.upper_bound(key);
     if (it != shards_map.end() && it->second->contains(key))
     {
-        return it->second;
+        if (is_consistent(it->second))
+            return it->second;
+        return nullptr;
     }
     // An empty string is considered to be the largest string in order.
     if (shards_map.begin() != shards_map.end() && shards_map.begin()->second->contains(key))
     {
-        return shards_map.begin()->second;
+        if (is_consistent(shards_map.begin()->second))
+            return shards_map.begin()->second;
+        return nullptr;
     }
     return nullptr;
 };

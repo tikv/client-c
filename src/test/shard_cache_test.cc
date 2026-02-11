@@ -114,6 +114,22 @@ void insertTestShard(
     shard_cache.insertShardToCacheForTest(keyspace_id, table_id, index_id, shard);
 }
 
+void insertTestShardWithRange(
+    ShardCache & shard_cache,
+    pd::KeyspaceID keyspace_id,
+    int64_t table_id,
+    int64_t index_id,
+    const ShardEpoch & shard_epoch,
+    const std::string & start_key,
+    const std::string & end_key,
+    const std::string & addr)
+{
+    auto shard = std::make_shared<ShardWithAddr>(
+        Shard(shard_epoch.id, start_key, end_key, shard_epoch.epoch),
+        std::vector<std::string>{addr});
+    shard_cache.insertShardToCacheForTest(keyspace_id, table_id, index_id, shard);
+}
+
 } // namespace
 
 TEST(ShardCacheTest, RetryOnGrpcFailureDoesNotDropShard)
@@ -196,6 +212,80 @@ TEST(ShardCacheTest, RetryOnServerIsBusyKeepsShard)
     ASSERT_NO_THROW(client.sendReqToShard<ServerBusyOnceThenOkRPC>(bo, req, &resp, labelFilterInvalid, dailTimeout, StoreType::TiKV, keyspace_id, table_id, index_id));
     EXPECT_EQ(ServerBusyOnceThenOkRPC::call_count.load(), 2);
     EXPECT_EQ(cluster.shard_cache->getRPCContext(bo, keyspace_id, table_id, index_id, shard_epoch), addr);
+}
+
+TEST(ShardCacheTest, SameShardEpochDifferentRangeReproFlow)
+{
+    constexpr pd::KeyspaceID keyspace_id = pd::NullspaceID;
+    constexpr int64_t table_id = 303;
+    constexpr int64_t index_id = 0;
+    const ShardEpoch shard_epoch{30361, 493};
+    const std::string addr1 = "127.0.0.1:13001";
+
+    Cluster cluster;
+    cluster.shard_cache = std::make_unique<ShardCache>("127.0.0.1:0");
+    insertTestShardWithRange(*cluster.shard_cache, keyspace_id, table_id, index_id, shard_epoch, "", "m", addr1);
+    insertTestShardWithRange(*cluster.shard_cache, keyspace_id, table_id, index_id, shard_epoch, "m", "z", addr1);
+    // Current queryable ranges:
+    // - ["", "m"): available.
+    // - [m, z): available.
+    // Reason: consistency check only requires id+epoch to exist in shards.
+
+    Backoffer bo(/*max_sleep=*/1);
+
+    // 2. drop one shard by (id, epoch)
+    cluster.shard_cache->onSendFail(keyspace_id, table_id, index_id, shard_epoch);
+    // Current queryable ranges:
+    // - none. shards no longer has this id+epoch, all ranges are rejected by consistency check.
+
+    // 3. getRPCContext fails (returns empty in current implementation)
+    EXPECT_EQ(cluster.shard_cache->getRPCContext(bo, keyspace_id, table_id, index_id, shard_epoch), "");
+    // Current queryable ranges:
+    // - none.
+
+    // 4. locateKey should reject stale shards_map entry and try reloading from TiCI meta service.
+    // In this unit test, no real meta service is available at 127.0.0.1:0, so reloading must fail.
+    try
+    {
+        (void)cluster.shard_cache->locateKey(keyspace_id, table_id, index_id, "a");
+        FAIL() << "expect GRPCErrorCode";
+    }
+    catch (const Exception & e)
+    {
+        EXPECT_EQ(e.code(), GRPCErrorCode);
+    }
+    // Current queryable ranges:
+    // - none.
+
+    // 5. simulate successful meta refresh with a new shard entry (same id/epoch), then query should recover.
+    insertTestShardWithRange(*cluster.shard_cache, keyspace_id, table_id, index_id, shard_epoch, "", "m", addr1);
+    // Current queryable ranges:
+    // - ["", "m"): available.
+    // - [m, z): unavailable because drop removed the endKey="z" entry from shards_map.
+
+    auto recovered_shard = cluster.shard_cache->locateKey(keyspace_id, table_id, index_id, "a");
+    ASSERT_NE(recovered_shard, nullptr);
+    EXPECT_EQ(recovered_shard->shard.id, shard_epoch.id);
+    EXPECT_EQ(recovered_shard->shard.epoch, shard_epoch.epoch);
+    EXPECT_EQ(recovered_shard->endKey(), "m");
+    EXPECT_EQ(recovered_shard->addr[0], addr1);
+    EXPECT_EQ(cluster.shard_cache->getRPCContext(bo, keyspace_id, table_id, index_id, shard_epoch), addr1);
+
+    // Request a key in range [m, z) without inserting a new shard for that range.
+    // It should try reloading from TiCI meta service and fail in unit-test env.
+    try
+    {
+        (void)cluster.shard_cache->locateKey(keyspace_id, table_id, index_id, "n");
+        FAIL() << "expect GRPCErrorCode";
+    }
+    catch (const Exception & e)
+    {
+        EXPECT_EQ(e.code(), GRPCErrorCode);
+    }
+    // Current queryable ranges:
+    // - ["", "m"): available.
+    // - [m, z): unavailable unless meta reload succeeds and inserts a new [m, z) shard.
+    EXPECT_EQ(cluster.shard_cache->getRPCContext(bo, keyspace_id, table_id, index_id, shard_epoch), addr1);
 }
 
 } // namespace pingcap::tests
