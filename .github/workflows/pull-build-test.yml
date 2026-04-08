@@ -29,7 +29,10 @@ jobs:
       - name: Build And Test
         run: |
           docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
             -v "${GITHUB_WORKSPACE}:/client-c" \
+            -w /client-c \
             local/tikv-client-c-builder:gha \
             /bin/bash -c "/client-c/ci/build-test.sh"
 
