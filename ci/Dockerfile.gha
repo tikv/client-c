@@ -33,6 +33,14 @@ RUN case "${TARGETARCH}" in \
 
 ENV GOPATH=/go
 ENV PATH=/usr/local/go/bin:${GOPATH}/bin:${PATH}
+ENV HOME=/home/ciuser
+
+RUN groupadd --system ciuser \
+    && useradd --system --create-home --gid ciuser ciuser \
+    && mkdir -p /go /mock-tikv \
+    && chown -R ciuser:ciuser /go /mock-tikv
+
+USER ciuser
 
 RUN git clone --depth 1 https://github.com/tikv/mock-tikv.git /mock-tikv \
     && cd /mock-tikv \
