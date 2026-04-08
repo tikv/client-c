@@ -1,0 +1,42 @@
+FROM ubuntu:22.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG GOLANG_VERSION=1.13.3
+ARG TARGETARCH
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        cmake \
+        git \
+        protobuf-compiler \
+        libprotobuf-dev \
+        libgrpc-dev \
+        libgrpc++-dev \
+        libc-ares-dev \
+        protobuf-compiler-grpc \
+        libpoco-dev \
+        wget \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN case "${TARGETARCH}" in \
+      amd64|arm64) GO_ARCH="${TARGETARCH}" ;; \
+      "") GO_ARCH="amd64" ;; \
+      *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && wget -q -O /tmp/go.tgz "https://dl.google.com/go/go${GOLANG_VERSION}.linux-${GO_ARCH}.tar.gz" \
+    && tar -C /usr/local -xzf /tmp/go.tgz \
+    && rm -f /tmp/go.tgz
+
+ENV GOPATH=/go
+ENV PATH=/usr/local/go/bin:${GOPATH}/bin:${PATH}
+
+RUN git clone --depth 1 https://github.com/tikv/mock-tikv.git /mock-tikv \
+    && cd /mock-tikv \
+    && git fetch --depth 1 origin 60d5921028afd72e1aeba880b9052c40e932eef3 \
+    && git checkout 60d5921028afd72e1aeba880b9052c40e932eef3 \
+    && make failpoint-enable \
+    && make
