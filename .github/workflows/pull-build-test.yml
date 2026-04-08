@@ -24,7 +24,7 @@ jobs:
           submodules: recursive
 
       - name: Build Builder Image
-        run: docker build -f ci/Dockerfile.gha -t local/tikv-client-c-builder:gha .
+        run: docker build -f ci/Dockerfile -t local/tikv-client-c-builder:latest .
 
       - name: Build And Test
         run: |
@@ -33,7 +33,7 @@ jobs:
             -e HOME=/tmp \
             -v "${GITHUB_WORKSPACE}:/client-c" \
             -w /client-c \
-            local/tikv-client-c-builder:gha \
+            local/tikv-client-c-builder:latest \
             /bin/bash -c "/client-c/ci/build-test.sh"
 
       - name: Upload Logs
