@@ -268,7 +268,11 @@ else()
     set(gRPC_LIBRARIES ${gRPC_LIBRARIES} ${gRPC_LIBRARY})
   endif()
 endif()
-set(gRPC_LIBRARIES ${gRPC_LIBRARIES} ${gRPC_CARES_LIBRARY} ${gRPC_GPR_LIBRARY} ${gRPC_ADDRESS_SORTING_LIBRARY} ${gRPC_UPB_LIBRARY})
+foreach(_dep IN ITEMS gRPC_CARES_LIBRARY gRPC_GPR_LIBRARY gRPC_ADDRESS_SORTING_LIBRARY gRPC_UPB_LIBRARY)
+  if(${_dep})
+    list(APPEND gRPC_LIBRARIES "${${_dep}}")
+  endif()
+endforeach()
 
 # Restore the original find library ordering.
 if(gRPC_USE_STATIC_LIBS)
