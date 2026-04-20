@@ -128,12 +128,14 @@ struct RegionClient
                 return ::grpc::Status::OK;
             auto status = reader->Finish();
             if (client != nullptr && shouldRemoveConnOnStatus(status))
-                (*client)->removeConn(addr);
+                client->removeConn(addr);
             return status;
         }
 
     private:
         friend struct RegionClient;
+        RpcClient * client = nullptr;
+        std::string addr;
         ::grpc::ClientContext context;
         std::unique_ptr<::grpc::ClientReader<RESP>> reader;
         bool no_resp = false;
@@ -169,6 +171,8 @@ struct RegionClient
             }
 
             auto stream_reader = std::make_unique<StreamReader<RESP>>();
+            stream_reader->client = cluster->rpc_client.get();
+            stream_reader->addr = ctx->addr;
             RpcCall<T> rpc(cluster->rpc_client, ctx->addr);
             rpc.setRequestCtx(req, ctx, cluster->api_version);
             rpc.setClientContext(stream_reader->context, timeout, meta_data);
@@ -198,6 +202,7 @@ struct RegionClient
                 return stream_reader;
             }
             auto extra_msg = "region_id: " + region_id.toString() + ", addr: " + ctx->addr;
+            rpc.dropConnIfNeeded(status);
             if (status.error_code() == ::grpc::StatusCode::UNIMPLEMENTED)
             {
 
