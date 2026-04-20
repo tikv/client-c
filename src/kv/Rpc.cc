@@ -40,5 +40,11 @@ ConnArrayPtr RpcClient::createConnArray(const std::string & addr)
     return conn_array;
 }
 
+void RpcClient::removeConn(const std::string & addr)
+{
+    std::lock_guard<std::mutex> lock(mutex);
+    conns.erase(addr);
+}
+
 } // namespace kv
 } // namespace pingcap

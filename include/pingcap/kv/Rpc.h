@@ -27,6 +27,18 @@ struct ConnArray
     std::shared_ptr<KvConnClient> get();
 };
 
+inline bool shouldRemoveConnOnStatus(const ::grpc::Status & status)
+{
+    switch (status.error_code())
+    {
+    case ::grpc::StatusCode::UNAVAILABLE:
+    case ::grpc::StatusCode::CANCELLED:
+        return true;
+    default:
+        return false;
+    }
+}
+
 using ConnArrayPtr = std::shared_ptr<ConnArray>;
 using GRPCMetaData = std::multimap<std::string, std::string>;
 
@@ -54,6 +66,8 @@ struct RpcClient
     ConnArrayPtr getConnArray(const std::string & addr);
 
     ConnArrayPtr createConnArray(const std::string & addr);
+
+    void removeConn(const std::string & addr);
 };
 
 using RpcClientPtr = std::unique_ptr<RpcClient>;
@@ -105,6 +119,12 @@ public:
             msg += " " + extra_msg;
         }
         return msg;
+    }
+
+    void dropConnIfNeeded(const ::grpc::Status & status)
+    {
+        if (shouldRemoveConnOnStatus(status))
+            client->removeConn(addr);
     }
 
 private:
