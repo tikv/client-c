@@ -29,14 +29,7 @@ struct ConnArray
 
 inline bool shouldRemoveConnOnStatus(const ::grpc::Status & status)
 {
-    switch (status.error_code())
-    {
-    case ::grpc::StatusCode::UNAVAILABLE:
-    case ::grpc::StatusCode::CANCELLED:
-        return true;
-    default:
-        return false;
-    }
+    return status.error_code() == grpc::StatusCode::UNAVAILABLE;
 }
 
 inline void dropConnIfNeeded(const RpcClientPtr & client, const std::string & addr, const ::grpc::Status & status)
