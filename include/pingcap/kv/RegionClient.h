@@ -79,10 +79,9 @@ struct RegionClient
                     // The rpc is not implemented on this service.
                     throw Exception("rpc is not implemented: " + rpc.errMsg(status, extra_msg), GRPCNotImplemented);
                 }
-                rpc.dropConnIfNeeded(status);
                 std::string err_msg = rpc.errMsg(status, extra_msg);
                 log->warning(err_msg);
-                onSendFail(bo, Exception(err_msg, GRPCErrorCode), ctx);
+                onSendFail(bo, Exception(err_msg, GRPCErrorCode), ctx, status);
                 continue;
             }
             if (resp->has_region_error())
@@ -126,16 +125,11 @@ struct RegionClient
         {
             if (no_resp)
                 return ::grpc::Status::OK;
-            auto status = reader->Finish();
-            if (client != nullptr && shouldRemoveConnOnStatus(status))
-                client->removeConn(addr);
-            return status;
+            return reader->Finish();
         }
 
     private:
         friend struct RegionClient;
-        RpcClient * client = nullptr;
-        std::string addr;
         ::grpc::ClientContext context;
         std::unique_ptr<::grpc::ClientReader<RESP>> reader;
         bool no_resp = false;
@@ -171,8 +165,6 @@ struct RegionClient
             }
 
             auto stream_reader = std::make_unique<StreamReader<RESP>>();
-            stream_reader->client = cluster->rpc_client.get();
-            stream_reader->addr = ctx->addr;
             RpcCall<T> rpc(cluster->rpc_client, ctx->addr);
             rpc.setRequestCtx(req, ctx, cluster->api_version);
             rpc.setClientContext(stream_reader->context, timeout, meta_data);
@@ -207,10 +199,9 @@ struct RegionClient
                 // The rpc is not implemented on this service.
                 throw Exception("rpc is not implemented: " + rpc.errMsg(status, extra_msg), GRPCNotImplemented);
             }
-            rpc.dropConnIfNeeded(status);
             std::string err_msg = rpc.errMsg(status, extra_msg);
             log->warning(err_msg);
-            onSendFail(bo, Exception(err_msg, GRPCErrorCode), ctx);
+            onSendFail(bo, Exception(err_msg, GRPCErrorCode), ctx, status);
         }
     }
 
@@ -218,7 +209,7 @@ protected:
     void onRegionError(Backoffer & bo, RPCContextPtr rpc_ctx, const errorpb::Error & err) const;
 
     // Normally, it happens when machine down or network partition between tidb and kv or process crash.
-    void onSendFail(Backoffer & bo, const Exception & e, RPCContextPtr rpc_ctx) const;
+    void onSendFail(Backoffer & bo, const Exception & e, RPCContextPtr rpc_ctx, const ::grpc::Status & status) const;
 };
 
 } // namespace kv

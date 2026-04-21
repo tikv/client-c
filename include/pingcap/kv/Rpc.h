@@ -39,6 +39,12 @@ inline bool shouldRemoveConnOnStatus(const ::grpc::Status & status)
     }
 }
 
+inline void dropConnIfNeeded(const RpcClientPtr & client, const std::string & addr, const ::grpc::Status & status)
+{
+    if (shouldRemoveConnOnStatus(status))
+        client->removeConn(addr);
+}
+
 using ConnArrayPtr = std::shared_ptr<ConnArray>;
 using GRPCMetaData = std::multimap<std::string, std::string>;
 
@@ -119,12 +125,6 @@ public:
             msg += " " + extra_msg;
         }
         return msg;
-    }
-
-    void dropConnIfNeeded(const ::grpc::Status & status)
-    {
-        if (shouldRemoveConnOnStatus(status))
-            client->removeConn(addr);
     }
 
 private:
