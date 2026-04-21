@@ -27,14 +27,9 @@ struct ConnArray
     std::shared_ptr<KvConnClient> get();
 };
 
-inline bool shouldRemoveConnOnStatus(const ::grpc::Status & status)
-{
-    return status.error_code() == grpc::StatusCode::UNAVAILABLE;
-}
-
 inline void dropConnIfNeeded(const RpcClientPtr & client, const std::string & addr, const ::grpc::Status & status)
 {
-    if (shouldRemoveConnOnStatus(status))
+    if (status.error_code() == grpc::StatusCode::UNAVAILABLE)
         client->removeConn(addr);
 }
 
