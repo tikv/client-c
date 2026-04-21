@@ -14,10 +14,7 @@ bool isConnValid(const std::shared_ptr<KvConnClient> & conn_client, size_t rpc_t
         return true;
 
     auto deadline = std::chrono::system_clock::now() + std::chrono::seconds(rpc_timeout);
-    if (conn_client->channel->WaitForConnected(deadline))
-        return true;
-
-    return false;
+    return conn_client->channel->WaitForConnected(deadline);
 }
 
 bool isConnArrayValid(const ConnArrayPtr & conn_array, size_t rpc_timeout)
@@ -59,19 +56,28 @@ void RpcClient::run()
 {
     while (!stopped.load())
     {
+        bool has_invalid_conns = false;
         {
-            std::unique_lock lock(scan_mu);
+            std::unique_lock lock(mutex);
             scan_cv.wait_for(lock, scan_interval, [this] {
-                return stopped.load();
+                return stopped.load() || !invalid_conns.empty();
             });
+            has_invalid_conns = !invalid_conns.empty();
         }
 
         if (stopped.load())
             return;
 
+        if (has_invalid_conns)
+        {
+            removeInvalidConns();
+            continue;
+        }
+
         try
         {
             scanConns();
+            removeInvalidConns();
         }
         catch (...)
         {
@@ -83,7 +89,6 @@ void RpcClient::run()
 void RpcClient::stop()
 {
     stopped.store(true);
-    std::lock_guard lock(scan_mu);
     scan_cv.notify_all();
 }
 
@@ -101,12 +106,32 @@ void RpcClient::scanConns()
     {
         if (!isConnArrayValid(conn_array, detect_rpc_timeout))
         {
-            log->information("delete unavailable addr: " + addr);
-            // RpcClient caches a connection pool per address, so drop the whole pool
-            // and let subsequent requests recreate fresh underlying channels lazily.
-            removeConn(addr, conn_array);
+            std::lock_guard<std::mutex> lock(mutex);
+            invalid_conns.push_back(addr);
         }
     }
+}
+
+void RpcClient::markConnInvalid(const std::string & addr)
+{
+    std::lock_guard<std::mutex> lock(mutex);
+    invalid_conns.push_back(addr);
+    scan_cv.notify_all();
+}
+
+void RpcClient::removeInvalidConns()
+{
+    std::lock_guard<std::mutex> lock(mutex);
+    if (invalid_conns.empty())
+        return;
+
+    for (const auto & addr : invalid_conns)
+    {
+        log->information("delete unavailable addr: " + addr);
+        conns.erase(addr);
+    }
+
+    invalid_conns.clear();
 }
 
 ConnArrayPtr RpcClient::getConnArray(const std::string & addr)

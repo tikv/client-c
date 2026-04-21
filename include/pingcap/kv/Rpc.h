@@ -25,7 +25,7 @@ struct ConnArray
     std::string address;
 
     size_t index = 0;
-    std::vector<std::shared_ptr<KvConnClient>> vec;
+    std::vector<std::shared_ptr<KvConnClient>> vec; // TODO(xzx) why this is a vector?
 
     ConnArray() = default;
 
@@ -49,8 +49,8 @@ struct RpcClient
     std::chrono::minutes scan_interval = rpc_conn_check_interval;
     size_t detect_rpc_timeout = rpc_conn_check_timeout;
     std::atomic<bool> stopped = false;
-    std::mutex scan_mu;
     std::condition_variable scan_cv;
+    std::vector<std::string> invalid_conns;
 
     RpcClient() = default;
 
@@ -63,6 +63,7 @@ struct RpcClient
         std::unique_lock lk(mutex);
         config = config_;
         conns.clear();
+        invalid_conns.clear();
     }
 
     void run();
@@ -70,6 +71,10 @@ struct RpcClient
     void stop();
 
     void scanConns();
+
+    void markConnInvalid(const std::string & addr);
+
+    void removeInvalidConns();
 
     ConnArrayPtr getConnArray(const std::string & addr);
 
@@ -85,7 +90,7 @@ using RpcClientPtr = std::unique_ptr<RpcClient>;
 inline void dropConnIfNeeded(const RpcClientPtr & client, const std::string & addr, const ::grpc::Status & status)
 {
     if (status.error_code() == grpc::StatusCode::UNAVAILABLE)
-        client->removeConn(addr);
+        client->markConnInvalid(addr);
 }
 
 // RpcCall holds the request and response, and delegates RPC calls.
