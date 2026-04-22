@@ -79,10 +79,6 @@ struct RpcClient
     ConnArrayPtr getConnArray(const std::string & addr);
 
     ConnArrayPtr createConnArray(const std::string & addr);
-
-    void removeConn(const std::string & addr);
-
-    void removeConn(const std::string & addr, const ConnArrayPtr & expected);
 };
 
 using RpcClientPtr = std::unique_ptr<RpcClient>;
