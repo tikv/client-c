@@ -25,7 +25,7 @@ struct ConnArray
     std::string address;
 
     size_t index = 0;
-    std::vector<std::shared_ptr<KvConnClient>> vec; // TODO(xzx) why this is a vector?
+    std::vector<std::shared_ptr<KvConnClient>> vec;
 
     ConnArray() = default;
 
