@@ -368,7 +368,10 @@ uint64_t Client::getGCSafePointV2(KeyspaceID keyspace_id)
 pdpb::GetGCStateResponse Client::getGCState(KeyspaceID keyspace_id)
 {
     pdpb::GetGCStateRequest request{};
-    request.set_allocated_header(requestHeader());
+    auto * header = requestHeader();
+    header->set_cluster_id(cluster_id);
+    header->set_caller_id("tiflash");
+    request.set_allocated_header(header);
     request.mutable_keyspace_scope()->set_keyspace_id(keyspace_id);
 
     auto leader_client = leaderClient();
