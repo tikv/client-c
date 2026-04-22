@@ -1,0 +1,45 @@
+name: pull-build-test
+
+on:
+  pull_request:
+    branches:
+      - master
+      - feature/**
+      - release-fts-*
+      - "!feature/release-*"
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Build Builder Image
+        run: docker build -f ci/Dockerfile -t local/tikv-client-c-builder:latest .
+
+      - name: Build And Test
+        run: |
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -v "${GITHUB_WORKSPACE}:/client-c" \
+            -w /client-c \
+            local/tikv-client-c-builder:latest \
+            /bin/bash -c "/client-c/ci/build-test.sh"
+
+      - name: Upload Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: build/**/*.log
+          if-no-files-found: ignore

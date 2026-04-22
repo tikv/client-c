@@ -7,6 +7,8 @@
 #include <pingcap/kv/Backoff.h>
 #include <pingcap/pd/Client.h>
 
+#include <atomic>
+#include <chrono>
 #include <map>
 #include <unordered_map>
 
@@ -87,19 +89,26 @@ struct Region
     metapb::Peer leader_peer;
     std::vector<metapb::Peer> pending_peers;
     std::atomic_uint work_tiflash_peer_idx;
+    std::atomic_int64_t ttl;
 
     Region(const metapb::Region & meta_, const metapb::Peer & peer_)
         : meta(meta_)
         , leader_peer(peer_)
         , work_tiflash_peer_idx(0)
-    {}
+        , ttl(0)
+    {
+        initTTL();
+    }
 
     Region(const metapb::Region & meta_, const metapb::Peer & peer_, const std::vector<metapb::Peer> & pending_peers_)
         : meta(meta_)
         , leader_peer(peer_)
         , pending_peers(pending_peers_)
         , work_tiflash_peer_idx(0)
-    {}
+        , ttl(0)
+    {
+        initTTL();
+    }
 
     const std::string & startKey() const { return meta.start_key(); }
 
@@ -128,6 +137,24 @@ struct Region
         }
         return false;
     }
+
+    inline void initTTL()
+    {
+        int64_t now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+        ttl = nextTTL(now);
+    }
+
+    // nextTTL returns a random TTL in range [ts+base, ts+base+jitter). The input ts should be an epoch timestamp in seconds.
+    static int64_t nextTTL(int64_t ts);
+
+    // checkRegionCacheTTL returns false means the region cache is expired.
+    bool checkRegionCacheTTL(int64_t ts);
+
+    // setRegionCacheTTL configures region cache TTL and jitter (seconds).
+    static void setRegionCacheTTL(int64_t base_sec, int64_t jitter_sec);
+
+    // setRegionCacheTTLEnabled enables or disables region cache TTL check.
+    static void setRegionCacheTTLEnabled(bool enable);
 };
 
 using RegionPtr = std::shared_ptr<Region>;
@@ -152,14 +179,16 @@ struct KeyLocation
 
 struct RPCContext
 {
+    uint64_t cluster_id;
     RegionVerID region;
     metapb::Region meta;
     metapb::Peer peer;
     Store store;
     std::string addr;
 
-    RPCContext(const RegionVerID & region_, const metapb::Region & meta_, const metapb::Peer & peer_, const Store & store_, const std::string & addr_)
-        : region(region_)
+    RPCContext(uint64_t cluster_id_, const RegionVerID & region_, const metapb::Region & meta_, const metapb::Peer & peer_, const Store & store_, const std::string & addr_)
+        : cluster_id(cluster_id_)
+        , region(region_)
         , meta(meta_)
         , peer(peer_)
         , store(store_)
@@ -180,6 +209,7 @@ class RegionCache
 public:
     RegionCache(pd::ClientPtr pdClient_, const ClusterConfig & config)
         : pd_client(pdClient_)
+        , cluster_id(pd_client ? pd_client->getClusterID() : 0)
         , tiflash_engine_key(config.tiflash_engine_key)
         , tiflash_engine_value(config.tiflash_engine_value)
         , log(&Logger::get("pingcap.tikv"))
@@ -266,6 +296,7 @@ private:
     std::map<uint64_t, Store> stores;
 
     pd::ClientPtr pd_client;
+    const uint64_t cluster_id;
 
     std::shared_mutex region_mutex;
 
