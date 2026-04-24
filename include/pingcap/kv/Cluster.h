@@ -34,7 +34,7 @@ struct Cluster
 
     Cluster()
         : pd_client(std::make_shared<pd::MockPDClient>())
-        , rpc_client(std::make_unique<RpcClient>())
+        , rpc_client(std::make_unique<RpcClient>(pd_client, ClusterConfig{}))
         , thread_pool(std::make_unique<pingcap::common::FixedThreadPool>(2))
         , mpp_prober(std::make_unique<common::MPPProber>(this))
     {
@@ -44,7 +44,7 @@ struct Cluster
     Cluster(const std::vector<std::string> & pd_addrs, const ClusterConfig & config)
         : pd_client(std::make_shared<pd::CodecClient>(pd_addrs, config))
         , region_cache(std::make_unique<RegionCache>(pd_client, config))
-        , rpc_client(std::make_unique<RpcClient>(config))
+        , rpc_client(std::make_unique<RpcClient>(pd_client, config))
         , oracle(std::make_unique<pd::Oracle>(pd_client, std::chrono::milliseconds(oracle_update_interval)))
         , lock_resolver(std::make_unique<LockResolver>(this))
         , api_version(config.api_version)

@@ -1,23 +1,24 @@
 #pragma once
 
-#include <atomic>
-#include <chrono>
-#include <condition_variable>
 #include <grpcpp/create_channel.h>
 #include <pingcap/Log.h>
 #include <pingcap/kv/RegionCache.h>
 #include <pingcap/kv/internal/type_traits.h>
 
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <map>
 #include <mutex>
+#include <utility>
 #include <vector>
 
 namespace pingcap
 {
 namespace kv
 {
-constexpr auto rpc_conn_check_interval = std::chrono::minutes(5);
-constexpr size_t rpc_conn_check_timeout = 2;
+constexpr auto rpc_conn_check_interval = std::chrono::minutes(10);
+constexpr auto rpc_conn_check_interval_jitter = std::chrono::minutes(5);
 
 struct ConnArray
 {
@@ -40,6 +41,7 @@ using GRPCMetaData = std::multimap<std::string, std::string>;
 struct RpcClient
 {
     ClusterConfig config;
+    pd::ClientPtr pd_client;
 
     std::mutex mutex;
 
@@ -47,7 +49,6 @@ struct RpcClient
 
     Logger * log = &Logger::get("pingcap.RpcClient");
     std::chrono::minutes scan_interval = rpc_conn_check_interval;
-    size_t detect_rpc_timeout = rpc_conn_check_timeout;
     std::atomic<bool> stopped = false;
     std::condition_variable scan_cv;
     std::vector<std::string> invalid_conns;
@@ -56,6 +57,11 @@ struct RpcClient
 
     explicit RpcClient(const ClusterConfig & config_)
         : config(config_)
+    {}
+
+    RpcClient(pd::ClientPtr pd_client_, const ClusterConfig & config_)
+        : config(config_)
+        , pd_client(std::move(pd_client_))
     {}
 
     void update(const ClusterConfig & config_)

@@ -1,36 +1,37 @@
 #include <pingcap/Exception.h>
 #include <pingcap/kv/Rpc.h>
 
+#include <random>
+#include <unordered_set>
+
 namespace pingcap
 {
 namespace kv
 {
 namespace
 {
-bool isConnValid(const std::shared_ptr<KvConnClient> & conn_client, size_t rpc_timeout)
+std::unordered_set<std::string> getStoreAddresses(const pd::ClientPtr & pd_client)
 {
-    auto state = conn_client->channel->GetState(false);
-    if (state == GRPC_CHANNEL_READY)
-        return true;
-
-    auto deadline = std::chrono::system_clock::now() + std::chrono::seconds(rpc_timeout);
-    return conn_client->channel->WaitForConnected(deadline);
+    std::unordered_set<std::string> store_addrs;
+    const auto stores = pd_client->getAllStores(true);
+    store_addrs.reserve(stores.size());
+    for (const auto & store : stores)
+    {
+        if (!store.address().empty())
+            store_addrs.emplace(store.address());
+    }
+    return store_addrs;
 }
 
-bool isConnArrayValid(const ConnArrayPtr & conn_array, size_t rpc_timeout)
+std::chrono::seconds getRandomScanInterval(std::chrono::minutes scan_interval)
 {
-    std::vector<std::shared_ptr<KvConnClient>> conn_snapshot;
-    {
-        std::lock_guard<std::mutex> lock(conn_array->mutex);
-        conn_snapshot = conn_array->vec;
-    }
+    const auto min_seconds = std::chrono::duration_cast<std::chrono::seconds>(scan_interval);
+    const auto max_seconds = std::chrono::duration_cast<std::chrono::seconds>(
+        scan_interval + rpc_conn_check_interval_jitter);
 
-    for (const auto & conn_client : conn_snapshot)
-    {
-        if (!isConnValid(conn_client, rpc_timeout))
-            return false;
-    }
-    return true;
+    thread_local std::mt19937_64 generator(std::random_device{}());
+    std::uniform_int_distribution<std::chrono::seconds::rep> distribution(min_seconds.count(), max_seconds.count());
+    return std::chrono::seconds(distribution(generator));
 }
 } // namespace
 
@@ -59,7 +60,8 @@ void RpcClient::run()
         bool has_invalid_conns = false;
         {
             std::unique_lock lock(mutex);
-            scan_cv.wait_for(lock, scan_interval, [this] {
+            const auto wait_interval = getRandomScanInterval(scan_interval);
+            scan_cv.wait_for(lock, wait_interval, [this] {
                 return stopped.load() || !invalid_conns.empty();
             });
             has_invalid_conns = !invalid_conns.empty();
@@ -94,21 +96,33 @@ void RpcClient::stop()
 
 void RpcClient::scanConns()
 {
-    std::vector<std::pair<std::string, ConnArrayPtr>> conn_snapshot;
+    std::vector<std::string> conn_snapshot;
     {
         std::lock_guard<std::mutex> lock(mutex);
         conn_snapshot.reserve(conns.size());
-        for (const auto & [addr, conn_array] : conns)
-            conn_snapshot.emplace_back(addr, conn_array);
+        for (const auto & conn : conns)
+            conn_snapshot.emplace_back(conn.first);
     }
 
-    for (const auto & [addr, conn_array] : conn_snapshot)
+    if (conn_snapshot.empty() || !pd_client || pd_client->isMock())
+        return;
+
+    const auto store_addrs = getStoreAddresses(pd_client);
+    std::vector<std::string> conns_to_remove;
+    for (const auto & addr : conn_snapshot)
     {
-        if (!isConnArrayValid(conn_array, detect_rpc_timeout))
-        {
-            std::lock_guard<std::mutex> lock(mutex);
+        if (store_addrs.find(addr) == store_addrs.end())
+            conns_to_remove.emplace_back(addr);
+    }
+
+    if (conns_to_remove.empty())
+        return;
+
+    std::lock_guard<std::mutex> lock(mutex);
+    for (const auto & addr : conns_to_remove)
+    {
+        if (conns.find(addr) != conns.end())
             invalid_conns.push_back(addr);
-        }
     }
 }
 
@@ -127,8 +141,8 @@ void RpcClient::removeInvalidConns()
 
     for (const auto & addr : invalid_conns)
     {
-        log->information("delete unavailable addr: " + addr);
-        conns.erase(addr);
+        if (conns.erase(addr))
+            log->information("delete invalid addr: " + addr);
     }
 
     invalid_conns.clear();
