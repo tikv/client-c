@@ -5,7 +5,6 @@
 #include <pingcap/kv/RegionClient.h>
 
 #include <atomic>
-#include <condition_variable>
 #include <cstdint>
 #include <mutex>
 #include <thread>
