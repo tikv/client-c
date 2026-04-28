@@ -196,6 +196,7 @@ struct RegionClient
             auto extra_msg = "region_id: " + region_id.toString() + ", addr: " + ctx->addr;
             if (status.error_code() == ::grpc::StatusCode::UNIMPLEMENTED)
             {
+
                 // The rpc is not implemented on this service.
                 throw Exception("rpc is not implemented: " + rpc.errMsg(status, extra_msg), GRPCNotImplemented);
             }
