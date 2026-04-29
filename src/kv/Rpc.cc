@@ -57,24 +57,16 @@ void RpcClient::run()
 {
     while (!stopped.load())
     {
-        bool has_invalid_conns = false;
         {
-            std::unique_lock lock(mutex);
             const auto wait_interval = getRandomScanInterval(scan_interval);
+            std::unique_lock lock(mutex);
             scan_cv.wait_for(lock, wait_interval, [this] {
-                return stopped.load() || !invalid_conns.empty();
+                return stopped.load();
             });
-            has_invalid_conns = !invalid_conns.empty();
         }
 
         if (stopped.load())
             return;
-
-        if (has_invalid_conns)
-        {
-            removeInvalidConns();
-            continue;
-        }
 
         try
         {
@@ -126,11 +118,11 @@ void RpcClient::scanConns()
     }
 }
 
-void RpcClient::markConnInvalid(const std::string & addr)
+void RpcClient::removeConn(const std::string & addr)
 {
     std::lock_guard<std::mutex> lock(mutex);
-    invalid_conns.push_back(addr);
-    scan_cv.notify_all();
+    if (conns.erase(addr))
+        log->information("delete invalid addr: " + addr);
 }
 
 void RpcClient::removeInvalidConns()

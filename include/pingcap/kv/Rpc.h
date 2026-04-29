@@ -78,7 +78,7 @@ struct RpcClient
 
     void scanConns();
 
-    void markConnInvalid(const std::string & addr);
+    void removeConn(const std::string & addr);
 
     void removeInvalidConns();
 
@@ -92,7 +92,7 @@ using RpcClientPtr = std::unique_ptr<RpcClient>;
 inline void dropConnIfNeeded(const RpcClientPtr & client, const std::string & addr, const ::grpc::Status & status)
 {
     if (status.error_code() == grpc::StatusCode::UNAVAILABLE)
-        client->markConnInvalid(addr);
+        client->removeConn(addr);
 }
 
 // RpcCall holds the request and response, and delegates RPC calls.
