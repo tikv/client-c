@@ -106,8 +106,9 @@ void RegionClient::onRegionError(Backoffer & bo, RPCContextPtr rpc_ctx, const er
     cluster->region_cache->dropRegion(rpc_ctx->region);
 }
 
-void RegionClient::onSendFail(Backoffer & bo, const Exception & e, RPCContextPtr rpc_ctx) const
+void RegionClient::onSendFail(Backoffer & bo, const Exception & e, RPCContextPtr rpc_ctx, const ::grpc::Status & status) const
 {
+    dropConnIfNeeded(cluster->rpc_client, rpc_ctx->addr, status);
     cluster->region_cache->onSendReqFail(rpc_ctx, e);
     // Retry on send request failure when it's not canceled.
     // When a store is not available, the leader of related region should be elected quickly.
