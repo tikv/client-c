@@ -113,8 +113,7 @@ void RpcClient::scanConns()
     std::lock_guard<std::mutex> lock(mutex);
     for (const auto & addr : conns_to_remove)
     {
-        if (conns.find(addr) != conns.end())
-            invalid_conns.push_back(addr);
+        invalid_conns.push_back(addr);
     }
 }
 
