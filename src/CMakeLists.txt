@@ -24,8 +24,9 @@ if (ENABLE_TESTS)
 endif()
 
 add_library(kv_client ${kvClient_sources})
+target_include_directories(kv_client BEFORE PUBLIC ${TICI_PROTO_INCLUDE_DIR})
 target_include_directories(kv_client PUBLIC ${kvClient_INCLUDE_DIR} ${fiu_include_dirs} ${Protobuf_INCLUDE_DIR} ${gRPC_INCLUDE_DIRS})
-target_link_libraries(kv_client kvproto ${Poco_Foundation_LIBRARY} fiu ${Protobuf_LIBRARY} ${gRPC_LIBRARIES})
+target_link_libraries(kv_client kvproto tici_proto ${Poco_Foundation_LIBRARY} fiu ${Protobuf_LIBRARY} ${gRPC_LIBRARIES})
 
 if (ENABLE_TESTS)
     add_subdirectory (test)

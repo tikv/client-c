@@ -1,0 +1,133 @@
+// Copyright 2025 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package schema;
+
+// ParserType represents the type of parser
+enum ParserType {
+  // Default value must be 0 in proto3
+  UNKNOWN_PARSER = 0;
+  // Default parser
+  DEFAULT_PARSER = 1;
+  // Other parser types
+  OTHER_PARSER = 2;
+}
+
+// ParserInfo represents parser information
+message ParserInfo {
+  // Parser type
+  ParserType parser_type = 1;
+  // Parser parameters
+  map<string, string> parser_params = 2;
+
+  repeated string stop_words = 3;
+}
+
+// TableInfo represents table information
+message TableInfo {
+  uint32 keyspace_id = 1;
+  // Table ID
+  int64 table_id = 2;
+  // Table name
+  string table_name = 3;
+  // Database name
+  string database_name = 4;
+  // Table version
+  int64 version = 5;
+  // Column information
+  repeated ColumnInfo columns = 6;
+  // Whether the table is clustered
+  bool is_clustered = 7;
+  // Whether the table is a partition table
+  bool is_partition = 8;
+  // Logical table ID for partition table, 0 for non-partition tables
+  int64 logical_table_id = 9;
+}
+
+// ColumnInfo represents column information
+message ColumnInfo {
+  // Column ID
+  int64 column_id = 2;
+  // Column name
+  string column_name = 3;
+  // MySQL type
+  int32 type = 4;
+  // Collation
+  string collation = 5;
+  // Column length
+  int32 column_length = 6;
+  // Decimal places
+  int32 decimal = 7;
+  // Flags
+  uint32 flag = 8;
+  // Enum elements
+  repeated string elems = 9;
+  // Default value
+  bytes default_val = 10;
+  // Whether it's a primary key
+  bool is_primary_key = 11;
+  // Whether it's an array
+  bool is_array = 12;
+}
+
+// IndexInfo represents index information
+message IndexInfo {
+  uint32 keyspace_id = 1;
+  // Table ID
+  int64 table_id = 2;
+  // Index ID
+  int64 index_id = 3;
+  // Index name
+  string index_name = 4;
+  // Index type (fulltext, custom)
+  int32 index_type = 5;
+  // Index columns
+  repeated ColumnInfo columns = 6;
+  // Whether the index is unique
+  bool is_unique = 7;
+  // Parser information
+  ParserInfo parser_info = 8;
+  // Other index parameters
+  map<string, string> other_params = 9;
+  // Fulltext index info
+  string fulltext_index = 10;
+  // Hybrid index info
+  string hybrid_index = 11;
+  // PD TSO when the index is created
+  uint64 created_ts = 12;
+}
+
+// PartitionDefinition represents partition table definitions
+message PartitionDefinition {
+  // Partition table ID
+  int64 table_id = 1;
+  // Partition table name
+  string table_name = 2;
+  // Less then value
+  repeated string less_than = 3;
+}
+
+// PartitionTableInfo represents partition table information
+message PartitionTableInfo {
+  // Partition type
+  int32 partition_type = 1;
+  // Partition table expr string
+  string expr = 2;
+  // Partition definitions
+  repeated PartitionDefinition definitions = 3;
+  // Number of partition definitions
+  uint64 num = 4;
+}
