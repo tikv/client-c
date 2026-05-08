@@ -70,8 +70,7 @@ void RpcClient::run()
 
         try
         {
-            scanConns();
-            removeInvalidConns();
+            scanAndRemoveInvalidConns();
         }
         catch (...)
         {
@@ -86,7 +85,7 @@ void RpcClient::stop()
     scan_cv.notify_all();
 }
 
-void RpcClient::scanConns()
+void RpcClient::scanAndRemoveInvalidConns()
 {
     std::vector<std::string> conn_snapshot;
     {
@@ -100,12 +99,19 @@ void RpcClient::scanConns()
         return;
 
     const auto store_addrs = getStoreAddresses(pd_client);
-
-    std::lock_guard<std::mutex> lock(mutex);
+    std::vector<std::string> invalid_conns;
     for (const auto & addr : conn_snapshot)
     {
         if (store_addrs.find(addr) == store_addrs.end())
             invalid_conns.push_back(addr);
+    }
+
+    if (invalid_conns.empty())
+        return;
+
+    for (const auto & addr : invalid_conns)
+    {
+        removeConn(addr);
     }
 }
 
@@ -114,21 +120,6 @@ void RpcClient::removeConn(const std::string & addr)
     std::lock_guard<std::mutex> lock(mutex);
     if (conns.erase(addr))
         log->information("delete invalid addr: " + addr);
-}
-
-void RpcClient::removeInvalidConns()
-{
-    std::lock_guard<std::mutex> lock(mutex);
-    if (invalid_conns.empty())
-        return;
-
-    for (const auto & addr : invalid_conns)
-    {
-        if (conns.erase(addr))
-            log->information("delete invalid addr: " + addr);
-    }
-
-    invalid_conns.clear();
 }
 
 ConnArrayPtr RpcClient::getConnArray(const std::string & addr)

@@ -51,7 +51,6 @@ struct RpcClient
     std::chrono::minutes scan_interval = rpc_conn_check_interval;
     std::atomic<bool> stopped = false;
     std::condition_variable scan_cv;
-    std::vector<std::string> invalid_conns;
 
     RpcClient() = default;
 
@@ -66,21 +65,18 @@ struct RpcClient
 
     void update(const ClusterConfig & config_)
     {
-        std::lock_guard<std::mutex> lk(mutex);
+        std::unique_lock lk(mutex);
         config = config_;
         conns.clear();
-        invalid_conns.clear();
     }
 
     void run();
 
     void stop();
 
-    void scanConns();
+    void scanAndRemoveInvalidConns();
 
     void removeConn(const std::string & addr);
-
-    void removeInvalidConns();
 
     ConnArrayPtr getConnArray(const std::string & addr);
 
