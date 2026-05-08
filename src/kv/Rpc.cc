@@ -100,20 +100,12 @@ void RpcClient::scanConns()
         return;
 
     const auto store_addrs = getStoreAddresses(pd_client);
-    std::vector<std::string> conns_to_remove;
+
+    std::lock_guard<std::mutex> lock(mutex);
     for (const auto & addr : conn_snapshot)
     {
         if (store_addrs.find(addr) == store_addrs.end())
-            conns_to_remove.emplace_back(addr);
-    }
-
-    if (conns_to_remove.empty())
-        return;
-
-    std::lock_guard<std::mutex> lock(mutex);
-    for (const auto & addr : conns_to_remove)
-    {
-        invalid_conns.push_back(addr);
+            invalid_conns.push_back(addr);
     }
 }
 
