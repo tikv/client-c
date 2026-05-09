@@ -87,6 +87,9 @@ void RpcClient::stop()
 
 void RpcClient::scanAndRemoveInvalidConns()
 {
+    if (!pd_client || pd_client->isMock())
+        return;
+
     std::vector<std::string> conn_snapshot;
     {
         std::lock_guard<std::mutex> lock(mutex);
@@ -95,7 +98,7 @@ void RpcClient::scanAndRemoveInvalidConns()
             conn_snapshot.emplace_back(conn.first);
     }
 
-    if (conn_snapshot.empty() || !pd_client || pd_client->isMock())
+    if (conn_snapshot.empty())
         return;
 
     const auto store_addrs = getStoreAddresses(pd_client);
