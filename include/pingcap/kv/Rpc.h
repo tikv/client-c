@@ -5,13 +5,21 @@
 #include <pingcap/kv/RegionCache.h>
 #include <pingcap/kv/internal/type_traits.h>
 
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <map>
 #include <mutex>
+#include <utility>
 #include <vector>
 
 namespace pingcap
 {
 namespace kv
 {
+constexpr auto rpc_conn_check_interval = std::chrono::minutes(10);
+constexpr auto rpc_conn_check_interval_jitter = std::chrono::minutes(5);
+
 struct ConnArray
 {
     std::mutex mutex;
@@ -33,15 +41,26 @@ using GRPCMetaData = std::multimap<std::string, std::string>;
 struct RpcClient
 {
     ClusterConfig config;
+    pd::ClientPtr pd_client;
 
     std::mutex mutex;
 
     std::map<std::string, ConnArrayPtr> conns;
 
+    Logger * log = &Logger::get("pingcap.RpcClient");
+    std::chrono::minutes scan_interval = rpc_conn_check_interval;
+    std::atomic<bool> stopped = false;
+    std::condition_variable scan_cv;
+
     RpcClient() = default;
 
     explicit RpcClient(const ClusterConfig & config_)
         : config(config_)
+    {}
+
+    RpcClient(pd::ClientPtr pd_client_, const ClusterConfig & config_)
+        : config(config_)
+        , pd_client(std::move(pd_client_))
     {}
 
     void update(const ClusterConfig & config_)
@@ -51,12 +70,26 @@ struct RpcClient
         conns.clear();
     }
 
+    void run();
+
+    void stop();
+
+    void scanAndRemoveInvalidConns();
+
+    void removeConn(const std::string & addr);
+
     ConnArrayPtr getConnArray(const std::string & addr);
 
     ConnArrayPtr createConnArray(const std::string & addr);
 };
 
 using RpcClientPtr = std::unique_ptr<RpcClient>;
+
+inline void dropConnIfNeeded(const RpcClientPtr & client, const std::string & addr, const ::grpc::Status & status)
+{
+    if (status.error_code() == grpc::StatusCode::UNAVAILABLE)
+        client->removeConn(addr);
+}
 
 // RpcCall holds the request and response, and delegates RPC calls.
 template <typename T>
