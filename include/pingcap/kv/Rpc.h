@@ -10,11 +10,7 @@
 #include <condition_variable>
 #include <map>
 #include <mutex>
-<<<<<<< HEAD
-#include <type_traits>
-=======
 #include <utility>
->>>>>>> 48009c6 (Remove useless grpc connections (#233))
 #include <vector>
 
 namespace pingcap
