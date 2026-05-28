@@ -32,6 +32,9 @@ void Cluster::startBackgroundTasks()
     thread_pool->start();
 
     thread_pool->enqueue([this] {
+        rpc_client->run();
+    });
+    thread_pool->enqueue([this] {
         mpp_prober->run();
     });
     if (region_cache)
