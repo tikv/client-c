@@ -3,11 +3,30 @@
 #include <pingcap/kv/Cluster.h>
 #include <pingcap/kv/RegionClient.h>
 
+#include <vector>
+
 namespace pingcap
 {
 namespace kv
 {
 struct Scanner;
+
+struct ScanOptions
+{
+    std::string start_key;
+    std::string end_key;
+    uint32_t limit = 0;
+    bool reverse = false;
+    bool key_only = false;
+    uint64_t version = 0;
+};
+
+struct ScanResult
+{
+    std::vector<kvrpcpb::KvPair> pairs;
+    bool has_more = false;
+    std::string next_start_key;
+};
 
 struct Snapshot
 {
@@ -30,6 +49,9 @@ struct Snapshot
     kvrpcpb::MvccInfo mvccGet(const std::string & key);
 
     kvrpcpb::MvccInfo mvccGet(Backoffer & bo, const std::string & key);
+
+    ScanResult ScanOnce(const ScanOptions & options);
+    ScanResult ScanOnce(Backoffer & bo, const ScanOptions & options);
 
     Scanner Scan(const std::string & begin, const std::string & end);
 };
