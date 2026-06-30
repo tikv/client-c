@@ -8,6 +8,7 @@
 
 #include <cmath>
 #include <memory>
+#include <string>
 #include <thread>
 #include <unordered_map>
 #include <utility>
@@ -20,6 +21,18 @@ namespace kv
 constexpr uint32_t txnCommitBatchSize = 16 * 1024;
 
 struct Txn;
+
+struct TxnMutation
+{
+    ::kvrpcpb::Op op;
+    std::string value;
+
+    static TxnMutation Put(const std::string & value_) { return TxnMutation{::kvrpcpb::Put, value_}; }
+
+    static TxnMutation Del() { return TxnMutation{::kvrpcpb::Del, ""}; }
+
+    uint64_t valueSize() const { return op == ::kvrpcpb::Put ? value.size() : 0; }
+};
 
 struct TwoPhaseCommitter;
 
@@ -82,7 +95,7 @@ public:
 struct TwoPhaseCommitter : public std::enable_shared_from_this<TwoPhaseCommitter>
 {
 private:
-    std::unordered_map<std::string, std::string> mutations;
+    std::unordered_map<std::string, TxnMutation> mutations;
 
     std::vector<std::string> keys;
     uint64_t start_ts = 0;
@@ -169,7 +182,7 @@ private:
                     auto & key = group.second[end];
                     size += key.size();
                     if constexpr (action == ActionPrewrite)
-                        size += mutations[key].size();
+                        size += mutations.at(key).valueSize();
 
                     if (key == primary_lock)
                         primary_idx = batches.size();

@@ -76,6 +76,64 @@ TEST_F(TestWithMockKVRegionSplit, testSplitRegionGet)
     }
 }
 
+TEST_F(TestWithMockKVRegionSplit, testTxnDelete)
+{
+    {
+        Txn txn(test_cluster.get());
+        txn.set("delete_test_key", "delete_test_value");
+        txn.commit();
+    }
+
+    {
+        Snapshot snap(test_cluster.get(), test_cluster->pd_client->getTS());
+        ASSERT_EQ(snap.Get("delete_test_key"), "delete_test_value");
+    }
+
+    {
+        Txn txn(test_cluster.get());
+        txn.del("delete_test_key");
+        auto buffered_result = txn.get("delete_test_key");
+        ASSERT_FALSE(buffered_result.second);
+        ASSERT_EQ(buffered_result.first, "");
+        txn.commit();
+    }
+
+    {
+        Snapshot snap(test_cluster.get(), test_cluster->pd_client->getTS());
+        ASSERT_EQ(snap.Get("delete_test_key"), "");
+    }
+
+    {
+        Txn txn(test_cluster.get());
+        txn.set("delete_test_key_2", "v1");
+        txn.del("delete_test_key_2");
+        auto buffered_result = txn.get("delete_test_key_2");
+        ASSERT_FALSE(buffered_result.second);
+        ASSERT_EQ(buffered_result.first, "");
+        txn.commit();
+    }
+
+    {
+        Snapshot snap(test_cluster.get(), test_cluster->pd_client->getTS());
+        ASSERT_EQ(snap.Get("delete_test_key_2"), "");
+    }
+
+    {
+        Txn txn(test_cluster.get());
+        txn.del("delete_test_key_3");
+        txn.set("delete_test_key_3", "v2");
+        auto buffered_result = txn.get("delete_test_key_3");
+        ASSERT_TRUE(buffered_result.second);
+        ASSERT_EQ(buffered_result.first, "v2");
+        txn.commit();
+    }
+
+    {
+        Snapshot snap(test_cluster.get(), test_cluster->pd_client->getTS());
+        ASSERT_EQ(snap.Get("delete_test_key_3"), "v2");
+    }
+}
+
 TEST_F(TestWithMockKVRegionSplit, testSplitRegionScan)
 {
     Txn txn(test_cluster.get());
