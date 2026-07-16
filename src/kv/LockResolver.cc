@@ -6,6 +6,24 @@ namespace pingcap
 {
 namespace kv
 {
+namespace
+{
+bool canBypassLockForRead(const TxnStatus & status, uint64_t caller_start_ts)
+{
+    if (status.ttl != 0)
+        return false;
+
+    if (status.isCommitted())
+        return status.commit_ts > caller_start_ts;
+
+    // Expired async-commit locks need resolveLockAsync to determine the final status.
+    if (status.primary_lock.has_value() && status.primary_lock->use_async_commit())
+        return false;
+
+    return status.isRolledBack();
+}
+} // namespace
+
 std::string Lock::toDebugString() const
 {
     return "key: " + Redact::keyToDebugString(key) + " primary: " + Redact::keyToDebugString(primary)
@@ -56,6 +74,12 @@ int64_t LockResolver::resolveLocks(
 
             if (status.ttl == 0)
             {
+                if (!for_write && canBypassLockForRead(status, caller_start_ts))
+                {
+                    pushed.push_back(lock->txn_id);
+                    break;
+                }
+
                 bool exists = true;
                 if (clean_txns.find(lock->txn_id) == clean_txns.end())
                 {
