@@ -20,8 +20,7 @@ bool canBypassLockForRead(const TxnStatus & status, uint64_t caller_start_ts)
     if (status.primary_lock.has_value() && status.primary_lock->use_async_commit())
         return false;
 
-    // ttl == 0 && commit_ts == 0 means the txn is rolled back / not committed.
-    return status.commit_ts == 0;
+    return status.isRolledBack();
 }
 } // namespace
 
