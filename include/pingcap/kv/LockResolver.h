@@ -234,7 +234,8 @@ public:
 
     // tryGetBypassLock checks the status of the transactions which own the locks in `locks`, and collect the txn ids which can be bypassed.
     // It is a best-effort optimization and will not synchronously resolve locks in caller's thread.
-    void tryGetBypassLock(
+    // Returns whether any locks have been scheduled for background resolve.
+    bool tryGetBypassLock(
         Backoffer & bo,
         uint64_t caller_start_ts,
         const std::unordered_map<uint64_t, std::vector<LockPtr>> & locks,

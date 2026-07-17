@@ -38,12 +38,13 @@ int64_t LockResolver::resolveLocks(Backoffer & bo, uint64_t caller_start_ts, std
     return resolveLocks(bo, caller_start_ts, locks, pushed, false);
 }
 
-void LockResolver::tryGetBypassLock(
+bool LockResolver::tryGetBypassLock(
     Backoffer & bo,
     uint64_t caller_start_ts,
     const std::unordered_map<uint64_t, std::vector<LockPtr>> & locks,
     std::vector<uint64_t> & bypass_lock_ts)
 {
+    bool has_pending_resolve = false;
     try
     {
         bypass_lock_ts.reserve(bypass_lock_ts.size() + locks.size());
@@ -74,6 +75,7 @@ void LockResolver::tryGetBypassLock(
                     || (status.primary_lock.has_value() && status.primary_lock->use_async_commit()))
                 {
                     addPendingLocksForBgResolve(caller_start_ts, txn_locks);
+                    has_pending_resolve = true;
                 }
             }
             else if (status.action == ::kvrpcpb::MinCommitTSPushed)
@@ -90,6 +92,7 @@ void LockResolver::tryGetBypassLock(
     {
         log->warning("tryGetBypassLock failed");
     }
+    return has_pending_resolve;
 }
 
 int64_t LockResolver::resolveLocks(
