@@ -189,6 +189,27 @@ TEST_F(TestWithLockResolve, testResolveLocksBypassesCommittedAfterRead)
     ASSERT_EQ(snapshot.Get("abf"), "4");
 }
 
+TEST_F(TestWithLockResolve, testScannerBypassesCommittedAfterRead)
+{
+    writeRowsAndSplit(test_cluster.get(), control_cluster.get());
+    const auto txn_id = leaveSecondaryLocksAfterPrimaryCommitted(test_cluster.get());
+
+    Snapshot snapshot(test_cluster.get(), txn_id);
+    auto scanner = snapshot.Scan("abf", "abz");
+
+    ASSERT_TRUE(scanner.valid);
+    ASSERT_EQ(scanner.key(), "abf");
+    ASSERT_EQ(scanner.value(), "4");
+
+    scanner.next();
+    ASSERT_TRUE(scanner.valid);
+    ASSERT_EQ(scanner.key(), "abg");
+    ASSERT_EQ(scanner.value(), "5");
+
+    scanner.next();
+    ASSERT_FALSE(scanner.valid);
+}
+
 TEST_F(TestWithLockResolve, testResolveLocksResolvesCommittedBeforeRead)
 {
     writeRowsAndSplit(test_cluster.get(), control_cluster.get());
