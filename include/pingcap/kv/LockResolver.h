@@ -5,9 +5,17 @@
 #include <pingcap/Log.h>
 #include <pingcap/kv/RegionCache.h>
 
+#include <atomic>
+#include <condition_variable>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <queue>
+#include <shared_mutex>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 namespace pingcap
 {
@@ -208,6 +216,10 @@ public:
         cluster = cluster_;
     }
 
+    void backgroundResolve();
+    void addPendingLocksForBgResolve(uint64_t caller_start_ts, const std::vector<LockPtr> & locks);
+    void stopBgResolve();
+
     // resolveLocks tries to resolve Locks. The resolving process is in 3 steps:
     // 1) Use the `lockTTL` to pick up all expired locks. Only locks that are too
     //    old are considered orphan locks and will be handled later. If all locks
@@ -219,6 +231,14 @@ public:
     //    the same transaction.
 
     int64_t resolveLocks(Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks, std::vector<uint64_t> & pushed);
+
+    // tryGetBypassLock checks the status of the transactions which own the locks in `locks`, and collect the txn ids which can be bypassed.
+    // It is a best-effort optimization and will not synchronously resolve locks in caller's thread.
+    void tryGetBypassLock(
+        Backoffer & bo,
+        uint64_t caller_start_ts,
+        const std::unordered_map<uint64_t, std::vector<LockPtr>> & locks,
+        std::vector<uint64_t> & bypass_lock_ts);
 
     int64_t resolveLocks(
         Backoffer & bo,
@@ -290,6 +310,11 @@ private:
     std::shared_mutex mu;
     std::unordered_map<int64_t, TxnStatus> resolved;
     std::queue<int64_t> cached;
+
+    std::mutex bg_mutex;
+    std::condition_variable bg_cv;
+    std::atomic<bool> stopped{false};
+    std::vector<std::pair<uint64_t, std::vector<LockPtr>>> pending_locks;
 
     Logger * log;
 };
