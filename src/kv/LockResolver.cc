@@ -103,7 +103,6 @@ int64_t LockResolver::resolveLocks(
     if (locks.empty())
         return before_txn_expired.value();
     std::unordered_map<uint64_t, std::unordered_set<RegionVerID>> clean_txns;
-    bool push_fail = false;
     if (!for_write)
     {
         pushed.reserve(locks.size());
@@ -123,7 +122,6 @@ int64_t LockResolver::resolveLocks(
             {
                 log->warning("get txn status failed: " + e.displayText());
                 before_txn_expired.update(0);
-                pushed.clear();
                 return before_txn_expired.value();
             }
 
@@ -176,7 +174,6 @@ int64_t LockResolver::resolveLocks(
                 {
                     log->warning("resolve txn failed: " + e.displayText());
                     before_txn_expired.update(0);
-                    pushed.clear();
                     return before_txn_expired.value();
                 }
             }
@@ -193,7 +190,6 @@ int64_t LockResolver::resolveLocks(
                     if (lock->lock_type != ::kvrpcpb::PessimisticLock && lock->txn_id > caller_start_ts)
                     {
                         log->warning("write conflict detected");
-                        pushed.clear();
                         // TODO: throw write conflict exception
                         throw Exception("write conflict", ErrorCodes::UnknownError);
                     }
@@ -202,7 +198,6 @@ int64_t LockResolver::resolveLocks(
                 {
                     if (status.action != ::kvrpcpb::MinCommitTSPushed)
                     {
-                        push_fail = true;
                         break;
                     }
                     pushed.push_back(lock->txn_id);
@@ -210,10 +205,6 @@ int64_t LockResolver::resolveLocks(
             }
             break;
         }
-    }
-    if (push_fail)
-    {
-        pushed.clear();
     }
     return before_txn_expired.value();
 }
