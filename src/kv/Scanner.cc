@@ -73,6 +73,10 @@ void Scanner::getData(Backoffer & bo)
         auto * context = request.mutable_context();
         context->set_priority(::kvrpcpb::Normal);
         context->set_not_fill_cache(false);
+        for (auto ts : snap.min_commit_ts_pushed.getTimestamps())
+        {
+            context->add_resolved_locks(ts);
+        }
 
         kvrpcpb::ScanResponse response;
         try
@@ -94,6 +98,10 @@ void Scanner::getData(Backoffer & bo)
             std::vector<LockPtr> locks{lock};
             std::vector<uint64_t> pushed{};
             auto ms_before_expired = snap.cluster->lock_resolver->resolveLocks(bo, snap.version, locks, pushed);
+            if (!pushed.empty())
+            {
+                snap.min_commit_ts_pushed.addTimestamps(pushed);
+            }
             if (ms_before_expired > 0)
             {
                 bo.backoffWithMaxSleep(
