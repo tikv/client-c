@@ -1,4 +1,5 @@
 #include <pingcap/RedactHelpers.h>
+#include <pingcap/kv/Backoff.h>
 #include <pingcap/kv/LockResolver.h>
 #include <pingcap/kv/RegionClient.h>
 
@@ -34,7 +35,68 @@ std::string Lock::toDebugString() const
 
 int64_t LockResolver::resolveLocks(Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks, std::vector<uint64_t> & pushed)
 {
-    return resolveLocks(bo, caller_start_ts, locks, pushed, false);
+    return resolveLocksImpl(bo, caller_start_ts, locks, pushed, false, true);
+}
+
+TryGetBypassLockResult LockResolver::tryGetBypassLock(
+    Backoffer & bo,
+    uint64_t caller_start_ts,
+    const std::unordered_map<uint64_t, std::vector<LockPtr>> & locks,
+    std::vector<uint64_t> & bypass_lock_ts)
+{
+    TryGetBypassLockResult result;
+    try
+    {
+        bypass_lock_ts.reserve(bypass_lock_ts.size() + locks.size());
+        for (const auto & [txn_id, txn_locks] : locks)
+        {
+            if (txn_locks.empty())
+                continue;
+
+            TxnStatus status;
+            try
+            {
+                status = getTxnStatusFromLock(bo, txn_locks.front(), caller_start_ts, false);
+            }
+            catch (Exception & e)
+            {
+                log->warning("get txn status failed: " + e.displayText());
+                continue;
+            }
+
+            if (status.ttl == 0)
+            {
+                const bool is_async_commit
+                    = status.primary_lock.has_value() && status.primary_lock->use_async_commit();
+                const bool can_bypass = canBypassLockForRead(status, caller_start_ts);
+                if (can_bypass)
+                {
+                    bypass_lock_ts.push_back(txn_id);
+                }
+
+                if (!is_async_commit && (status.isCommitted() || status.isRolledBack())
+                    && addPendingLocksForBgResolve(caller_start_ts, txn_locks))
+                {
+                    result.has_pending_resolve = true;
+                    if (!can_bypass)
+                        result.need_wait_bg_resolve = true;
+                }
+            }
+            else if (status.action == ::kvrpcpb::MinCommitTSPushed)
+            {
+                bypass_lock_ts.push_back(txn_id);
+            }
+        }
+    }
+    catch (Exception & e)
+    {
+        log->warning("tryGetBypassLock failed: " + e.displayText());
+    }
+    catch (...)
+    {
+        log->warning("tryGetBypassLock failed");
+    }
+    return result;
 }
 
 int64_t LockResolver::resolveLocks(
@@ -44,11 +106,21 @@ int64_t LockResolver::resolveLocks(
     std::vector<uint64_t> & pushed,
     bool for_write)
 {
+    return resolveLocksImpl(bo, caller_start_ts, locks, pushed, for_write, true);
+}
+
+int64_t LockResolver::resolveLocksImpl(
+    Backoffer & bo,
+    uint64_t caller_start_ts,
+    std::vector<LockPtr> & locks,
+    std::vector<uint64_t> & pushed,
+    bool for_write,
+    bool allow_bypass)
+{
     TxnExpireTime before_txn_expired;
     if (locks.empty())
         return before_txn_expired.value();
     std::unordered_map<uint64_t, std::unordered_set<RegionVerID>> clean_txns;
-    bool push_fail = false;
     if (!for_write)
     {
         pushed.reserve(locks.size());
@@ -68,15 +140,17 @@ int64_t LockResolver::resolveLocks(
             {
                 log->warning("get txn status failed: " + e.displayText());
                 before_txn_expired.update(0);
-                pushed.clear();
                 return before_txn_expired.value();
             }
 
             if (status.ttl == 0)
             {
-                if (!for_write && canBypassLockForRead(status, caller_start_ts))
+                if (!for_write && allow_bypass && canBypassLockForRead(status, caller_start_ts))
                 {
                     pushed.push_back(lock->txn_id);
+                    // Let current reads bypass the lock while cleaning it up asynchronously.
+                    if (addPendingLocksForBgResolve(caller_start_ts, {lock}))
+                        break;
                 }
 
                 bool exists = true;
@@ -120,7 +194,6 @@ int64_t LockResolver::resolveLocks(
                 {
                     log->warning("resolve txn failed: " + e.displayText());
                     before_txn_expired.update(0);
-                    pushed.clear();
                     return before_txn_expired.value();
                 }
             }
@@ -137,7 +210,6 @@ int64_t LockResolver::resolveLocks(
                     if (lock->lock_type != ::kvrpcpb::PessimisticLock && lock->txn_id > caller_start_ts)
                     {
                         log->warning("write conflict detected");
-                        pushed.clear();
                         // TODO: throw write conflict exception
                         throw Exception("write conflict", ErrorCodes::UnknownError);
                     }
@@ -146,7 +218,6 @@ int64_t LockResolver::resolveLocks(
                 {
                     if (status.action != ::kvrpcpb::MinCommitTSPushed)
                     {
-                        push_fail = true;
                         break;
                     }
                     pushed.push_back(lock->txn_id);
@@ -154,10 +225,6 @@ int64_t LockResolver::resolveLocks(
             }
             break;
         }
-    }
-    if (push_fail)
-    {
-        pushed.clear();
     }
     return before_txn_expired.value();
 }
@@ -559,6 +626,84 @@ TxnStatus LockResolver::getTxnStatusFromLock(Backoffer & bo, LockPtr lock, uint6
     }
 }
 
+void LockResolver::backgroundResolve()
+{
+    while (!stopped.load())
+    {
+        std::vector<std::pair<uint64_t, std::vector<LockPtr>>> to_resolve;
+        {
+            std::unique_lock lk(bg_mutex);
+            bg_cv.wait(lk, [this] { return !pending_locks.empty() || stopped.load(); });
+            if (stopped.load())
+                return;
+            pending_locks.swap(to_resolve);
+            pending_lock_count = 0;
+            pending_locks_full_logged = false;
+        }
+
+        for (auto & [caller_start_ts, locks] : to_resolve)
+        {
+            pingcap::kv::Backoffer bo(pingcap::kv::bgResolveLockMaxBackoff);
+            try
+            {
+                std::vector<uint64_t> ignored;
+                resolveLocksImpl(bo, caller_start_ts, locks, ignored, false, false);
+            }
+            catch (Exception & e)
+            {
+                log->warning("background resolve lock failed: " + e.displayText());
+            }
+            catch (...)
+            {
+                log->warning("background resolve lock failed");
+            }
+        }
+    }
+}
+
+bool LockResolver::addPendingLocksForBgResolve(uint64_t caller_start_ts, const std::vector<LockPtr> & locks)
+{
+    if (locks.empty())
+        return true;
+
+    bool should_log = false;
+    size_t pending_count = 0;
+    {
+        std::unique_lock lk(bg_mutex);
+        if (stopped.load())
+            return false;
+
+        if (locks.size() > maxPendingLocksForBgResolve - pending_lock_count)
+        {
+            should_log = !pending_locks_full_logged;
+            pending_locks_full_logged = true;
+            pending_count = pending_lock_count;
+        }
+        else
+        {
+            pending_locks.push_back({caller_start_ts, locks});
+            pending_lock_count += locks.size();
+            bg_cv.notify_one();
+            return true;
+        }
+    }
+
+    if (should_log)
+    {
+        log->warning(
+            "background resolve lock queue is full, drop pending locks, queue_limit="
+            + std::to_string(maxPendingLocksForBgResolve) + " pending_lock_count=" + std::to_string(pending_count)
+            + " dropped_lock_count=" + std::to_string(locks.size()));
+    }
+    return false;
+}
+
+void LockResolver::stopBgResolve()
+{
+    std::unique_lock lk(bg_mutex);
+    stopped.store(true);
+    bg_cv.notify_all();
+}
 
 } // namespace kv
 } // namespace pingcap

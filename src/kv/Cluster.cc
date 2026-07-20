@@ -45,6 +45,12 @@ void Cluster::startBackgroundTasks()
             region_cache->updateCachePeriodically();
         });
     }
+    if (lock_resolver)
+    {
+        thread_pool->enqueue([this] {
+            lock_resolver->backgroundResolve();
+        });
+    }
 }
 
 } // namespace kv
