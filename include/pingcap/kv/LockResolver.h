@@ -46,6 +46,7 @@ struct TxnStatus
 };
 
 constexpr size_t resolvedCacheSize = 2048;
+constexpr size_t maxPendingLocksForBgResolve = 4096;
 constexpr int bigTxnThreshold = 16;
 
 const uint64_t defaultLockTTL = 3000;
@@ -223,7 +224,7 @@ public:
     }
 
     void backgroundResolve();
-    void addPendingLocksForBgResolve(uint64_t caller_start_ts, const std::vector<LockPtr> & locks);
+    bool addPendingLocksForBgResolve(uint64_t caller_start_ts, const std::vector<LockPtr> & locks);
     void stopBgResolve();
 
     // resolveLocks tries to resolve Locks. The resolving process is in 3 steps:
@@ -330,6 +331,8 @@ private:
     std::condition_variable bg_cv;
     std::atomic<bool> stopped{false};
     std::vector<std::pair<uint64_t, std::vector<LockPtr>>> pending_locks;
+    size_t pending_lock_count = 0;
+    bool pending_locks_full_logged = false;
 
     Logger * log;
 };

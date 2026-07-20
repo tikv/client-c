@@ -74,9 +74,9 @@ TryGetBypassLockResult LockResolver::tryGetBypassLock(
                     bypass_lock_ts.push_back(txn_id);
                 }
 
-                if (!is_async_commit && (status.isCommitted() || status.isRolledBack()))
+                if (!is_async_commit && (status.isCommitted() || status.isRolledBack())
+                    && addPendingLocksForBgResolve(caller_start_ts, txn_locks))
                 {
-                    addPendingLocksForBgResolve(caller_start_ts, txn_locks);
                     result.has_pending_resolve = true;
                     if (!can_bypass)
                         result.need_wait_bg_resolve = true;
@@ -149,8 +149,8 @@ int64_t LockResolver::resolveLocksImpl(
                 {
                     pushed.push_back(lock->txn_id);
                     // Let current reads bypass the lock while cleaning it up asynchronously.
-                    addPendingLocksForBgResolve(caller_start_ts, {lock});
-                    break;
+                    if (addPendingLocksForBgResolve(caller_start_ts, {lock}))
+                        break;
                 }
 
                 bool exists = true;
@@ -637,6 +637,8 @@ void LockResolver::backgroundResolve()
             if (stopped.load())
                 return;
             pending_locks.swap(to_resolve);
+            pending_lock_count = 0;
+            pending_locks_full_logged = false;
         }
 
         for (auto & [caller_start_ts, locks] : to_resolve)
@@ -659,11 +661,41 @@ void LockResolver::backgroundResolve()
     }
 }
 
-void LockResolver::addPendingLocksForBgResolve(uint64_t caller_start_ts, const std::vector<LockPtr> & locks)
+bool LockResolver::addPendingLocksForBgResolve(uint64_t caller_start_ts, const std::vector<LockPtr> & locks)
 {
-    std::unique_lock lk(bg_mutex);
-    pending_locks.push_back({caller_start_ts, locks});
-    bg_cv.notify_one();
+    if (locks.empty())
+        return false;
+
+    bool should_log = false;
+    size_t pending_count = 0;
+    {
+        std::unique_lock lk(bg_mutex);
+        if (stopped.load())
+            return false;
+
+        if (locks.size() > maxPendingLocksForBgResolve - pending_lock_count)
+        {
+            should_log = !pending_locks_full_logged;
+            pending_locks_full_logged = true;
+            pending_count = pending_lock_count;
+        }
+        else
+        {
+            pending_locks.push_back({caller_start_ts, locks});
+            pending_lock_count += locks.size();
+            bg_cv.notify_one();
+            return true;
+        }
+    }
+
+    if (should_log)
+    {
+        log->warning(
+            "background resolve lock queue is full, drop pending locks, queue_limit="
+            + std::to_string(maxPendingLocksForBgResolve) + " pending_lock_count=" + std::to_string(pending_count)
+            + " dropped_lock_count=" + std::to_string(locks.size()));
+    }
+    return false;
 }
 
 void LockResolver::stopBgResolve()
