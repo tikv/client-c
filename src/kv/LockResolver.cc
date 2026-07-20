@@ -35,7 +35,7 @@ std::string Lock::toDebugString() const
 
 int64_t LockResolver::resolveLocks(Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks, std::vector<uint64_t> & pushed)
 {
-    return resolveLocks(bo, caller_start_ts, locks, pushed, false);
+    return resolveLocksImpl(bo, caller_start_ts, locks, pushed, false, true);
 }
 
 TryGetBypassLockResult LockResolver::tryGetBypassLock(
@@ -105,6 +105,17 @@ int64_t LockResolver::resolveLocks(
     std::vector<uint64_t> & pushed,
     bool for_write)
 {
+    return resolveLocksImpl(bo, caller_start_ts, locks, pushed, for_write, true);
+}
+
+int64_t LockResolver::resolveLocksImpl(
+    Backoffer & bo,
+    uint64_t caller_start_ts,
+    std::vector<LockPtr> & locks,
+    std::vector<uint64_t> & pushed,
+    bool for_write,
+    bool allow_bypass)
+{
     TxnExpireTime before_txn_expired;
     if (locks.empty())
         return before_txn_expired.value();
@@ -133,9 +144,11 @@ int64_t LockResolver::resolveLocks(
 
             if (status.ttl == 0)
             {
-                if (!for_write && canBypassLockForRead(status, caller_start_ts))
+                if (!for_write && allow_bypass && canBypassLockForRead(status, caller_start_ts))
                 {
                     pushed.push_back(lock->txn_id);
+                    // Let current reads bypass the lock while cleaning it up asynchronously.
+                    addPendingLocksForBgResolve(caller_start_ts, {lock});
                     break;
                 }
 
@@ -631,7 +644,7 @@ void LockResolver::backgroundResolve()
             try
             {
                 std::vector<uint64_t> ignored;
-                resolveLocks(bo, caller_start_ts, locks, ignored);
+                resolveLocksImpl(bo, caller_start_ts, locks, ignored, false, false);
             }
             catch (Exception & e)
             {

@@ -257,6 +257,14 @@ public:
     int64_t resolveLocksForWrite(Backoffer & bo, uint64_t caller_start_ts, std::vector<LockPtr> & locks);
 
 private:
+    int64_t resolveLocksImpl(
+        Backoffer & bo,
+        uint64_t caller_start_ts,
+        std::vector<LockPtr> & locks,
+        std::vector<uint64_t> & pushed,
+        bool for_write,
+        bool allow_bypass);
+
     void saveResolved(uint64_t txn_id, const TxnStatus & status)
     {
         std::unique_lock<std::shared_mutex> lk(mu);
