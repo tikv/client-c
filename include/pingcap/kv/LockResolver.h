@@ -202,6 +202,12 @@ struct AsyncResolveData
 
 using AsyncResolveDataPtr = std::shared_ptr<AsyncResolveData>;
 
+struct TryGetBypassLockResult
+{
+    bool has_pending_resolve = false;
+    bool need_wait_bg_resolve = false;
+};
+
 // LockResolver resolves locks and also caches resolved txn status.
 class LockResolver
 {
@@ -234,8 +240,8 @@ public:
 
     // tryGetBypassLock checks the status of the transactions which own the locks in `locks`, and collect the txn ids which can be bypassed.
     // It is a best-effort optimization and will not synchronously resolve locks in caller's thread.
-    // Returns whether any locks have been scheduled for background resolve.
-    bool tryGetBypassLock(
+    // The result tells the caller whether background resolve is scheduled and whether it is worth waiting for.
+    TryGetBypassLockResult tryGetBypassLock(
         Backoffer & bo,
         uint64_t caller_start_ts,
         const std::unordered_map<uint64_t, std::vector<LockPtr>> & locks,
