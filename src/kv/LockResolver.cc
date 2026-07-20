@@ -664,7 +664,7 @@ void LockResolver::backgroundResolve()
 bool LockResolver::addPendingLocksForBgResolve(uint64_t caller_start_ts, const std::vector<LockPtr> & locks)
 {
     if (locks.empty())
-        return false;
+        return true;
 
     bool should_log = false;
     size_t pending_count = 0;
