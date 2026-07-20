@@ -77,7 +77,6 @@ int64_t LockResolver::resolveLocks(
                 if (!for_write && canBypassLockForRead(status, caller_start_ts))
                 {
                     pushed.push_back(lock->txn_id);
-                    break;
                 }
 
                 bool exists = true;
