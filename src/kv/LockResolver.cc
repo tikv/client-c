@@ -66,14 +66,15 @@ TryGetBypassLockResult LockResolver::tryGetBypassLock(
 
             if (status.ttl == 0)
             {
+                const bool is_async_commit
+                    = status.primary_lock.has_value() && status.primary_lock->use_async_commit();
                 const bool can_bypass = canBypassLockForRead(status, caller_start_ts);
                 if (can_bypass)
                 {
                     bypass_lock_ts.push_back(txn_id);
                 }
 
-                if (status.isCommitted() || status.isRolledBack()
-                    || (status.primary_lock.has_value() && status.primary_lock->use_async_commit()))
+                if (!is_async_commit && (status.isCommitted() || status.isRolledBack()))
                 {
                     addPendingLocksForBgResolve(caller_start_ts, txn_locks);
                     result.has_pending_resolve = true;
