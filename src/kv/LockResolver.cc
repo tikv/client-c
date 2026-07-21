@@ -237,8 +237,8 @@ int64_t LockResolver::resolveLocksForWrite(Backoffer & bo, uint64_t caller_start
 
 TxnStatus LockResolver::getTxnStatus(Backoffer & bo, uint64_t txn_id, const std::string & primary, uint64_t caller_start_ts, uint64_t current_ts, bool rollback_if_not_exists, bool force_sync_commit, bool is_txn_file)
 {
-    TxnStatus * cached_status = getResolved(txn_id);
-    if (cached_status != nullptr)
+    auto cached_status = getResolved(txn_id);
+    if (cached_status.has_value())
     {
         return *cached_status;
     }
