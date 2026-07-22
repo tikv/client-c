@@ -643,6 +643,9 @@ void LockResolver::backgroundResolve()
 
         for (auto & [caller_start_ts, locks] : to_resolve)
         {
+            if (stopped.load())
+                break;
+
             pingcap::kv::Backoffer bo(pingcap::kv::bgResolveLockMaxBackoff);
             try
             {
