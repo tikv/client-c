@@ -264,7 +264,7 @@ private:
         std::vector<LockPtr> & locks,
         std::vector<uint64_t> & pushed,
         bool for_write,
-        bool allow_bypass);
+        bool is_bg_resolve);
 
     void saveResolved(uint64_t txn_id, const TxnStatus & status)
     {
