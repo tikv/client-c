@@ -145,6 +145,10 @@ int64_t LockResolver::resolveLocksImpl(
 
             if (status.ttl == 0)
             {
+                // Only reads can bypass locks that are invisible to the current snapshot. The txn_id is always
+                // returned in `pushed` for later requests to skip the same lock. Foreground reads try to hand the
+                // actual cleanup to the background worker; if enqueue fails, they fall through and resolve it
+                // synchronously. Background cleanup must not enqueue again, so it always falls through here.
                 if (!for_write && canBypassLockForRead(status, caller_start_ts))
                 {
                     pushed.push_back(lock->txn_id);
