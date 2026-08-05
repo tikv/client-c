@@ -15,6 +15,8 @@ namespace pingcap
 namespace kv
 {
 constexpr int oracle_update_interval = 2000;
+constexpr int mock_cluster_background_workers = 3; // RPC maintenance, MPP prober, and lock resolver.
+constexpr int cluster_background_workers = 4; // RPC maintenance, MPP prober, region cache, and lock resolver.
 // Cluster represents a tikv+pd cluster.
 
 struct Cluster
@@ -35,7 +37,9 @@ struct Cluster
     Cluster()
         : pd_client(std::make_shared<pd::MockPDClient>())
         , rpc_client(std::make_unique<RpcClient>(pd_client, ClusterConfig{}))
-        , thread_pool(std::make_unique<pingcap::common::FixedThreadPool>(2))
+        , oracle(std::make_unique<pd::Oracle>(pd_client, std::chrono::milliseconds(oracle_update_interval)))
+        , lock_resolver(std::make_unique<LockResolver>(this))
+        , thread_pool(std::make_unique<pingcap::common::FixedThreadPool>(mock_cluster_background_workers))
         , mpp_prober(std::make_unique<common::MPPProber>(this))
     {
         startBackgroundTasks();
@@ -48,7 +52,7 @@ struct Cluster
         , oracle(std::make_unique<pd::Oracle>(pd_client, std::chrono::milliseconds(oracle_update_interval)))
         , lock_resolver(std::make_unique<LockResolver>(this))
         , api_version(config.api_version)
-        , thread_pool(std::make_unique<pingcap::common::FixedThreadPool>(3))
+        , thread_pool(std::make_unique<pingcap::common::FixedThreadPool>(cluster_background_workers))
         , mpp_prober(std::make_unique<common::MPPProber>(this))
     {
         startBackgroundTasks();
@@ -64,6 +68,8 @@ struct Cluster
     // (e.g. background threads) that cluster object holds so as to exit elegantly.
     ~Cluster()
     {
+        if (lock_resolver)
+            lock_resolver->stopBgResolve();
         rpc_client->stop();
         mpp_prober->stop();
         if (region_cache)
