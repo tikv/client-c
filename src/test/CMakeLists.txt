@@ -11,6 +11,7 @@ list(APPEND test_libs
     fiu)
 
 add_executable(kv_client_ut
+    pd_gc_test.cc
     io_or_region_error_get_test.cc
     region_split_test.cc
     region_cache_test.cc
