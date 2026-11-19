@@ -8,6 +8,7 @@
 
 #include <cmath>
 #include <memory>
+#include <shared_mutex>
 #include <thread>
 #include <unordered_map>
 #include <utility>
@@ -98,6 +99,7 @@ private:
     Cluster * cluster;
 
     std::unordered_map<uint64_t, int> region_txn_size;
+    // Total bytes of all keys and values in this transaction. Used for lock TTL decisions.
     uint64_t txn_size = 0;
 
     int lock_ttl = 0;
@@ -105,6 +107,8 @@ private:
     std::string primary_lock;
     // commited means primary key has been written to kv stores.
     bool commited;
+
+    bool commit_result_undetermined = false;
 
     // Only for test now
     bool use_async_commit;
@@ -120,6 +124,8 @@ private:
 public:
     explicit TwoPhaseCommitter(Txn * txn, bool _use_async_commit = false);
 
+    // Executes TiKV 2PC. After the primary key is committed, the transaction is
+    // durable; secondary commit errors are logged but not returned to callers.
     void execute();
 
 private:
@@ -147,6 +153,8 @@ private:
     void prewriteKeys(Backoffer & bo, const std::vector<std::string> & keys) { doActionOnKeys<ActionPrewrite>(bo, keys); }
 
     void commitKeys(Backoffer & bo, const std::vector<std::string> & keys) { doActionOnKeys<ActionCommit>(bo, keys); }
+
+    void cleanupKeys(Backoffer & bo, const std::vector<std::string> & keys) { doActionOnKeys<ActionCleanUp>(bo, keys); }
 
     template <Action action>
     void doActionOnKeys(Backoffer & bo, const std::vector<std::string> & cur_keys)
@@ -178,9 +186,12 @@ private:
                 batches.emplace_back(BatchKeys(group.first, sub_keys));
             }
         }
-        if (primary_idx != std::numeric_limits<uint64_t>::max() && primary_idx != 0)
+        if (primary_idx != std::numeric_limits<uint64_t>::max())
         {
-            std::swap(batches[0], batches[primary_idx]);
+            if (primary_idx != 0)
+            {
+                std::swap(batches[0], batches[primary_idx]);
+            }
             batches[0].is_primary = true;
         }
 
@@ -213,12 +224,18 @@ private:
             {
                 commitSingleBatch(bo, batch);
             }
+            else if constexpr (action == ActionCleanUp)
+            {
+                cleanupSingleBatch(bo, batch);
+            }
         }
     }
 
     void prewriteSingleBatch(Backoffer & bo, const BatchKeys & batch);
 
     void commitSingleBatch(Backoffer & bo, const BatchKeys & batch);
+
+    void cleanupSingleBatch(Backoffer & bo, const BatchKeys & batch);
 };
 
 } // namespace kv

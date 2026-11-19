@@ -19,7 +19,9 @@ private:
     TwoPhaseCommitterPtr committer;
 
 public:
-    TestTwoPhaseCommitter(Txn * txn) : committer(std::make_shared<TwoPhaseCommitter>(txn)) {}
+    TestTwoPhaseCommitter(Txn * txn)
+        : committer(std::make_shared<TwoPhaseCommitter>(txn))
+    {}
 
     void prewriteKeys(Backoffer & bo, const std::vector<std::string> & keys) { committer->prewriteKeys(bo, keys); }
 
@@ -28,6 +30,12 @@ public:
     std::vector<std::string> keys() { return committer->keys; }
 
     void setCommitTS(int64_t commit_ts) { committer->commit_ts = commit_ts; }
+
+    uint64_t startTS() { return committer->start_ts; }
+
+    uint64_t txnSize() { return committer->txn_size; }
+
+    int lockTTL() { return committer->lock_ttl; }
 };
 
 } // namespace kv
@@ -71,7 +79,6 @@ protected:
 
 TEST_F(TestWith2PCRealTiKV, testCommitRollback)
 {
-
     // Commit.
     {
         Txn txn(test_cluster.get());
@@ -97,7 +104,7 @@ TEST_F(TestWith2PCRealTiKV, testCommitRollback)
         txn2.set("c", "c2");
         txn2.commit();
 
-        txn1.commit();
+        ASSERT_THROW(txn1.commit(), Exception);
 
         Snapshot snap(test_cluster.get());
         ASSERT_EQ(snap.Get("a"), "a");
@@ -106,9 +113,105 @@ TEST_F(TestWith2PCRealTiKV, testCommitRollback)
     }
 }
 
+TEST_F(TestWith2PCRealTiKV, testEmptyTxnCommit)
+{
+    Txn txn(test_cluster.get());
+    ASSERT_NO_THROW(txn.commit());
+}
+
+TEST_F(TestWith2PCRealTiKV, testCommitTsExpiredRetries)
+{
+    const std::string prefix = "clientc_commit_ts_expired_" + std::to_string(test_cluster->pd_client->getTS()) + "_";
+    const std::string key = prefix + "k";
+
+    {
+        Txn txn(test_cluster.get());
+        txn.set(key, "v0");
+        txn.commit();
+    }
+
+    Txn txn(test_cluster.get());
+    txn.set(key, "v1");
+    TestTwoPhaseCommitter committer{&txn};
+    auto keys = committer.keys();
+    Backoffer prewrite_bo(prewriteMaxBackoff);
+    committer.prewriteKeys(prewrite_bo, keys);
+
+    // A reader after prewrite pushes the lock's min_commit_ts. Commit with a
+    // stale commit_ts should be rejected by TiKV with CommitTsExpired, and the
+    // client should retry the same primary commit with a fresh commit_ts.
+    Txn reader(test_cluster.get());
+    auto result = reader.get(key);
+    ASSERT_EQ(result.second, true);
+    ASSERT_EQ(result.first, "v0");
+
+    committer.setCommitTS(committer.startTS() + 1);
+    Backoffer commit_bo(commitMaxBackoff);
+    ASSERT_NO_THROW(committer.commitKeys(commit_bo, keys));
+
+    Snapshot snap(test_cluster.get());
+    ASSERT_EQ(snap.Get(key), "v1");
+}
+
+TEST_F(TestWith2PCRealTiKV, testFailedPrewriteCleansWrittenLocks)
+{
+    const std::string prefix = "clientc_cleanup_" + std::to_string(test_cluster->pd_client->getTS()) + "_";
+    const std::string key_a = prefix + "a";
+    const std::string key_b = prefix + "b";
+    const std::string key_c = prefix + "c";
+
+    {
+        Txn txn(test_cluster.get());
+        txn.set(key_a, "a0");
+        txn.set(key_b, "b0");
+        txn.set(key_c, "c0");
+        txn.commit();
+    }
+
+    test_cluster->splitRegion(key_c);
+
+    Txn older_writer(test_cluster.get());
+    older_writer.set(key_a, "a1");
+    older_writer.set(key_b, "b1");
+    older_writer.set(key_c, "c1");
+
+    {
+        Txn newer_writer(test_cluster.get());
+        newer_writer.set(key_c, "c2");
+        newer_writer.commit();
+    }
+
+    ASSERT_THROW(older_writer.commit(), Exception);
+
+    Backoffer mvcc_bo(GetMaxBackoff);
+    ASSERT_FALSE(Snapshot(test_cluster.get()).mvccGet(mvcc_bo, key_a).has_lock());
+    ASSERT_FALSE(Snapshot(test_cluster.get()).mvccGet(mvcc_bo, key_b).has_lock());
+
+    {
+        Txn next_writer(test_cluster.get());
+        next_writer.set(key_a, "a2");
+        next_writer.set(key_b, "b2");
+        ASSERT_NO_THROW(next_writer.commit());
+    }
+
+    Snapshot snap(test_cluster.get());
+    ASSERT_EQ(snap.Get(key_a), "a2");
+    ASSERT_EQ(snap.Get(key_b), "b2");
+    ASSERT_EQ(snap.Get(key_c), "c2");
+}
+
+TEST_F(TestWith2PCRealTiKV, testLargeTxnTTLUsesBytes)
+{
+    Txn txn(test_cluster.get());
+    txn.set("clientc_large_ttl_key", std::string(33 * 1024 * 1024, 'x'));
+    TestTwoPhaseCommitter committer{&txn};
+
+    ASSERT_GT(committer.txnSize(), 32ULL * 1024 * 1024);
+    ASSERT_EQ(committer.lockTTL(), 20000);
+}
+
 TEST_F(TestWith2PCRealTiKV, commitAfterReadByOtherTxn)
 {
-
     // Commit.
     {
         Txn txn(test_cluster.get());
@@ -337,4 +440,4 @@ TEST_F(TestWith2PCRealTiKV, testScanWithLargeTxn)
     }
 }
 
-} // namespace
+} // namespace pingcap::tests

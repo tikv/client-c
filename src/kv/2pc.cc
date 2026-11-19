@@ -14,6 +14,11 @@ constexpr uint64_t bytesPerMiB = 1024 * 1024;
 
 constexpr uint64_t ttlManagerRunThreshold = 32 * 1024 * 1024;
 
+// 1 hour in PD TSO units. TiKV should not reject commit_ts with a min_commit_ts
+// this far in the future during normal retry.
+constexpr uint64_t maxCommitTsExpiredSkew = 3600000ULL << pd::physicalShiftBits;
+
+constexpr uint32_t maxCommitTsExpiredRetry = 8;
 
 uint64_t txnLockTTL(std::chrono::milliseconds start, uint64_t txn_size)
 {
@@ -21,7 +26,7 @@ uint64_t txnLockTTL(std::chrono::milliseconds start, uint64_t txn_size)
 
     if (txn_size >= txnCommitBatchSize)
     {
-        uint64_t txn_size_mb = txn_size / bytesPerMiB;
+        double txn_size_mb = static_cast<double>(txn_size) / bytesPerMiB;
         lock_ttl = static_cast<uint64_t>(ttlFactor * sqrt(txn_size_mb));
         if (lock_ttl < defaultLockTTL)
         {
@@ -47,15 +52,15 @@ TwoPhaseCommitter::TwoPhaseCommitter(Txn * txn, bool _use_async_commit)
     txn->walkBuffer([&](const std::string & key, const std::string & value) {
         keys.push_back(key);
         mutations.emplace(key, value);
+        txn_size += key.size() + value.size();
     });
     cluster = txn->cluster;
     start_ts = txn->start_ts;
-    primary_lock = keys[0];
-    txn_size = mutations.size();
-    // TODO: use right lock_ttl
-    // currently prewrite is not concurrent, so the right lock_ttl is not enough for prewrite to complete
-    // lock_ttl = txnLockTTL(txn->start_time, txn_size);
-    lock_ttl = defaultLockTTL;
+    if (!keys.empty())
+    {
+        primary_lock = keys[0];
+    }
+    lock_ttl = txnLockTTL(txn->start_time, txn_size);
     if (txn_size > ttlManagerRunThreshold)
     {
         lock_ttl = managedLockTTL;
@@ -66,6 +71,11 @@ void TwoPhaseCommitter::execute()
 {
     try
     {
+        if (keys.empty())
+        {
+            return;
+        }
+
         if (use_async_commit)
         {
             // If we want to use async commit or 1PC and also want external consistency across
@@ -103,15 +113,32 @@ void TwoPhaseCommitter::execute()
         // TODO: check expired
         Backoffer commit_bo(commitMaxBackoff);
         commitKeys(commit_bo, keys);
-        // TODO: Process commit exception
 
         ttl_manager.close();
     }
     catch (Exception & e)
     {
-        if (!commited)
+        ttl_manager.close();
+        if (commited)
         {
-            // TODO: Rollback keys.
+            // The primary commit makes the transaction durable. Match
+            // client-go/TiDB 2PC semantics: secondary commit failures are logged
+            // but not surfaced as Txn::commit() failures, because retrying the
+            // whole transaction could duplicate writes.
+            log->warning("write commit exception after primary committed: " + e.displayText());
+            return;
+        }
+        if (!commit_result_undetermined)
+        {
+            try
+            {
+                Backoffer cleanup_bo(cleanupMaxBackoff);
+                cleanupKeys(cleanup_bo, keys);
+            }
+            catch (Exception & cleanup_error)
+            {
+                log->warning("2PC cleanup exception: " + cleanup_error.displayText());
+            }
         }
         log->warning("write commit exception: " + e.displayText());
         throw;
@@ -210,7 +237,7 @@ void TwoPhaseCommitter::prewriteSingleBatch(Backoffer & bo, const BatchKeys & ba
         }
         else
         {
-            if (batch.keys[0] == primary_lock)
+            if (batch.is_primary)
             {
                 // After writing the primary key, if the size of the transaction is large than 32M,
                 // start the ttlManager. The ttlManager will be closed in tikvTxn.Commit().
@@ -253,25 +280,80 @@ void TwoPhaseCommitter::commitSingleBatch(Backoffer & bo, const BatchKeys & batc
     req.set_start_version(start_ts);
     req.set_commit_version(commit_ts);
 
-    kvrpcpb::CommitResponse response;
+    RegionClient region_client(cluster, batch.region);
+    uint32_t commit_ts_expired_retry = 0;
+    for (;;)
+    {
+        kvrpcpb::CommitResponse response;
+        try
+        {
+            region_client.sendReqToRegion<RPC_NAME(KvCommit)>(bo, req, &response);
+        }
+        catch (Exception & e)
+        {
+            if (batch.is_primary && e.code() != RegionEpochNotMatch)
+            {
+                commit_result_undetermined = true;
+                throw;
+            }
+            bo.backoff(boRegionMiss, e);
+            commitKeys(bo, batch.keys);
+            return;
+        }
+
+        if (response.has_error())
+        {
+            if (response.error().has_commit_ts_expired())
+            {
+                const auto & rejected = response.error().commit_ts_expired();
+                if (rejected.min_commit_ts() > rejected.attempted_commit_ts()
+                    && rejected.min_commit_ts() - rejected.attempted_commit_ts() > maxCommitTsExpiredSkew)
+                {
+                    throw Exception("2PC MinCommitTS is too large, got MinCommitTS: " + std::to_string(rejected.min_commit_ts())
+                                        + ", AttemptedCommitTS: " + std::to_string(rejected.attempted_commit_ts()),
+                                    LockError);
+                }
+                if (++commit_ts_expired_retry > maxCommitTsExpiredRetry)
+                {
+                    throw Exception("2PC commit_ts_expired retry limit exceeded: " + response.error().ShortDebugString(), LockError);
+                }
+                commit_ts = cluster->pd_client->getTS();
+                req.set_commit_version(commit_ts);
+                continue;
+            }
+            throw Exception("meet errors: " + response.error().ShortDebugString(), LockError);
+        }
+        break;
+    }
+
+    commited = true;
+}
+
+void TwoPhaseCommitter::cleanupSingleBatch(Backoffer & bo, const BatchKeys & batch)
+{
+    kvrpcpb::BatchRollbackRequest req;
+    for (const auto & key : batch.keys)
+    {
+        req.add_keys(key);
+    }
+    req.set_start_version(start_ts);
+
+    kvrpcpb::BatchRollbackResponse response;
     RegionClient region_client(cluster, batch.region);
     try
     {
-        region_client.sendReqToRegion<RPC_NAME(KvCommit)>(bo, req, &response);
+        region_client.sendReqToRegion<RPC_NAME(KvBatchRollback)>(bo, req, &response);
     }
     catch (Exception & e)
     {
         bo.backoff(boRegionMiss, e);
-        commit_ts = cluster->pd_client->getTS();
-        commitKeys(bo, batch.keys);
+        cleanupKeys(bo, batch.keys);
         return;
     }
     if (response.has_error())
     {
-        throw Exception("meet errors: " + response.error().ShortDebugString(), LockError);
+        throw Exception("cleanup failed: " + response.error().ShortDebugString(), LockError);
     }
-
-    commited = true;
 }
 
 uint64_t sendTxnHeartBeat(Backoffer & bo, Cluster * cluster, std::string & primary_key, uint64_t start_ts, uint64_t ttl)
