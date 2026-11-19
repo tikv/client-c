@@ -338,6 +338,8 @@ uint64_t Client::getGCSafePoint()
         check_leader.store(true);
         throw Exception(err_msg, status.error_code());
     }
+    if (response.header().error().type() != pdpb::ErrorType::OK)
+        throw Exception("get safe point failed: " + response.header().error().message(), InternalError);
     return response.safe_point();
 }
 
@@ -362,6 +364,8 @@ uint64_t Client::getGCSafePointV2(KeyspaceID keyspace_id)
         check_leader.store(true);
         throw Exception(err_msg, status.error_code());
     }
+    if (response.header().error().type() != pdpb::ErrorType::OK)
+        throw Exception("get keyspace safe point failed: " + response.header().error().message(), InternalError);
     return response.safe_point();
 }
 
@@ -383,6 +387,10 @@ pdpb::GetGCStateResponse Client::getGCState(KeyspaceID keyspace_id)
     if (!status.ok())
     {
         std::string err_msg = "GetGCState failed, keyspace_id=" + std::to_string(keyspace_id) + ": " + std::to_string(status.error_code()) + ": " + status.error_message();
+        // Unsupported RPCs indicate a server capability, not a stale leader.
+        // Map at the gRPC boundary: raw code 12 collides with ServerIsBusy.
+        if (status.error_code() == grpc::StatusCode::UNIMPLEMENTED)
+            throw Exception(err_msg, GRPCNotImplemented);
         log->warning(err_msg);
         check_leader.store(true);
         throw Exception(err_msg, status.error_code());
