@@ -9,6 +9,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <map>
 #include <unordered_map>
 
@@ -30,14 +31,20 @@ struct Store
     std::map<std::string, std::string> labels;
     StoreType store_type;
     ::metapb::StoreState state;
+    bool has_txn_protocol_version_range;
+    uint32_t txn_protocol_version_min;
+    uint32_t txn_protocol_version_max;
 
-    Store(uint64_t id_, const std::string & addr_, const std::string & peer_addr_, const std::map<std::string, std::string> & labels_, StoreType store_type_, const ::metapb::StoreState state_)
+    Store(uint64_t id_, const std::string & addr_, const std::string & peer_addr_, const std::map<std::string, std::string> & labels_, StoreType store_type_, const ::metapb::StoreState state_, bool has_txn_protocol_version_range_ = false, uint32_t txn_protocol_version_min_ = 0, uint32_t txn_protocol_version_max_ = 0)
         : id(id_)
         , addr(addr_)
         , peer_addr(peer_addr_)
         , labels(labels_)
         , store_type(store_type_)
         , state(state_)
+        , has_txn_protocol_version_range(has_txn_protocol_version_range_)
+        , txn_protocol_version_min(txn_protocol_version_min_)
+        , txn_protocol_version_max(txn_protocol_version_max_)
     {}
 };
 

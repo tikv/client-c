@@ -1,6 +1,7 @@
 #include <pingcap/RedactHelpers.h>
 #include <pingcap/kv/Backoff.h>
 #include <pingcap/kv/LockResolver.h>
+#include <pingcap/kv/internal/terminal_error.h>
 #include <pingcap/kv/RegionClient.h>
 
 namespace pingcap
@@ -60,6 +61,8 @@ TryGetBypassLockResult LockResolver::tryGetBypassLock(
             }
             catch (Exception & e)
             {
+                if (isTerminalTransactionError(e))
+                    e.rethrow();
                 log->warning("get txn status failed: " + e.displayText());
                 continue;
             }
@@ -90,6 +93,8 @@ TryGetBypassLockResult LockResolver::tryGetBypassLock(
     }
     catch (Exception & e)
     {
+        if (isTerminalTransactionError(e))
+            e.rethrow();
         log->warning("tryGetBypassLock failed: " + e.displayText());
     }
     catch (...)
@@ -138,6 +143,8 @@ int64_t LockResolver::resolveLocksImpl(
             }
             catch (Exception & e)
             {
+                if (isTerminalTransactionError(e))
+                    e.rethrow();
                 log->warning("get txn status failed: " + e.displayText());
                 before_txn_expired.update(0);
                 return before_txn_expired.value();
@@ -195,6 +202,8 @@ int64_t LockResolver::resolveLocksImpl(
                 }
                 catch (Exception & e)
                 {
+                    if (isTerminalTransactionError(e))
+                        e.rethrow();
                     log->warning("resolve txn failed: " + e.displayText());
                     before_txn_expired.update(0);
                     return before_txn_expired.value();
@@ -414,6 +423,7 @@ void LockResolver::resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & st
 
     std::vector<std::thread> threads;
     std::atomic<int> errors{};
+    internal::TerminalErrorCollector terminal_errors;
     threads.reserve(keys_by_region.size());
     for (auto & pair : keys_by_region)
     {
@@ -425,6 +435,8 @@ void LockResolver::resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & st
             }
             catch (Exception & e)
             {
+                if (isTerminalTransactionError(e))
+                    terminal_errors.capture(e);
                 errors.fetch_add(1);
                 log->warning("ResolveRegionLocks error: " + e.displayText());
             }
@@ -437,6 +449,8 @@ void LockResolver::resolveLockAsync(Backoffer & bo, LockPtr lock, TxnStatus & st
     }
 
     log->debug("resolve lock async done");
+
+    terminal_errors.rethrowIfPresent();
 
     if (errors.load() > 0)
     {
@@ -501,6 +515,7 @@ AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lo
     auto shared_data = std::make_shared<AsyncResolveData>(status.primary_lock->min_commit_ts(), false);
     std::vector<std::thread> threads;
     std::atomic_int8_t errors{0};
+    internal::TerminalErrorCollector terminal_errors;
     threads.reserve(regions.size());
     for (auto & pair : regions)
     {
@@ -512,6 +527,8 @@ AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lo
             }
             catch (Exception & e)
             {
+                if (isTerminalTransactionError(e))
+                    terminal_errors.capture(e);
                 if (e.code() == ErrorCodes::NonAsyncCommit)
                 {
                     need_fallback.store(true);
@@ -527,6 +544,7 @@ AsyncResolveDataPtr LockResolver::checkAllSecondaries(Backoffer & bo, LockPtr lo
         t.join();
     }
 
+    terminal_errors.rethrowIfPresent();
     if (need_fallback.load())
     {
         throw Exception("CheckSecondaryLocks receives a non-async-commit lock", ErrorCodes::NonAsyncCommit);

@@ -6,6 +6,8 @@ namespace kv
 {
 void RegionClient::onRegionError(Backoffer & bo, RPCContextPtr rpc_ctx, const errorpb::Error & err) const
 {
+    rethrowTerminalRegionError(err);
+
     if (err.has_not_leader())
     {
         const auto & not_leader = err.not_leader();

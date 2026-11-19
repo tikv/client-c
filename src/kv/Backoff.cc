@@ -46,7 +46,7 @@ void Backoffer::backoff(pingcap::kv::BackoffType tp, const pingcap::Exception & 
 
 void Backoffer::backoffWithMaxSleep(pingcap::kv::BackoffType tp, int max_sleep_time, const pingcap::Exception & exc)
 {
-    if (exc.code() == MismatchClusterIDCode)
+    if (exc.code() == MismatchClusterIDCode || exc.code() == IncompatibleRequest || exc.code() == UndeterminedResult)
     {
         exc.rethrow();
     }

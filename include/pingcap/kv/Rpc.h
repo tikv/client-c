@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <condition_variable>
 #include <map>
 #include <mutex>
@@ -103,7 +104,11 @@ public:
     {}
 
     template <typename REQ>
-    void setRequestCtx(REQ & req, RPCContextPtr rpc_ctx, kvrpcpb::APIVersion api_version)
+    void setRequestCtx(REQ & req,
+                       RPCContextPtr rpc_ctx,
+                       kvrpcpb::APIVersion api_version,
+                       ::kvrpcpb::RequestOrigin default_origin,
+                       uint32_t txn_protocol_version)
     {
         ::kvrpcpb::Context * context = req.mutable_context();
         // Set api_version to this context, it's caller's duty to ensure the api_version.
@@ -113,6 +118,11 @@ public:
         context->set_allocated_region_epoch(new metapb::RegionEpoch(rpc_ctx->meta.region_epoch()));
         context->set_allocated_peer(new metapb::Peer(rpc_ctx->peer));
         context->set_cluster_id(rpc_ctx->cluster_id);
+        if (context->request_origin() == ::kvrpcpb::RequestOriginUnknown)
+            context->set_request_origin(default_origin);
+        // This is a capability declaration selected for this physical send. Never
+        // retain a version supplied by a logical request creator.
+        context->set_txn_protocol_version(txn_protocol_version);
     }
 
     void setClientContext(::grpc::ClientContext & context, int timeout, const GRPCMetaData & meta_data = {})

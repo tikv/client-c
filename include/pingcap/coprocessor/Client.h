@@ -7,6 +7,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <thread>
 
@@ -113,6 +114,11 @@ public:
         std::shared_ptr<::coprocessor::Response> resp;
         bool same_zone{true};
         Exception error;
+        // The by-value error above is retained for existing callers, but slices derived
+        // exceptions and loses structured details such as ErrIncompatibleRequest's protobuf.
+        // Keep a polymorphic clone in shared ownership so Result remains copyable and callers
+        // can inspect the exception directly, without rethrowing an std::exception_ptr.
+        std::shared_ptr<Exception> detailed_error;
         bool finished{false};
 
         Result() = default;
@@ -121,6 +127,7 @@ public:
         {}
         explicit Result(const Exception & err)
             : error(err)
+            , detailed_error(err.clone())
         {}
         explicit Result(bool finished_)
             : finished(finished_)
@@ -131,6 +138,8 @@ public:
         {}
 
         const std::string & data() const { return resp->data(); }
+
+        const Exception * exception() const { return detailed_error.get(); }
     };
 
     ResponseIter(std::unique_ptr<common::IMPMCQueue<Result>> && queue_,

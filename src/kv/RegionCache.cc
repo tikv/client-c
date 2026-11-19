@@ -335,7 +335,18 @@ Store RegionCache::reloadStoreWithoutLock(const metapb::Store & store)
             store_type = StoreType::TiFlash;
         }
     }
-    auto res = stores.insert_or_assign(id, Store(id, store.address(), store.peer_address(), labels, store_type, store.state()));
+    const bool has_range = store.has_txn_protocol_version_range();
+    const auto min_version = has_range ? store.txn_protocol_version_range().min() : 0;
+    const auto max_version = has_range ? store.txn_protocol_version_range().max() : 0;
+    const bool invalid_range = min_version > max_version;
+    auto old = stores.find(id);
+    if (invalid_range
+        && (old == stores.end() || old->second.txn_protocol_version_min != min_version || old->second.txn_protocol_version_max != max_version
+            || old->second.txn_protocol_version_min <= old->second.txn_protocol_version_max))
+    {
+        log->warning("store_id " + std::to_string(id) + " has invalid transaction protocol range [" + std::to_string(min_version) + "," + std::to_string(max_version) + "]");
+    }
+    auto res = stores.insert_or_assign(id, Store(id, store.address(), store.peer_address(), labels, store_type, store.state(), has_range, min_version, max_version));
     return res.first->second;
 }
 

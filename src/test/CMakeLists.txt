@@ -15,6 +15,9 @@ add_executable(kv_client_ut
     region_split_test.cc
     region_cache_test.cc
     lock_resolve_test.cc
+    txn_protocol_test.cc
+    txn_protocol_rpc_test.cc
+    terminal_error_test.cc
     coprocessor_test.cc
     batch_coprocessor_test.cc
 )

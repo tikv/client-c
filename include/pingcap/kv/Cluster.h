@@ -30,6 +30,8 @@ struct Cluster
     LockResolverPtr lock_resolver;
 
     ::kvrpcpb::APIVersion api_version = ::kvrpcpb::APIVersion::V1;
+    const ::kvrpcpb::RequestOrigin request_origin;
+    const uint32_t default_txn_protocol_version;
 
     std::unique_ptr<pingcap::common::FixedThreadPool> thread_pool;
     std::unique_ptr<common::MPPProber> mpp_prober;
@@ -39,6 +41,8 @@ struct Cluster
         , rpc_client(std::make_unique<RpcClient>(pd_client, ClusterConfig{}))
         , oracle(std::make_unique<pd::Oracle>(pd_client, std::chrono::milliseconds(oracle_update_interval)))
         , lock_resolver(std::make_unique<LockResolver>(this))
+        , request_origin(ClusterConfig{}.request_origin)
+        , default_txn_protocol_version(ClusterConfig{}.default_txn_protocol_version)
         , thread_pool(std::make_unique<pingcap::common::FixedThreadPool>(mock_cluster_background_workers))
         , mpp_prober(std::make_unique<common::MPPProber>(this))
     {
@@ -46,12 +50,14 @@ struct Cluster
     }
 
     Cluster(const std::vector<std::string> & pd_addrs, const ClusterConfig & config)
-        : pd_client(std::make_shared<pd::CodecClient>(pd_addrs, config))
+        : pd_client(std::make_shared<pd::CodecClient>(pd_addrs, validateCompatibilityConfig(config)))
         , region_cache(std::make_unique<RegionCache>(pd_client, config))
         , rpc_client(std::make_unique<RpcClient>(pd_client, config))
         , oracle(std::make_unique<pd::Oracle>(pd_client, std::chrono::milliseconds(oracle_update_interval)))
         , lock_resolver(std::make_unique<LockResolver>(this))
         , api_version(config.api_version)
+        , request_origin(config.request_origin)
+        , default_txn_protocol_version(config.default_txn_protocol_version)
         , thread_pool(std::make_unique<pingcap::common::FixedThreadPool>(cluster_background_workers))
         , mpp_prober(std::make_unique<common::MPPProber>(this))
     {
@@ -60,6 +66,8 @@ struct Cluster
 
     void update(const std::vector<std::string> & pd_addrs, const ClusterConfig & config) const
     {
+        if (config.request_origin != request_origin || config.default_txn_protocol_version != default_txn_protocol_version)
+            throw Exception("request origin and transaction protocol version are immutable after Cluster creation", LogicalError);
         pd_client->update(pd_addrs, config);
         rpc_client->update(config);
     }
@@ -81,6 +89,17 @@ struct Cluster
     void splitRegion(const std::string & split_key);
 
     void startBackgroundTasks();
+
+private:
+    static const ClusterConfig & validateCompatibilityConfig(const ClusterConfig & config)
+    {
+        // This client currently implements protocol semantics only through incompatible-error-handling.
+        // The configured ceiling must not advertise support for higher versions (e.g. shared locks)
+        // merely because their enum values are available in kvproto; their semantics must be implemented first.
+        if (config.default_txn_protocol_version > ::kvrpcpb::TXN_VER_SUPPORT_INCOMPATIBLE_ERROR_HANDLING)
+            throw Exception("default transaction protocol version must be legacy or incompatible-error-handling", LogicalError);
+        return config;
+    }
 };
 
 struct MinCommitTSPushed

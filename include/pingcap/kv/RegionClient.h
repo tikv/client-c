@@ -4,6 +4,7 @@
 #include <pingcap/kv/Cluster.h>
 #include <pingcap/kv/RegionCache.h>
 #include <pingcap/kv/Rpc.h>
+#include <pingcap/kv/internal/txn_protocol.h>
 
 namespace pingcap
 {
@@ -53,9 +54,15 @@ struct RegionClient
         {
             throw Exception("should setup proper label_filter for tiflash");
         }
+        bool compatibility_resend_used = false;
+        RPCContextPtr compatibility_resend_ctx;
+        uint32_t compatibility_resend_version = 0;
         for (;;)
         {
-            RPCContextPtr ctx = cluster->region_cache->getRPCContext(bo, region_id, store_type, /*load_balance=*/true, tiflash_label_filter, store_id_blocklist, prefer_store_id);
+            const bool is_compatibility_resend = compatibility_resend_ctx != nullptr;
+            RPCContextPtr ctx = is_compatibility_resend
+                ? compatibility_resend_ctx
+                : cluster->region_cache->getRPCContext(bo, region_id, store_type, /*load_balance=*/true, tiflash_label_filter, store_id_blocklist, prefer_store_id);
             if (ctx == nullptr)
             {
                 // If the region is not found in cache, it must be out
@@ -64,8 +71,19 @@ struct RegionClient
                 auto s = store_id_blocklist != nullptr ? ", store_filter_size=" + std::to_string(store_id_blocklist->size()) + "." : std::string(".");
                 throw Exception("Region epoch not match after retries: Region " + region_id.toString() + " not in region cache" + s, RegionEpochNotMatch);
             }
+            auto selection = internal::selectTxnProtocolVersion(
+                req, cluster->default_txn_protocol_version, ctx->store.txn_protocol_version_min, ctx->store.txn_protocol_version_max);
+            if (is_compatibility_resend)
+            {
+                selection.selected = compatibility_resend_version;
+                selection.allowed = !selection.protected_request || selection.required <= selection.selected;
+                compatibility_resend_ctx.reset();
+            }
+            if (!selection.allowed)
+                throw localIncompatibleRequest(ctx, selection);
+
             RpcCall<T> rpc(cluster->rpc_client, ctx->addr);
-            rpc.setRequestCtx(req, ctx, cluster->api_version);
+            rpc.setRequestCtx(req, ctx, cluster->api_version, cluster->request_origin, selection.selected);
 
             grpc::ClientContext context;
             rpc.setClientContext(context, timeout, meta_data);
@@ -87,6 +105,29 @@ struct RegionClient
             if (resp->has_region_error())
             {
                 log->warning("region_id " + region_id.toString() + " find error: " + resp->region_error().DebugString());
+                const auto & error = resp->region_error();
+                if (error.has_undetermined_result())
+                    throw Exception(error.undetermined_result().message(), UndeterminedResult);
+                if (error.has_incompatible_request())
+                {
+                    const auto & incompatible = error.incompatible_request();
+                    if (!compatibility_resend_used && !is_compatibility_resend
+                        && internal::isValidUpperBoundRejection(incompatible, selection.selected))
+                    {
+                        auto updated = internal::selectTxnProtocolVersion(
+                            req,
+                            cluster->default_txn_protocol_version,
+                            incompatible.min_compatible_txn_protocol_version(),
+                            incompatible.max_compatible_txn_protocol_version());
+                        if (updated.allowed && updated.selected != selection.selected)
+                        {
+                            compatibility_resend_used = true;
+                            compatibility_resend_ctx = ctx;
+                            compatibility_resend_version = updated.selected;
+                            continue;
+                        }
+                    }
+                }
                 onRegionError(bo, ctx, resp->region_error());
                 continue;
             }
@@ -153,9 +194,15 @@ struct RegionClient
         {
             throw Exception("should setup proper label_filter for tiflash");
         }
+        bool compatibility_resend_used = false;
+        RPCContextPtr compatibility_resend_ctx;
+        uint32_t compatibility_resend_version = 0;
         for (;;)
         {
-            RPCContextPtr ctx = cluster->region_cache->getRPCContext(bo, region_id, store_type, /*load_balance=*/true, tiflash_label_filter, store_id_blocklist, prefer_store_id);
+            const bool is_compatibility_resend = compatibility_resend_ctx != nullptr;
+            RPCContextPtr ctx = is_compatibility_resend
+                ? compatibility_resend_ctx
+                : cluster->region_cache->getRPCContext(bo, region_id, store_type, /*load_balance=*/true, tiflash_label_filter, store_id_blocklist, prefer_store_id);
             if (ctx == nullptr)
             {
                 // If the region is not found in cache, it must be out
@@ -164,9 +211,20 @@ struct RegionClient
                 throw Exception("Region epoch not match after retries: Region " + region_id.toString() + " not in region cache.", RegionEpochNotMatch);
             }
 
+            auto selection = internal::selectTxnProtocolVersion(
+                req, cluster->default_txn_protocol_version, ctx->store.txn_protocol_version_min, ctx->store.txn_protocol_version_max);
+            if (is_compatibility_resend)
+            {
+                selection.selected = compatibility_resend_version;
+                selection.allowed = !selection.protected_request || selection.required <= selection.selected;
+                compatibility_resend_ctx.reset();
+            }
+            if (!selection.allowed)
+                throw localIncompatibleRequest(ctx, selection);
+
             auto stream_reader = std::make_unique<StreamReader<RESP>>();
             RpcCall<T> rpc(cluster->rpc_client, ctx->addr);
-            rpc.setRequestCtx(req, ctx, cluster->api_version);
+            rpc.setRequestCtx(req, ctx, cluster->api_version, cluster->request_origin, selection.selected);
             rpc.setClientContext(stream_reader->context, timeout, meta_data);
 
             stream_reader->reader = rpc.call(&stream_reader->context, req);
@@ -175,6 +233,29 @@ struct RegionClient
                 if (stream_reader->first_resp.has_region_error())
                 {
                     log->warning("region_id " + region_id.toString() + " find error: " + stream_reader->first_resp.region_error().message());
+                    const auto & error = stream_reader->first_resp.region_error();
+                    if (error.has_undetermined_result())
+                        throw Exception(error.undetermined_result().message(), UndeterminedResult);
+                    if (error.has_incompatible_request())
+                    {
+                        const auto & incompatible = error.incompatible_request();
+                        if (!compatibility_resend_used && !is_compatibility_resend
+                            && internal::isValidUpperBoundRejection(incompatible, selection.selected))
+                        {
+                            auto updated = internal::selectTxnProtocolVersion(
+                                req,
+                                cluster->default_txn_protocol_version,
+                                incompatible.min_compatible_txn_protocol_version(),
+                                incompatible.max_compatible_txn_protocol_version());
+                            if (updated.allowed && updated.selected != selection.selected)
+                            {
+                                compatibility_resend_used = true;
+                                compatibility_resend_ctx = ctx;
+                                compatibility_resend_version = updated.selected;
+                                continue;
+                            }
+                        }
+                    }
                     onRegionError(bo, ctx, stream_reader->first_resp.region_error());
                     continue;
                 }
@@ -207,6 +288,21 @@ struct RegionClient
     }
 
 protected:
+    static ErrIncompatibleRequest localIncompatibleRequest(const RPCContextPtr & ctx, const internal::TxnProtocolSelection & selection)
+    {
+        ::errorpb::IncompatibleRequest error;
+        error.set_reason(::errorpb::IncompatibleRequestReasonUnknown);
+        error.set_min_compatible_txn_protocol_version(ctx->store.txn_protocol_version_min);
+        error.set_max_compatible_txn_protocol_version(ctx->store.txn_protocol_version_max);
+        error.set_provided_txn_protocol_version(selection.selected);
+        const auto message = "transaction protocol is incompatible with store " + std::to_string(ctx->store.id) + " range ["
+            + std::to_string(ctx->store.txn_protocol_version_min) + "," + std::to_string(ctx->store.txn_protocol_version_max)
+            + "], process ceiling " + std::to_string(selection.process_ceiling) + ", candidate " + std::to_string(selection.selected)
+            + ", required " + std::to_string(selection.required);
+        error.set_message(message);
+        return ErrIncompatibleRequest(message, error);
+    }
+
     void onRegionError(Backoffer & bo, RPCContextPtr rpc_ctx, const errorpb::Error & err) const;
 
     // Normally, it happens when machine down or network partition between tidb and kv or process crash.

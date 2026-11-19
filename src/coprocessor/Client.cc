@@ -791,6 +791,11 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
         resp = std::make_shared<::coprocessor::Response>();
         if (!reader->read(resp.get()))
             break;
+        if (resp->has_region_error())
+        {
+            rethrowTerminalRegionError(resp->region_error());
+            throw Exception("Coprocessor stream subsequent response has a region error: " + resp->region_error().message(), ErrorCodes::CoprocessorError);
+        }
         if (is_first_resp)
         {
             is_first_resp = false;
@@ -805,9 +810,6 @@ std::vector<CopTask> ResponseIter::handleTaskImpl(kv::Backoffer & bo, const CopT
             if (resp->has_locked())
                 throw Exception("Coprocessor stream subsequent response has a lock error", ErrorCodes::CoprocessorError);
         }
-
-        if (resp->has_region_error())
-            throw Exception("Coprocessor stream subsequent response has a region error: " + resp->region_error().message(), ErrorCodes::CoprocessorError);
 
         const std::string & err_msg = resp->other_error();
         if (!err_msg.empty())

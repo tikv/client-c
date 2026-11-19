@@ -9,6 +9,7 @@
 
 #include <kvproto/kvrpcpb.pb.h>
 
+#include <cstdint>
 #include <fstream>
 #include <streambuf>
 #include <string>
@@ -23,6 +24,8 @@ struct ClusterConfig
     std::string cert_path;
     std::string key_path;
     ::kvrpcpb::APIVersion api_version = ::kvrpcpb::APIVersion::V1;
+    ::kvrpcpb::RequestOrigin request_origin = ::kvrpcpb::RequestOriginUnknown;
+    uint32_t default_txn_protocol_version = ::kvrpcpb::TXN_VER_SUPPORT_INCOMPATIBLE_ERROR_HANDLING;
 
     ClusterConfig() = default;
 
